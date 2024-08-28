@@ -1,54 +1,49 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
-namespace QuantumSuperpositionExample
+internal static partial class Program
 {
-    class Program
+    public static void Main()
     {
-        static void Main()
+        for (int i = 1; i <= 100; i++)
         {
-            // Example: Check prime numbers from 1 to 100
-            for (int i = 1; i <= 100; i++)
+            if (IsPrime(i))
             {
-                if (IsPrime(i))
-                {
-                    Console.WriteLine(i + " is prime!");
-                }
+                Console.WriteLine(i + " is prime!");
             }
-
-            // Example: Find factors of 10
-            for (int i = 10; i <= 10; i++)  // This loop runs once since the range is 10 to 10
-            {
-                Console.WriteLine("Factors of " + i + ": " + string.Join(", ", Factors(i)));
-            }
-
-            // Example: Find minimum value of a set
-            Console.WriteLine("Minimum value of 3, 5, 8 is " + MinValue(new List<int> { 3, 5, 8 }));
         }
 
-        static bool IsPrime(int i)
-        {
-            var divisors = new QuantumSuperposition<int>(Enumerable.Range(2, i > 2 ? i - 2 : 1));
-            return (i % divisors).All() != 0;
-        }
+        for (int i = 10; i <= 10; i++)
+            Console.WriteLine("Factors " + Factors(i).ToString());
 
-        static List<int> Factors(int v)
-        {
-            var divisors = new QuantumSuperposition<int>(Enumerable.Range(1, v));
+        Console.WriteLine("min vlaue of 3, 5, 8 is " + MinValue(new[] { 3, 5, 8 }));
 
-            // Obtain eigenstates where the modulus result is 0
-            var factors = divisors.EigenstatesWhere(divisor => v % divisor == 0);
+        // Wait for user input before closing the console
+        Console.WriteLine("Press any key to close the window...");
+        Console.ReadKey();
+    }
 
-            return factors.ToList();
+    public static bool IsPrime(int i)
+    {
+        var divisors = new QuBit<int>(Enumerable.Range(2, i > 2 ? i - 2 : 1));
+        return (i % divisors).All(); 
+    }
 
-        }
 
-        static int MinValue(IEnumerable<int> range)
-        {
-            var minval = new QuantumSuperposition<int>(range);
-            var test = (minval.Any() <= minval.All());
-            return int.Parse(test.ToString());  // Assuming ToString() is overloaded to represent the collapsed result.
-        }
+    public static Eigenstates<int> Factors(int v)
+    {
+
+        var divisors = new Eigenstates<int>(Enumerable.Range(1, v));
+        return v % divisors == 0;
+
+    }
+
+    public static int MinValue(IEnumerable<int> range)
+    {
+
+        var minval = new Eigenstates<int>(range);
+        var test = minval.Any() <= minval.All();
+        return test.ToValues().First();
+
     }
 }
