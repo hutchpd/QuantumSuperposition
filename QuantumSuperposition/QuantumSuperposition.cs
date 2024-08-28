@@ -608,9 +608,10 @@ public partial class QuBit<T>
 }
 
 /// <summary>
-/// 
+/// Represents a collection of eigenstates for a given type <typeparamref name="T"/>.
+/// Supports various mathematical and logical operations on these eigenstates.
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T">The type of elements in the eigenstates.</typeparam>
 public partial class Eigenstates<T>
 {
     private new Dictionary<T, T> _qList;
@@ -621,70 +622,70 @@ public partial class Eigenstates<T>
     private enum QuSuper
     {
         /// <summary>
-        /// 
+        /// Represents a conjunctive eigenstate (all states must satisfy a condition).
         /// </summary>
         eConj,
         /// <summary>
-        /// 
+        /// Represents a disjunctive eigenstate (any state can satisfy a condition).
         /// </summary>
         eDisj,
         /// <summary>
-        /// 
+        /// Represents a collapsed eigenstate (only one state is considered).
         /// </summary>
         eCollapsedResult
     }
     /// <summary>
-    /// 
+    /// Initializes a new instance of the <see cref="Eigenstates{T}"/> class from a collection of items.
     /// </summary>
-    /// <param name="Items"></param>
+    /// <param name="Items">The items to include in the eigenstates.</param>
     public Eigenstates(IEnumerable<T> Items)
     {
         _qList = Items.ToDictionary(x => x, x => x);
     }
     /// <summary>
-    /// 
+    /// Initializes a new instance of the <see cref="Eigenstates{T}"/> class from a dictionary of items.
     /// </summary>
-    /// <param name="Items"></param>
+    /// <param name="Items">The dictionary of items to include in the eigenstates.</param>
     public Eigenstates(Dictionary<T, T> Items)
     {
         _qList = Items;
     }
     /// <summary>
-    /// 
+    /// Determines if a scalar value is not equal to any state in the eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value to compare.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator !=(T a, Eigenstates<T> b)
     {
         return b.Do_condition_type(a, b, b.qop_ne);
     }
     /// <summary>
-    /// 
+    /// Determines if a scalar value is equal to any state in the eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value to compare.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator ==(T a, Eigenstates<T> b)
     {
         return b.Do_condition_type(a, b, b.qop_eq);
     }
     /// <summary>
-    /// 
+    /// Determines if a scalar value is less than any state in the eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value to compare.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator <(T a, Eigenstates<T> b)
     {
         return b.Do_condition_type(a, b, b.qop_lt);
     }
     /// <summary>
-    /// 
+    /// Determines if a scalar value is greater than any state in the eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value to compare.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >(T a, Eigenstates<T> b)
     {
         return b.Do_condition_type(a, b, b.qop_gt);
@@ -700,292 +701,312 @@ public partial class Eigenstates<T>
         return b.Do_condition_type(a, b, b.qop_lteq);
     }
     /// <summary>
-    /// 
+    /// Determines if a scalar value is greater than than or equal to any state in the eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value to compare.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >=(T a, Eigenstates<T> b)
     {
         return b.Do_condition_type(a, b, b.qop_gteq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is not equal to any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator !=(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_ne);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is equal to any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator ==(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_eq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is less than any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator <(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_lt);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is greater than any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_gt);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is less than or equal to any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator <=(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_lteq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the first eigenstates is greater than or equal to any state in the second eigenstates.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >=(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_condition_type(a, b, a.qop_gteq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is not equal to a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator !=(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_ne);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is equal to a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator ==(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_eq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is less than a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator <(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_lt);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is greater than a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_gt);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is less than or equal to a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator <=(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_lteq);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is greater than or equal to a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator >=(Eigenstates<T> a, T b)
     {
         return a.Do_condition_type(a, b, a.qop_gteq);
     }
     /// <summary>
-    /// 
+    /// Computes the modulus of a scalar value and an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the modulus operation.</returns>
     public static Eigenstates<T> operator %(T a, Eigenstates<T> b)
     {
         return b.Do_oper_type(a, b, b.qop_mod);
     }
     /// <summary>
-    /// 
+    /// Computes the modulus of an eigenstates of states and an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstate of states</param>
+    /// <param name="b">The second eigenstate of states.</param>
+    /// <returns>A new eigenstates resulting from the modulus operation.</returns>
     public static Eigenstates<T> operator %(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_oper_type(a, b, b.qop_mod);
     }
     /// <summary>
-    /// 
+    /// Determines if any state in the eigenstates is less than a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result.</returns>
     public static Eigenstates<T> operator %(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_mod);
     }
     /// <summary>
-    /// 
+    /// Computes the modulus of an eigenstates of states and a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates.</param>
+    /// <param name="b">The scalar value.</param>
+    /// <returns>A new eigenstates resulting from the modulus operation.</returns>
     public static Eigenstates<T> operator +(T a, Eigenstates<T> b)
     {
         return b.Do_oper_type(a, b, b.qop_add);
     }
     /// <summary>
-    /// 
+    /// Adds a scalar value to an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the addition operation.</returns>
+    public static Eigenstates<T> operator +(T a, Eigenstates<T> b)
+    {
+        return b.Do_oper_type(a, b, b.qop_add);
+    }
+
+    /// <summary>
+    /// Adds two eigenstates of states.
+    /// </summary>
+    /// <param name="a">The first eigenstates.</param>
+    /// <param name="b">The second eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the addition operation.</returns>
     public static Eigenstates<T> operator +(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_oper_type(a, b, b.qop_add);
     }
+
     /// <summary>
-    /// 
+    /// Adds an eigenstates of states and a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates.</param>
+    /// <param name="b">The scalar value.</param>
+    /// <returns>A new eigenstates resulting from the addition operation.</returns>
     public static Eigenstates<T> operator +(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_add);
     }
     /// <summary>
-    /// 
+    /// Subtracts a scalar value from an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
-
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the subtraction operation.</returns>
     public static Eigenstates<T> operator -(T a, Eigenstates<T> b)
     {
         return b.Do_oper_type(a, b, b.qop_neg);
     }
+
     /// <summary>
-    /// 
+    /// Subtracts two eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates.</param>
+    /// <param name="b">The second eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the subtraction operation.</returns>
     public static Eigenstates<T> operator -(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_oper_type(a, b, b.qop_neg);
     }
+
     /// <summary>
-    /// 
+    /// Subtracts a scalar value from an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates.</param>
+    /// <param name="b">The scalar value.</param>
+    /// <returns>A new eigenstates resulting from the subtraction operation.</returns>
     public static Eigenstates<T> operator -(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_neg);
     }
+
     /// <summary>
-    /// 
+    /// Multiplies a scalar value with an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the multiplication operation.</returns>
     public static Eigenstates<T> operator *(T a, Eigenstates<T> b)
     {
         return b.Do_oper_type(a, b, b.qop_mult);
     }
+
     /// <summary>
-    /// 
+    /// Multiplies two eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates.</param>
+    /// <param name="b">The second eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the multiplication operation.</returns>
     public static Eigenstates<T> operator *(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_oper_type(a, b, b.qop_mult);
     }
+
     /// <summary>
-    /// 
+    /// Multiplies an eigenstates of states with a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates.</param>
+    /// <param name="b">The scalar value.</param>
+    /// <returns>A new eigenstates resulting from the multiplication operation.</returns>
     public static Eigenstates<T> operator *(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_mult);
     }
+
     /// <summary>
-    /// 
+    /// Divides a scalar value by an eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the division operation.</returns>
     public static Eigenstates<T> operator /(T a, Eigenstates<T> b)
     {
         return b.Do_oper_type(a, b, b.qop_div);
     }
+
     /// <summary>
-    /// 
+    /// Divides one eigenstates of states by another eigenstates of states.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates.</param>
+    /// <param name="b">The second eigenstates.</param>
+    /// <returns>A new eigenstates resulting from the division operation.</returns>
     public static Eigenstates<T> operator /(Eigenstates<T> a, Eigenstates<T> b)
     {
         return a.Do_oper_type(a, b, b.qop_div);
     }
+
     /// <summary>
-    /// 
+    /// Divides an eigenstates of states by a scalar value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates.</param>
+    /// <param name="b">The scalar value.</param>
+    /// <returns>A new eigenstates resulting from the division operation.</returns>
     public static Eigenstates<T> operator /(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_div);
     }
+
     /// <summary>
-    /// 
+    /// Computes the modulus of two values.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>The result of the modulo operation.</returns>
     private T qop_mod(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -994,12 +1015,13 @@ public partial class Eigenstates<T>
         var Modu = Expression.Lambda<Func<T, T, T>>(body, paramA, paramB).Compile();
         return Modu(a, b);
     }
+
     /// <summary>
-    /// 
+    /// Adds two values.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>The result of the addition operation.</returns>
     private T qop_add(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1008,12 +1030,13 @@ public partial class Eigenstates<T>
         var Modu = Expression.Lambda<Func<T, T, T>>(body, paramA, paramB).Compile();
         return Modu(a, b);
     }
+
     /// <summary>
-    /// 
+    /// Negates a value by performing an addition operation (note: symmetric to subtraction in some contexts).
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value (used for symmetry).</param>
+    /// <returns>The result of the negation operation.</returns>
     private T qop_neg(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1023,11 +1046,11 @@ public partial class Eigenstates<T>
         return Modu(a, b);
     }
     /// <summary>
-    /// 
+    /// Multiplies two values.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>The result of the multiplication operation.</returns>
     private T qop_mult(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1037,11 +1060,11 @@ public partial class Eigenstates<T>
         return Modu(a, b);
     }
     /// <summary>
-    /// 
+    /// Divides two values.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value (dividend).</param>
+    /// <param name="b">The second value (divisor).</param>
+    /// <returns>The result of the division operation.</returns>
     private T qop_div(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1051,11 +1074,11 @@ public partial class Eigenstates<T>
         return Modu(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is greater than the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the first value is greater than the second; otherwise, false.</returns>
     private bool qop_gt(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1065,11 +1088,11 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is greater than or equal to the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the first value is greater than or equal to the second; otherwise, false.</returns>
     private bool qop_gteq(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1079,11 +1102,11 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is less than the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the first value is less than the second; otherwise, false.</returns>
     private bool qop_lt(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1093,11 +1116,11 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is less than or equal to the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the first value is less than or equal to the second; otherwise, false.</returns>
     private bool qop_lteq(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1107,11 +1130,11 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is not equal to the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the values are not equal; otherwise, false.</returns>
     private bool qop_ne(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1121,11 +1144,11 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Determines if the first value is equal to the second value.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <returns></returns>
+    /// <param name="a">The first value.</param>
+    /// <param name="b">The second value.</param>
+    /// <returns>True if the values are equal; otherwise, false.</returns>
     private bool qop_eq(T a, T b)
     {
         var paramA = Expression.Parameter(typeof(T), "a");
@@ -1135,12 +1158,12 @@ public partial class Eigenstates<T>
         return Equal(a, b);
     }
     /// <summary>
-    /// 
+    /// Performs a conditional operation between a scalar value and an eigenstates, using a specified condition.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates to compare against.</param>
+    /// <param name="cb">The condition delegate to use for comparison.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the condition.</returns>
     private Eigenstates<T> Do_condition_type(T a, Eigenstates<T> b, Func<T, T, bool> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1160,12 +1183,12 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Performs a conditional operation between an eigenstates and a scalar value, using a specified condition.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to compare.</param>
+    /// <param name="b">The scalar value to compare against.</param>
+    /// <param name="cb">The condition delegate to use for comparison.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the condition.</returns>
     private Eigenstates<T> Do_condition_type(Eigenstates<T> a, T b, Func<T, T, bool> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1177,12 +1200,12 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Performs a conditional operation between two eigenstates, using a specified condition.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to compare.</param>
+    /// <param name="b">The second eigenstates to compare against.</param>
+    /// <param name="cb">The condition delegate to use for comparison.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the condition.</returns>
     private Eigenstates<T> Do_condition_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, bool> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1230,12 +1253,12 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Performs an operation between a scalar value and an eigenstates, using a specified operation.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The scalar value.</param>
+    /// <param name="b">The eigenstates to operate on.</param>
+    /// <param name="cb">The operation delegate to use.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the operation.</returns>
     private Eigenstates<T> Do_oper_type(T a, Eigenstates<T> b, Func<T, T, T> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1244,12 +1267,12 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Performs an operation between an eigenstates and a scalar value, using a specified operation.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The eigenstates to operate on.</param>
+    /// <param name="b">The scalar value to operate with.</param>
+    /// <param name="cb">The operation delegate to use.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the operation.</returns>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, T b, Func<T, T, T> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1258,12 +1281,12 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Performs an operation between two eigenstates, using a specified operation.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="cb"></param>
-    /// <returns></returns>
+    /// <param name="a">The first eigenstates to operate on.</param>
+    /// <param name="b">The second eigenstates to operate with.</param>
+    /// <param name="cb">The operation delegate to use.</param>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> containing the result of the operation.</returns>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, T> cb)
     {
         var ans = new Dictionary<T, T>();
@@ -1275,17 +1298,17 @@ public partial class Eigenstates<T>
         return new Eigenstates<T>(ans);
     }
     /// <summary>
-    /// 
+    /// Converts the current eigenstates into a string representation.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A string representing the keys of the eigenstates.</returns>
     public override string ToString()
     {
         return string.Join(",", _qList.Keys);
     }
     /// <summary>
-    /// 
+    /// Sets the type of the eigenstates to conjunctive (All).
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> with the type set to conjunctive.</returns>
     public Eigenstates<T> All()
     {
         var b = new Eigenstates<T>(_qList);
@@ -1293,9 +1316,9 @@ public partial class Eigenstates<T>
         return b;
     }
     /// <summary>
-    /// 
+    /// Sets the type of the eigenstates to disjunctive (Any).
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A new instance of <see cref="Eigenstates{T}"/> with the type set to disjunctive.</returns>
     public Eigenstates<T> Any()
     {
         var b = new Eigenstates<T>(_qList);
@@ -1303,29 +1326,28 @@ public partial class Eigenstates<T>
         return b;
     }
     /// <summary>
-    /// 
+    /// Gets the current type of the eigenstates (conjunctive, disjunctive, or collapsed).
     /// </summary>
-    /// <returns></returns>
+    /// <returns>The current type of the eigenstates.</returns>
     public object GetCurrentType()
     {
         return _eType;
     }
 
     /// <summary>
-    /// Set the type of the eigenstates.
+    /// Sets the type of the eigenstates.
     /// </summary>
-    /// <param name="t"></param>
+    /// <param name="t">The type to set (conjunctive, disjunctive, or collapsed).</param>
     private void SetType(QuSuper t)
     {
         _eType = t;
     }
 
     /// <summary>
-    /// Collapse the eigenstates to a single value or a list of values.
+    /// Collapses the eigenstates to a single value or a list of values.
     /// </summary>
     /// <returns>An IEnumerable of the values of the eigenstate or a single value.</returns>
-    /// <exception cref="InvalidOperationException"></exception>
-    /// This is so much prettier in perl.
+    /// <exception cref="InvalidOperationException">Thrown if there are no values to collapse.</exception>
     public IEnumerable<T> ToValues()
     {
         // If no values, throw an exception
