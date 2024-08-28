@@ -44,8 +44,8 @@ The `IsPrime` method checks whether a number is prime by creating a `QuantumSupe
 ```csharp
 static bool IsPrime(int i)
 {
-    var divisors = new QuantumSuperposition<int>(Enumerable.Range(2, i > 2 ? i - 2 : 1));
-    return (i % divisors).All() != 0;
+    var divisors = new QuBit<int>(Enumerable.Range(2, i > 2 ? i - 2 : 1));
+    return (i % divisors).All(); 
 }
 
 // Example Usage
@@ -63,18 +63,14 @@ for (int i = 1; i <= 100; i++)
 The `Factors` method uses the `QuantumSuperposition<int>` class to determine the factors of a number by finding divisors that result in a modulus of 0.
 
 ```csharp
-static List<int> Factors(int v)
+static Eigenstates<int> Factors(int v)
 {
-    var divisors = new QuantumSuperposition<int>(Enumerable.Range(1, v));
-
-    // Obtain eigenstates where the modulus result is 0
-    var factors = divisors.EigenstatesWhere(divisor => v % divisor == 0);
-
-    return factors.ToList();
+    var divisors = new Eigenstates<int>(Enumerable.Range(1, v));
+    return v % divisors == 0;
 }
 
 // Example Usage
-Console.WriteLine("Factors of 10: " + string.Join(", ", Factors(10)));
+Console.WriteLine("Factors of 10: " + Factors(10).ToString());
 ```
 
 ### 3. Finding the Minimum Value in a Set
@@ -84,13 +80,13 @@ The `MinValue` method finds the minimum value in a set of integers using `Quantu
 ```csharp
 static int MinValue(IEnumerable<int> range)
 {
-    var minval = new QuantumSuperposition<int>(range);
-    var test = (minval.Any() <= minval.All());
-    return int.Parse(test.ToString());  // Assuming ToString() is overloaded to represent the collapsed result.
+    var minval = new Eigenstates<int>(range);
+    var test = minval.Any() <= minval.All();
+    return test.ToValues().First();
 }
 
 // Example Usage
-Console.WriteLine("Minimum value of 3, 5, 8 is " + MinValue(new List<int> { 3, 5, 8 }));
+Console.WriteLine("Minimum value of 3, 5, 8 is " + MinValue(new[] { 3, 5, 8 }));
 ```
 
 ## Advanced Concepts
