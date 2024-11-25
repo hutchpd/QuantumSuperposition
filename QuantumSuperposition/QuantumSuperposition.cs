@@ -605,6 +605,39 @@ public partial class QuBit<T>
 
         return hash;
     }
+
+    /// <summary>
+    /// Method to get the values from the quantum superposition.
+    /// </summary>
+    /// <returns>Values from the quantum superposition.</returns>
+    /// <exception cref="InvalidOperationException"> Thrown when there are no values to collapse.</exception>
+    public IEnumerable<T> ToValues()
+    {
+        // If no values, throw an exception
+        if (!_qList.Any())
+            throw new InvalidOperationException("No values to collapse.");
+
+        // Return all values if in disjunctive superposition
+        if (_eType == QuSuper.eDisj)
+        {
+            return _qList;
+        }
+        else if (_eType == QuSuper.eConj)
+        {
+            // If only one distinct value remains, return it as a single item list
+            if (_qList.Distinct().Count() == 1)
+                return new List<T> { _qList.First() };
+
+            // Otherwise, return all the values
+            return _qList;
+        }
+        else
+        {
+            // If in the collapsed state or any other state that means a single value
+            return new List<T> { _qList.First() };
+        }
+    }
+
 }
 
 /// <summary>
@@ -859,16 +892,6 @@ public partial class Eigenstates<T>
     public static Eigenstates<T> operator %(Eigenstates<T> a, T b)
     {
         return a.Do_oper_type(a, b, a.qop_mod);
-    }
-    /// <summary>
-    /// Computes the modulus of an eigenstates of states and a scalar value.
-    /// </summary>
-    /// <param name="a">The eigenstates.</param>
-    /// <param name="b">The scalar value.</param>
-    /// <returns>A new eigenstates resulting from the modulus operation.</returns>
-    public static Eigenstates<T> operator +(T a, Eigenstates<T> b)
-    {
-        return b.Do_oper_type(a, b, b.qop_add);
     }
     /// <summary>
     /// Adds a scalar value to an eigenstates of states.

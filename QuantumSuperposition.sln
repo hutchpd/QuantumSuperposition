@@ -5,7 +5,13 @@ VisualStudioVersion = 17.10.35013.160
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantumSuperposition", "QuantumSuperposition\QuantumSuperposition.csproj", "{A167AA44-8F27-4C8F-96B3-A3DA15EB56AE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestQSP", "TestQSP\TestQSP.csproj", "{A1FC3364-A002-4367-8B88-6122B9E23B8C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestQSP", "TestQSP\TestQSP.csproj", "{A1FC3364-A002-4367-8B88-6122B9E23B8C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PositronicVariables", "PositronicVariables\PositronicVariables.csproj", "{B4AA4D25-9101-4D77-93DF-7F56C4884092}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestPV", "TestPV\TestPV.csproj", "{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PositronicVariableTests", "PositronicVariableTests\PositronicVariableTests.csproj", "{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +27,18 @@ Global
 		{A1FC3364-A002-4367-8B88-6122B9E23B8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1FC3364-A002-4367-8B88-6122B9E23B8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1FC3364-A002-4367-8B88-6122B9E23B8C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4AA4D25-9101-4D77-93DF-7F56C4884092}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4AA4D25-9101-4D77-93DF-7F56C4884092}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4AA4D25-9101-4D77-93DF-7F56C4884092}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4AA4D25-9101-4D77-93DF-7F56C4884092}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
