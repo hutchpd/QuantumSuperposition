@@ -2,46 +2,56 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 
+/// <summary>
+/// A "positronic" variable that stores a timeline of QuBit<T> states.
+/// Supports negative-time convergence, partial unification, etc.
+/// </summary>
+/// <typeparam name="T"></typeparam>
 public class PositronicVariable<T> where T : struct, IComparable
 {
     // --------------------------------------------------------------------------
     //   Static fields
     // --------------------------------------------------------------------------
-    private static int entropy = -1;
-    private static bool s_converged = false;
-
-    // All known variables
+    private static int entropy = -1;         // +1=forward, -1=reverse
+    private static bool s_converged = false; // Once true, all future assignments unify
     private static readonly List<PositronicVariable<T>> antivars = new();
 
-    // Capture the user/test's console writer once
+    // For capturing user console writer during negative-time loops
     private static TextWriter _capturedWriter = null;
 
     // --------------------------------------------------------------------------
-    //   Timeline
+    //   Per-instance: timeline tracking
     // --------------------------------------------------------------------------
-    private readonly List<QuBit<T>> timeline = new();
+    // Each slice in the timeline is a QuBit<T> representing the variable's state
+    // at that moment. Negative-time steps append slices, or unify them if needed.
+    internal readonly List<QuBit<T>> timeline = new();
+
+    // This is so we don't keep overwriting the single slice if timeline.Count==1
+    private bool replacedInitialSlice = false;
 
     // --------------------------------------------------------------------------
     //   Constructors
     // --------------------------------------------------------------------------
     public PositronicVariable(T initialValue)
     {
+        // Force a new QuBit and set it to "any" if multiple states appear
         var qb = new QuBit<T>(new[] { initialValue });
+        qb.Any();  // ensures eDisj if we ever have multiple distinct states
+        timeline.Add(qb);
+        antivars.Add(this);
+    }
+
+    public PositronicVariable(QuBit<T> qb)
+    {
+        // Force "Any()" so if the QuBit has multiple distinct values, it shows up as "any(...)"
         qb.Any();
         timeline.Add(qb);
         antivars.Add(this);
     }
 
-    private PositronicVariable(QuBit<T> qb)
-    {
-        timeline.Add(qb);
-        antivars.Add(this);
-    }
-
     // --------------------------------------------------------------------------
-    //   Reset / Entropy
+    //   Static Tools for Testing / Setup
     // --------------------------------------------------------------------------
     public static void ResetStaticVariables()
     {
@@ -54,118 +64,232 @@ public class PositronicVariable<T> where T : struct, IComparable
     public static void SetEntropy(int e) => entropy = e;
     public static int GetEntropy() => entropy;
 
+    /// <summary>
+    /// Returns true if *all* existing PositronicVariables found a repeated slice.
+    /// This is used in some negative-time loops to see if we can unify everything.
+    /// </summary>
+    public static bool AllConverged()
+    {
+        return antivars.All(v => v.Converged() > 0);
+    }
+
+    public static IEnumerable<PositronicVariable<T>> GetAllVariables() => antivars;
+
     // --------------------------------------------------------------------------
     //   RunConvergenceLoop
     // --------------------------------------------------------------------------
     //
-    // This approach:
-    //   1) Force negative time
-    //   2) Discard console output in negative runs
-    //   3) Repeatedly run user code -> check if all converge
-    //       if converge => unifyAll => break out of negative loop
-    //   4) Switch console to user’s test writer, set entropy=1, run code once
+    //  1) Capture the console writer if not already done
+    //  2) Switch to negative time, discard console
+    //  3) Repeatedly run user code until all converge => unifyAll => break
+    //  4) Switch to forward time, restore console, run code once more
     public static void RunConvergenceLoop(Action code)
     {
+        // 1) Capture once
         if (_capturedWriter == null)
-            _capturedWriter = Console.Out;  // store the test's writer
+            _capturedWriter = Console.Out;
 
         s_converged = false;
+
+        // 2) Negative-time => discard console
         Console.SetOut(TextWriter.Null);
         entropy = -1;
 
-        const int maxIterations = 1000;
-        int iterationCount = 0;
+        const int maxIters = 1000;
+        int iteration = 0;
 
-        // Negative-time loop
-        while (!s_converged && iterationCount < maxIterations)
+        while (!s_converged && iteration < maxIters)
         {
-            code();  // user code in negative time
+            code(); // user code in negative time
 
-            // Check if *all* variables are converged
-            bool allConverged = antivars.All(v => v.Converged() > 0);
-            if (allConverged)
+            bool allVarsConverged = antivars.All(v => v.Converged() > 0);
+            if (allVarsConverged)
             {
                 s_converged = true;
-                // unify all slices for each variable, 
-                // ensuring we gather all states
-                foreach (var v in antivars)
-                    v.UnifyAll();
+
+                // We'll unify all variables, *then* do a quick debug dump
+                foreach (var pv in antivars)
+                {
+                    pv.UnifyAll();
+                }
+
+                // For debugging, let's print them out in real console (just briefly):
+                var realConsole = Console.Out;
+                Console.SetOut(realConsole);
+                Console.WriteLine("[DEBUG] All variables unified in negative time =>");
+                foreach (var pv in antivars)
+                {
+                    Console.WriteLine("   " + pv);
+                }
+                // after debug, we still remain in negative time, but we'll break
+                // so it's effectively the final negative iteration
                 break;
             }
-            iterationCount++;
+
+            iteration++;
         }
 
-        // Now do exactly one forward pass, capturing output
+        // 4) forward pass => restore console
         Console.SetOut(_capturedWriter);
         entropy = 1;
-        code();
+        code(); // final forward run
     }
 
     // --------------------------------------------------------------------------
-    //   Converged (the "second to last vs. older" approach)
+    //   Converged()
     // --------------------------------------------------------------------------
+    // Return how far back the final slice matches an older slice. 0 => no match
+    // Typically, if timeline < 2 => 0
+    // else compare timeline[^1] with older slices from the second-last on back
     public int Converged()
     {
-        if (timeline.Count < 3)
+        if (timeline.Count < 2)
             return 0;
 
-        var currSlice = timeline[^2]; // second-to-last
-        for (int i = 3; i <= timeline.Count; i++)
+        var current = timeline[^1];
+        // Compare with older slices
+        for (int i = 2; i <= timeline.Count; i++)
         {
             var older = timeline[timeline.Count - i];
-            if (SameStates(older, currSlice))
-            {
-                // original Perl returns (i - 2)
-                return i - 2;
-            }
+            if (SameStates(older, current))
+                return i - 1; // how many steps back
         }
         return 0;
     }
 
     // --------------------------------------------------------------------------
-    //   UnifyAll
+    //   UnifyAll()
     // --------------------------------------------------------------------------
-    // merges *all* timeline slices into a single "any(...)" superposition
+    // Merge all timeline slices into a single multi-state slice => "any(...)"
+    // Then replace timeline with that single slice. Also sets global s_converged=true
     public void UnifyAll()
     {
-        var combined = new List<T>();
-        foreach (var qb in timeline)
-        {
-            combined.AddRange(qb._qList);
-        }
-        var allStates = combined.Distinct().ToList();
+        // Combine states from each slice
+        var allStates = timeline
+            .SelectMany(qb => qb.ToValues())
+            .Distinct()
+            .ToList();
+
         var unified = new QuBit<T>(allStates);
+        // If multiple distinct states, QuBit sets eDisj => "any(...)"
         unified.Any();
+
+        timeline.Clear();
         timeline.Add(unified);
+
+        s_converged = true;
+
+        // [NEW] debugging
+        // (We do NOT forcibly print to normal console here, but we *could*.)
     }
 
     // --------------------------------------------------------------------------
-    //   Unify
+    //   Unify(int count)
     // --------------------------------------------------------------------------
-    // Unify the last 'count' timeline slices into one superposition.
-    // This method merges the states of the last count slices,
-    // takes only distinct states, and adds a new timeline slice.
+    // Merge the last 'count' slices only
     public void Unify(int count)
     {
-        if (count < 2 || timeline.Count < count)
-            return;
+        if (count < 2) return;
+        if (timeline.Count < count) return;
 
-        var combined = new List<T>();
-        int startIndex = timeline.Count - count;
-        for (int i = startIndex; i < timeline.Count; i++)
-        {
-            combined.AddRange(timeline[i]._qList);
-        }
-        // Remove duplicates and form a unified superposition.
-        var unifiedStates = combined.Distinct().ToList();
-        var unified = new QuBit<T>(unifiedStates);
-        unified.Any();
-        timeline.Add(unified);
+        int start = timeline.Count - count;
+        var merged = timeline
+            .Skip(start)
+            .SelectMany(qb => qb.ToValues())
+            .Distinct()
+            .ToList();
+
+        // remove those slices
+        timeline.RemoveRange(start, count);
+
+        var newQb = new QuBit<T>(merged);
+        newQb.Any();
+        timeline.Add(newQb);
+
+        // Mark the system as converged so further assignments merge with this slice.
+        s_converged = true;
     }
 
 
+    // --------------------------------------------------------------------------
+    //   Assign(...) from another PositronicVariable or scalar
+    // --------------------------------------------------------------------------
+    public void Assign(PositronicVariable<T> other)
+    {
+        var qb = other.GetCurrentQBit();
+        qb.Any(); // ensure correct eType if multiple states
+        ReplaceOrAppendOrUnify(qb);
+    }
+
+    public void Assign(T scalarValue)
+    {
+        var qb = new QuBit<T>(new[] { scalarValue });
+        qb.Any();
+        ReplaceOrAppendOrUnify(qb);
+    }
+
+    private void ReplaceOrAppendOrUnify(QuBit<T> qb)
+    {
+        // If the system is converged, choose behavior based on time direction.
+        if (s_converged)
+        {
+            // In forward time, we want the assignment to replace the current unified slice.
+            if (entropy > 0)
+            {
+                timeline[^1] = qb;
+                return;
+            }
+            else
+            {
+                // In negative time, if the new value is already in the union, do nothing.
+                var current = timeline[^1].ToValues().ToList();
+                var newVal = qb.ToValues().ToList();
+                if (newVal.All(x => current.Contains(x)))
+                    return;
+                else
+                {
+                    timeline[^1] = qb;
+                    return;
+                }
+            }
+        }
+
+        // If there's exactly 1 slice and we haven't replaced it yet, overwrite it.
+        if (!replacedInitialSlice && timeline.Count == 1)
+        {
+            var existing = timeline[0];
+            if (!SameStates(existing, qb))
+            {
+                timeline[0] = qb;
+            }
+            replacedInitialSlice = true;
+            return;
+        }
+
+        // Otherwise, just append the new slice.
+        timeline.Add(qb);
+    }
+
+    public void CollapseToLastSlice()
+    {
+        // Get the current unified QBit
+        var last = timeline.Last();
+        // Instead of using the whole union, select only the first (or last) value.
+        var baseline = last.ToValues().First();
+        // Create a new QBit from that single value.
+        var collapsedQB = new QuBit<T>(new[] { baseline });
+        collapsedQB.Any();
+        timeline.Clear();
+        timeline.Add(collapsedQB);
+    }
+
+
+    // --------------------------------------------------------------------------
+    //   QuBit comparison helper
+    // --------------------------------------------------------------------------
     private bool SameStates(QuBit<T> a, QuBit<T> b)
     {
+        // Compare .ToValues(), ensuring they have same distinct states
         var av = a.ToValues().OrderBy(x => x).ToList();
         var bv = b.ToValues().OrderBy(x => x).ToList();
         if (av.Count != bv.Count) return false;
@@ -176,33 +300,13 @@ public class PositronicVariable<T> where T : struct, IComparable
         return true;
     }
 
-    // --------------------------------------------------------------------------
-    //   Assign
-    // --------------------------------------------------------------------------
-    public void Assign(PositronicVariable<T> other)
-    {
-        var qb = other.GetCurrentQBit();
-        qb.Any();
-        timeline.Add(qb);
-    }
-
-    public void Assign(T scalarValue)
-    {
-        var qb = new QuBit<T>(new[] { scalarValue });
-        qb.Any();
-        timeline.Add(qb);
-    }
-
-    // --------------------------------------------------------------------------
-    //   Current QBit
-    // --------------------------------------------------------------------------
-    private QuBit<T> GetCurrentQBit() => timeline[^1];
+    public QuBit<T> GetCurrentQBit() => timeline[^1];
 
     // --------------------------------------------------------------------------
     //   Value / ToValues
     // --------------------------------------------------------------------------
-    public PositronicValueWrapper Value => new PositronicValueWrapper(GetCurrentQBit());
-    public IEnumerable<T> ToValues() => GetCurrentQBit().ToValues();
+    // For convenience in tests
+    public PositronicValueWrapper Value => new(GetCurrentQBit());
 
     public class PositronicValueWrapper
     {
@@ -211,58 +315,36 @@ public class PositronicVariable<T> where T : struct, IComparable
         public IEnumerable<T> ToValues() => qb.ToValues();
     }
 
+    public IEnumerable<T> ToValues() => GetCurrentQBit().ToValues();
+
     // --------------------------------------------------------------------------
-    //   Operators +, %
+    //   Operator Overloads (+, %, etc.)
     // --------------------------------------------------------------------------
+    // Instead of re-implementing arithmetic, we just call your QuBit<T> operators.
+    // e.g. left.GetCurrentQBit() + right => yields a QuBit<T> => wrap in a new PositronicVariable<T>.
     public static PositronicVariable<T> operator +(PositronicVariable<T> left, T right)
     {
-        var leftQB = left.GetCurrentQBit();
-        var newStates = new List<T>();
-        foreach (var s in leftQB._qList)
-        {
-            dynamic ds = s;
-            dynamic dr = right;
-            newStates.Add((T)(ds + dr));
-        }
-        var combined = new QuBit<T>(newStates);
-        combined.Any();
-        return new PositronicVariable<T>(combined);
+        var resultQB = left.GetCurrentQBit() + right; // calls QuBit<T>.operator+(QuBit<T>, T)
+        resultQB.Any();  // ensure multi-state is recognized
+        return new PositronicVariable<T>(resultQB);
     }
 
     public static PositronicVariable<T> operator %(PositronicVariable<T> left, T right)
     {
-        var leftQB = left.GetCurrentQBit();
-        var newStates = new List<T>();
-        foreach (var s in leftQB._qList)
-        {
-            dynamic ds = s;
-            dynamic dr = right;
-            newStates.Add((T)(ds % dr));
-        }
-        var combined = new QuBit<T>(newStates);
-        combined.Any();
-        return new PositronicVariable<T>(combined);
+        var resultQB = left.GetCurrentQBit() % right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
     }
 
+    // If you also want e.g. "T + PositronicVariable<T>", define that, but typically we do `variable + T`.
+
     // --------------------------------------------------------------------------
-    //   ToString
+    //   ToString()
     // --------------------------------------------------------------------------
     public override string ToString()
     {
-        var vals = GetCurrentQBit().ToValues().Distinct().ToList();
-        if (vals.Count == 1)
-            return vals[0].ToString();
-        return $"any({string.Join(", ", vals)})";
+        // Delegate to QuBit<T>.ToString()
+        // That way, if the unified QuBit is correctly marked as disjunctive (via Any()), it will print “any(…).”
+        return GetCurrentQBit().ToString();
     }
-
-    public static bool AllConverged()
-    {
-        return antivars.All(v => v.Converged() > 0);
-    }
-
-    public static IEnumerable<PositronicVariable<T>> GetAllVariables()
-    {
-        return antivars;
-    }
-
 }

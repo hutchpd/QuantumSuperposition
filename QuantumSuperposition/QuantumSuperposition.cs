@@ -41,6 +41,10 @@ public partial class QuBit<T>
     public QuBit(IEnumerable<T> Items)
     {
         _qList = Items;
+
+        if (_qList.Distinct().Count() > 1)
+            SetType(QuSuper.eDisj); // YOU KNOW IT'S A MULTI-STATE
+
     }
 
     /// <summary>
@@ -75,7 +79,7 @@ public partial class QuBit<T>
     /// Sets the superposition type to "Any" (disjunctive superposition).
     /// </summary>
     /// <returns></returns>
-    public object Any()
+    public QuBit<T> Any()
     {
         SetType(QuSuper.eDisj);
         return this;
@@ -397,6 +401,44 @@ public partial class QuBit<T>
         return new QuBit<T>(ans);
     }
 
+    // Might need this for the logical operators
+    private static Func<T, T, TResult> CreateBinaryOperation<TResult>(ExpressionType op)
+    {
+        if (IsDynamicType())
+        {
+            return (a, b) =>
+            {
+                dynamic da = a, db = b;
+                return (TResult)(op switch
+                {
+                    ExpressionType.Add => da + db,
+                    ExpressionType.Multiply => da * db,
+                    ExpressionType.Subtract => da - db,
+                    ExpressionType.Divide => da / db,
+                    ExpressionType.Modulo => da % db,
+                    ExpressionType.Equal => da == db,
+                    ExpressionType.NotEqual => da != db,
+                    ExpressionType.GreaterThan => da > db,
+                    ExpressionType.LessThan => da < db,
+                    ExpressionType.GreaterThanOrEqual => da >= db,
+                    ExpressionType.LessThanOrEqual => da <= db,
+                    _ => throw new NotSupportedException($"Operation '{op}' not supported")
+                });
+            };
+        }
+
+        var paramA = Expression.Parameter(typeof(T), "a");
+        var paramB = Expression.Parameter(typeof(T), "b");
+        var body = Expression.MakeBinary(op, paramA, paramB);
+        return Expression.Lambda<Func<T, T, TResult>>(body, paramA, paramB).Compile();
+    }
+
+    private static bool IsDynamicType()
+    {
+        return typeof(T) == typeof(object); // Best we can do at runtime in C#
+    }
+
+
     /// <summary>
     /// Method to compute the modulus of two values.
     /// </summary>
@@ -425,6 +467,7 @@ public partial class QuBit<T>
         var Modu = Expression.Lambda<Func<T, T, T>>(body, paramA, paramB).Compile();
         return Modu(a, b);
     }
+
     /// <summary>
     /// Method to negate a value.
     /// </summary>
@@ -635,6 +678,27 @@ public partial class QuBit<T>
         {
             // If in the collapsed state or any other state that means a single value
             return new List<T> { _qList.First() };
+        }
+    }
+
+    public override string ToString()
+    {
+        // Always use the internal _eType to decide on output.
+        // If in disjunctive mode (eDisj), always print in the any(...) format,
+        // even if _qList.Distinct() returns just one element.
+        if (_eType == QuSuper.eDisj)
+        {
+            // Use the distinct list, but force the "any(...)" format.
+            var distinctVals = _qList.Distinct().ToList();
+            return $"any({string.Join(", ", distinctVals)})";
+        }
+        else
+        {
+            // Otherwise, if in conjunctive mode, print normally:
+            var distinctVals = _qList.Distinct().ToList();
+            if (distinctVals.Count == 1)
+                return distinctVals[0].ToString();
+            return $"all({string.Join(", ", distinctVals)})";
         }
     }
 
@@ -1326,8 +1390,16 @@ public partial class Eigenstates<T>
     /// <returns>A string representing the keys of the eigenstates.</returns>
     public override string ToString()
     {
-        return string.Join(",", _qList.Keys);
+        if (_eType == QuSuper.eDisj)
+            return $"any({string.Join(", ", _qList.Distinct())})";
+
+        var vals = _qList.Distinct().ToList();
+        if (vals.Count == 1)
+            return vals[0].ToString();
+
+        return $"any({string.Join(", ", vals)})";
     }
+
     /// <summary>
     /// Sets the type of the eigenstates to conjunctive (All).
     /// </summary>
