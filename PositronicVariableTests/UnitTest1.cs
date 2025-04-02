@@ -122,9 +122,7 @@ namespace PositronicVariables.Tests
         {
             var snapshot = new List<List<int>>();
             FieldInfo timelineField = typeof(PositronicVariable<int>)
-                .GetField("timeline", BindingFlags.NonPublic | BindingFlags.Instance);
-            if (timelineField == null)
-                return snapshot;
+                    .GetField("timeline", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
             var slices = timelineField.GetValue(variable) as List<QuBit<int>>;
             if (slices == null)
@@ -833,7 +831,7 @@ namespace PositronicVariables.Tests
         }
 
         [Test]
-        public void WhenConverged_AssignMergesOnlyLastSlice()
+        public void WhenConverged_AssignMergesOnlyLastSlice_UnionMode()
         {
             // Arrange: Run a negative loop to accumulate a union.
             PositronicVariable<int>.ResetStaticVariables();
@@ -842,40 +840,37 @@ namespace PositronicVariables.Tests
 
             // Simulate a negative loop that cycles through 0,1,2:
             pv.Assign((pv + 1) % 3); // overwrites seed: now state is 0
-            pv.Assign((pv + 1) % 3); // now state is 1 (and timeline now has [0] replaced by 1)
+            pv.Assign((pv + 1) % 3); // now state is 1
             pv.Assign((pv + 1) % 3); // now state is 2
                                      // Manually unify so that the union is built:
             pv.UnifyAll();
 
-            // At this point, we expect the union to be {0,1,2} (if all had been accumulated)
+            // At this point, we expect the union to be {0, 1, 2}.
             var unionBefore = pv.ToValues().OrderBy(x => x).ToList();
             CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, unionBefore,
-                "Expected union from negative loop to be {0,1,2}.");
+                "Expected union from negative loop to be {0, 1, 2}.");
 
             // Now, simulate that convergence was detected:
-            // (s_converged would be set by the convergence loop; here we mimic that)
             // Subsequent assignments now use the merge branch.
-            pv.Assign(0); // new assignment is 0; union of {0,1,2} ∪ {0} is still {0,1,2}
+            pv.Assign(0); // assigning a value already present should leave the union unchanged.
             var unionAfterSame = pv.ToValues().OrderBy(x => x).ToList();
             CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, unionAfterSame,
                 "Union should remain unchanged when assigning an already-present value.");
 
             // Now assign a new value not in the union:
             pv.Assign(3);
-            // Because the merge branch unions with only the last slice, if the last slice had been "collapsed"
-            // to just {0} then the result might be {0,3} rather than {0,1,2,3}.
             var unionAfterNew = pv.ToValues().OrderBy(x => x).ToList();
-            // Depending on design, you might expect the new value to join the full union, or not.
-            // For example, if the intention is that once convergence happens the union is fixed,
-            // then unionAfterNew might be expected to remain {0,1,2}. If the expectation is to update,
-            // then you’d expect {0,1,2,3}.
-            // Here we check that it is not preserving the full union:
-            CollectionAssert.AreNotEquivalent(new[] { 0, 1, 2, 3 }, unionAfterNew,
-                "The merge branch appears to be preserving the full union instead of merging only with the last slice.");
+            // In union mode we expect the new value to update the union.
+            CollectionAssert.AreEquivalent(new[] { 0, 1, 2, 3 }, unionAfterNew,
+                "The merge branch should update the union when a new value is assigned.");
         }
 
+
+       
+
+
         [Test]
-        public void ForwardPassUsesOnlyLastUnifiedSlice()
+        public void ForwardPassUsesFullNegativeUnion_UnionMode()
         {
             // Arrange: Run a negative loop until convergence.
             PositronicVariable<int>.ResetStaticVariables();
@@ -883,92 +878,101 @@ namespace PositronicVariables.Tests
             var antival = new PositronicVariable<int>(-1);
 
             // Run iterations so that the negative loop cycles.
-            // (Our other tests show that manually running 6 iterations yields a full cycle,
-            // but here we simulate the convergence loop behavior.)
             for (int i = 0; i < 8; i++)
             {
                 var next = (antival + 1) % 3;
                 antival.Assign(next);
             }
-            // At some point convergence is detected and UnifyAll is called,
-            // which collapses the timeline to a single slice.
+            // Unify negative slices (do not collapse)
             antival.UnifyAll();
-            antival.CollapseToLastSlice();
-            // Check negative-phase union (for example, it might be {0,1,2} if we had run long enough)
             var negUnion = antival.ToValues().OrderBy(x => x).ToList();
             TestContext.WriteLine("Negative union: " + string.Join(", ", negUnion));
+            // Expect the negative union to be {0, 1, 2}
+            CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, negUnion,
+                "Expected negative union to be {0, 1, 2}.");
 
             // Act: Now switch to forward time.
             PositronicVariable<int>.SetEntropy(1);
-            var forward = (antival + 1) % 3;
-            // The operator + creates a new variable based solely on the current (unified) QBit.
-            // If that QBit only has one value (say, 0), then forward becomes any(1).
-            // And when we do antival.Assign(forward), we merge forward into antival.
+            var forward = (antival + 1) % 3;  // arithmetic applies elementwise over the union.
             antival.Assign(forward);
 
-            // Assert: Now antival.ToString() should show a state that reflects only the last slice,
-            // not the full union of the negative loop.
-            // For example, if the negative unified state was any(0) then the forward pass yields any(1).
+            // Assert: The final state should be the elementwise addition of the negative union.
+            // (For modulo 3 arithmetic, {0,1,2}+1 gives {1,2,0} which is a cyclic permutation of {0,1,2}.)
             string final = antival.ToString();
             TestContext.WriteLine("Final state: " + final);
+            // We check that the final state still represents a union of three states.
+            Assert.IsTrue(final.Contains("any(") && final.Contains("0") && final.Contains("1") && final.Contains("2"),
+                "Final state does not reflect elementwise forward arithmetic over the full union.");
+        }
 
-            // In our failing test, the expected output was a disjunction of three values,
-            // but here we see that the final state is just any(0) followed by a forward update to any(1).
-            // This confirms that the final forward pass is operating on only the last unified slice.
-            Assert.IsTrue(final.Contains("any(1)"), "Final state does not reflect forward addition on the unified slice.");
+        [Test]
+        public void RunConvergenceLoop_VariableConvergesToExpectedState()
+        {
+            // Reset the static state
+            PositronicVariable<int>.ResetStaticVariables();
+
+            // Create a variable with initial value 1
+            var pv = new PositronicVariable<int>(1);
+
+            // Define user code that repeatedly assigns the same value
+            void Code()
+            {
+                // Reassign the same value to simulate “steady state”
+                pv.Assign(1);
+            }
+
+            // Run the convergence loop
+            PositronicVariable<int>.RunConvergenceLoop(Code);
+
+            // Check that the timeline has only one slice
+            Assert.AreEqual(1, pv.timeline.Count);
+
+            // And that Converged() indicates no convergence (because we never had a second slice)
+            Assert.AreEqual(0, pv.Converged());
+
+            // Depending on intended behavior, you might expect the variable to have unified.
+            // If so, this test failure would support the theory that the first assignment
+            // isn’t appending a new slice, which prevents convergence detection.
         }
 
 
         [Test]
-        public void RunConvergenceLoop_VariableConvergesToExpectedState()
+        public void RunConvergenceLoop_VariableConvergesToExpectedState_UnionMode()
         {
             // Arrange
             var output = new StringBuilder();
             var writer = new StringWriter(output);
             Console.SetOut(writer);
 
-            // Reset static variables before the test
             PositronicVariable<int>.ResetStaticVariables();
 
-            // Declare 'antival' outside the lambda to persist across iterations
+            // Declare 'antival' to persist across iterations.
             var antival = new PositronicVariable<int>(-1);
 
-            // Act
+            // Act: Run convergence loop without collapsing.
             PositronicVariable<int>.RunConvergenceLoop(() =>
             {
-                // Display initial state
                 Console.WriteLine($"The antival is {antival}");
-
-                // Manipulate the value in a positronic way
                 var val = (antival + 1) % 3;
-
                 Console.WriteLine($"The value is {val}");
-
-                // Assign the new value to 'antival'
                 antival.Assign(val);
-
-                TestContext.WriteLine($"DEBUG: antival={antival}");
             });
 
-            // Restore console output
+            // Restore console output.
             Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-
-            // For debugging, let's show what we captured:
             TestContext.WriteLine("Captured final output:\n" + output);
 
-            // The test expects a VERY specific string, something like:
-            // "The antival is any(1, 0, 2)\nany(The value is 1\n, The value is 2\n, The value is 0\n)"
-            // Exactly matching your original test approach:
+            // In union mode, the negative phase is preserved. For example, if the union is any(1, 0, 2)
+            // and forward arithmetic is applied elementwise, you might expect output similar to:
             var expectedOutput = "The antival is any(1, 0, 2)\nany(The value is 1\n, The value is 2\n, The value is 0\n)";
-
-            // Because your negative time loop prints each possible state, you'd get that "any(...)" effect in your output.
-            // Let's do the line normalization:
             var actual = output.ToString().Replace("\r\n", "\n").Replace("\r", "\n");
             var expected = expectedOutput.Replace("\r\n", "\n").Replace("\r", "\n");
 
             Assert.That(actual, Is.EqualTo(expected),
                 $"Unexpected final output.  Actual:\n{actual}\nExpected:\n{expected}\n");
         }
+
+
 
         [Test]
         public void ConvergenceLoop_IterationCountTest()
@@ -1027,6 +1031,66 @@ namespace PositronicVariables.Tests
                 $"but got any({string.Join(", ", result.Value.ToValues())}).");
         }
 
+        [Test]
+        public void ReplacedInitialSlice_AccumulatesIncorrectly()
+        {
+            // Arrange: Reset state and force negative time.
+            PositronicVariable<int>.ResetStaticVariables();
+            PositronicVariable<int>.SetEntropy(-1);
+
+            // Create a variable with an initial value of -1.
+            var pv = new PositronicVariable<int>(-1);
+
+            // Initially, timeline should have 1 slice (the seed).
+            Assert.AreEqual(1, pv.timeline.Count, "Expected one initial timeline slice.");
+
+            // Act: Make the first assignment.
+            pv.Assign((pv + 1) % 3); // (-1 + 1) % 3 => 0
+
+            // Because replacedInitialSlice is false, the first assignment overwrites the existing slice.
+            Assert.AreEqual(1, pv.timeline.Count, "Expected the first assignment to replace the initial slice.");
+
+            // Act: Make a second assignment.
+            pv.Assign((pv + 1) % 3); // Now, should append a new slice.
+
+            // Now the timeline should have two slices.
+            Assert.AreEqual(2, pv.timeline.Count, "Expected a new slice to be appended after the initial replacement.");
+
+            // Optionally, inspect the union after unification.
+            pv.UnifyAll();
+            var finalStates = pv.ToValues().OrderBy(x => x).ToList();
+            // In a correct cycle accumulation, you might expect more than just the last state.
+            CollectionAssert.AreNotEquivalent(new[] { 0, 1, 2 }, finalStates,
+                "The union is not accumulating all expected values because the initial slice was overwritten.");
+        }
+
+
+        [Test]
+        public void ForwardArithmetic_AppliesElementwiseOverUnion()
+        {
+            // Arrange: Force negative time and build a union {1,0,2}.
+            PositronicVariable<int>.SetEntropy(-1);
+            var varUnion = new PositronicVariable<int>(-1);
+            // Cycle through assignments so that the negative timeline covers 0, 1, 2.
+            varUnion.Assign((varUnion + 1) % 3); // First assignment yields 0.
+            varUnion.Assign((varUnion + 1) % 3); // Second assignment yields 1.
+            varUnion.Assign((varUnion + 1) % 3); // Third assignment yields 2.
+                                                 // Unify negative slices to form any(1, 0, 2)
+            varUnion.UnifyAll();
+
+            // Act: Switch to forward time and apply forward arithmetic.
+            PositronicVariable<int>.SetEntropy(1);
+            var forwardResult = (varUnion + 1) % 3;
+
+            // Expected elementwise arithmetic:
+            // For each branch: 1 + 1 % 3 = 2, 0 + 1 % 3 = 1, 2 + 1 % 3 = 0.
+            var expectedValues = new List<int> { 2, 1, 0 };
+            var actualValues = forwardResult.ToValues().OrderBy(x => x).ToList();
+
+            // Assert: The result should be the union of elementwise arithmetic.
+            CollectionAssert.AreEquivalent(expectedValues, actualValues,
+                "Forward arithmetic did not apply elementwise over the unified negative state as expected.");
+        }
 
 
     }

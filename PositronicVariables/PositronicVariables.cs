@@ -25,7 +25,7 @@ public class PositronicVariable<T> where T : struct, IComparable
     // --------------------------------------------------------------------------
     // Each slice in the timeline is a QuBit<T> representing the variable's state
     // at that moment. Negative-time steps append slices, or unify them if needed.
-    internal readonly List<QuBit<T>> timeline = new();
+    public readonly List<QuBit<T>> timeline = new();
 
     // This is so we don't keep overwriting the single slice if timeline.Count==1
     private bool replacedInitialSlice = false;
@@ -113,16 +113,14 @@ public class PositronicVariable<T> where T : struct, IComparable
                     pv.UnifyAll();
                 }
 
-                // For debugging, let's print them out in real console (just briefly):
-                var realConsole = Console.Out;
-                Console.SetOut(realConsole);
-                Console.WriteLine("[DEBUG] All variables unified in negative time =>");
-                foreach (var pv in antivars)
-                {
-                    Console.WriteLine("   " + pv);
-                }
-                // after debug, we still remain in negative time, but we'll break
-                // so it's effectively the final negative iteration
+                // Instead of using Console.Out (which is null), restore from _capturedWriter:
+                Console.SetOut(_capturedWriter);
+                // TODO: only print debug info if a verbose flag is enabled:
+                // Console.WriteLine("[DEBUG] All variables unified in negative time =>");
+                // foreach (var pv in antivars)
+                // {
+                //     Console.WriteLine("   " + pv);
+                // }
                 break;
             }
 
@@ -227,31 +225,18 @@ public class PositronicVariable<T> where T : struct, IComparable
         qb.Any();
         ReplaceOrAppendOrUnify(qb);
     }
-
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
-        // If the system is converged, choose behavior based on time direction.
         if (s_converged)
         {
-            // In forward time, we want the assignment to replace the current unified slice.
-            if (entropy > 0)
-            {
-                timeline[^1] = qb;
-                return;
-            }
-            else
-            {
-                // In negative time, if the new value is already in the union, do nothing.
-                var current = timeline[^1].ToValues().ToList();
-                var newVal = qb.ToValues().ToList();
-                if (newVal.All(x => current.Contains(x)))
-                    return;
-                else
-                {
-                    timeline[^1] = qb;
-                    return;
-                }
-            }
+            // For both forward and negative time, merge the incoming value with the current union.
+            var current = timeline[^1].ToValues().ToList();
+            var incoming = qb.ToValues().ToList();
+            var merged = current.Union(incoming).Distinct().ToList();
+            var newQb = new QuBit<T>(merged);
+            newQb.Any(); // ensure disjunctive representation
+            timeline[^1] = newQb;
+            return;
         }
 
         // If there's exactly 1 slice and we haven't replaced it yet, overwrite it.
@@ -269,6 +254,8 @@ public class PositronicVariable<T> where T : struct, IComparable
         // Otherwise, just append the new slice.
         timeline.Add(qb);
     }
+
+
 
     public void CollapseToLastSlice()
     {
