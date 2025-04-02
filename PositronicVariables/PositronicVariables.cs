@@ -6,235 +6,263 @@ using System.Text;
 
 public class PositronicVariable<T> where T : struct, IComparable
 {
-    // Static variables
-    private static List<PositronicVariable<T>> _antivars = new List<PositronicVariable<T>>();
-    private static int _entropy = -1;
-    private static bool _converged = false;
-    private static int _convergence = 0;
-    private static Action _mainLogic;
+    // --------------------------------------------------------------------------
+    //   Static fields
+    // --------------------------------------------------------------------------
+    private static int entropy = -1;
+    private static bool s_converged = false;
 
-    // Instance variables
-    private List<Eigenstates<T>> _timeline = new List<Eigenstates<T>>();
-    private int _antistate = 0;
+    // All known variables
+    private static readonly List<PositronicVariable<T>> antivars = new();
 
-    public Eigenstates<T> Value { get; private set; }
+    // Capture the user/test's console writer once
+    private static TextWriter _capturedWriter = null;
 
-    public static void ResetStaticVariables()
-    {
-        _antivars = new List<PositronicVariable<T>>();
-        _entropy = -1;
-        _converged = false;
-        _convergence = 0;
-        _mainLogic = null;
-    }
+    // --------------------------------------------------------------------------
+    //   Timeline
+    // --------------------------------------------------------------------------
+    private readonly List<QuBit<T>> timeline = new();
 
+    // --------------------------------------------------------------------------
+    //   Constructors
+    // --------------------------------------------------------------------------
     public PositronicVariable(T initialValue)
     {
-        Value = new Eigenstates<T>(new List<T> { initialValue });
-        _timeline.Add(Value);
-        _antivars.Add(this);
-    }
-    public static void SetEntropy(int value)
-    {
-        _entropy = value;
+        var qb = new QuBit<T>(new[] { initialValue });
+        qb.Any();
+        timeline.Add(qb);
+        antivars.Add(this);
     }
 
-    public static int GetEntropy()
+    private PositronicVariable(QuBit<T> qb)
     {
-        return _entropy;
+        timeline.Add(qb);
+        antivars.Add(this);
     }
 
-
-    // Operator overloading for operations with T
-    public static PositronicVariable<T> operator +(PositronicVariable<T> a, T b)
+    // --------------------------------------------------------------------------
+    //   Reset / Entropy
+    // --------------------------------------------------------------------------
+    public static void ResetStaticVariables()
     {
-        var result = new PositronicVariable<T>(default(T));
-        result.Value = a.Value + b;
-        return result;
+        entropy = -1;
+        s_converged = false;
+        antivars.Clear();
+        _capturedWriter = null;
     }
 
-    public static PositronicVariable<T> operator %(PositronicVariable<T> a, T b)
-    {
-        var result = new PositronicVariable<T>(default(T));
-        result.Value = a.Value % b;
-        return result;
-    }
+    public static void SetEntropy(int e) => entropy = e;
+    public static int GetEntropy() => entropy;
 
-    // Assignment method since we can't overload '='
-    public void Assign(PositronicVariable<T> other)
+    // --------------------------------------------------------------------------
+    //   RunConvergenceLoop
+    // --------------------------------------------------------------------------
+    //
+    // This approach:
+    //   1) Force negative time
+    //   2) Discard console output in negative runs
+    //   3) Repeatedly run user code -> check if all converge
+    //       if converge => unifyAll => break out of negative loop
+    //   4) Switch console to user’s test writer, set entropy=1, run code once
+    public static void RunConvergenceLoop(Action code)
     {
-        var val = other.Value;
+        if (_capturedWriter == null)
+            _capturedWriter = Console.Out;  // store the test's writer
 
-        if (_entropy > 0)
+        s_converged = false;
+        Console.SetOut(TextWriter.Null);
+        entropy = -1;
+
+        const int maxIterations = 1000;
+        int iterationCount = 0;
+
+        // Negative-time loop
+        while (!s_converged && iterationCount < maxIterations)
         {
-            // Time running forward: add new universe to timelines
-            Value = val;
-            _timeline.Add(Value);
-        }
-        else if (_convergence > 1)
-        {
-            // Timelines have converged: use entire convergence loop of timelines
-            var superstates = new List<T>();
-            int maxState = _timeline.Max(tl => tl.ToValues().Count()) - 1;
+            code();  // user code in negative time
 
-            for (int stateNum = 0; stateNum <= maxState; stateNum++)
+            // Check if *all* variables are converged
+            bool allConverged = antivars.All(v => v.Converged() > 0);
+            if (allConverged)
             {
-                var states = new List<T>();
-
-                for (int i = _timeline.Count - _convergence; i < _timeline.Count; i++)
-                {
-                    var timelineValues = _timeline[i].ToValues().ToList();
-                    if (stateNum < timelineValues.Count)
-                        states.Add(timelineValues[stateNum]);
-                }
-
-                var anyState = new Eigenstates<T>(states.Distinct());
-                superstates.AddRange(anyState.ToValues());
+                s_converged = true;
+                // unify all slices for each variable, 
+                // ensuring we gather all states
+                foreach (var v in antivars)
+                    v.UnifyAll();
+                break;
             }
+            iterationCount++;
+        }
 
-            Value = new Eigenstates<T>(superstates.Distinct());
-            _timeline.Add(Value);
-            _antistate = 0;
-        }
-        else
-        {
-            // Time running backward: use most recent timeline
-            Value = _timeline.Last();
-            _antistate = 0;
-        }
+        // Now do exactly one forward pass, capturing output
+        Console.SetOut(_capturedWriter);
+        entropy = 1;
+        code();
     }
 
+    // --------------------------------------------------------------------------
+    //   Converged (the "second to last vs. older" approach)
+    // --------------------------------------------------------------------------
     public int Converged()
     {
-        Console.WriteLine($"Converged called. Timeline count: {_timeline.Count}");
-
-        if (_timeline.Count < 3)
+        if (timeline.Count < 3)
             return 0;
 
-        var currTl = _timeline[_timeline.Count - 2];
-        int maxState = _timeline.Max(tl => tl.ToValues().Count()) - 1;
-
-        for (int timelineNum = 3; timelineNum <= _timeline.Count; timelineNum++)
+        var currSlice = timeline[^2]; // second-to-last
+        for (int i = 3; i <= timeline.Count; i++)
         {
-            var prevTl = _timeline[_timeline.Count - timelineNum];
-            bool allEqual = true;
-
-            for (int stateNum = 0; stateNum <= maxState; stateNum++)
+            var older = timeline[timeline.Count - i];
+            if (SameStates(older, currSlice))
             {
-                T currVal = default(T), prevVal = default(T);
-                var currValues = currTl.ToValues().ToList();
-                var prevValues = prevTl.ToValues().ToList();
-
-                if (stateNum < currValues.Count)
-                    currVal = currValues[stateNum];
-
-                if (stateNum < prevValues.Count)
-                    prevVal = prevValues[stateNum];
-
-                // Comparing values
-                if (!EqualityComparer<T>.Default.Equals(currVal, prevVal))
-                {
-                    allEqual = false;
-                    break;
-                }
+                // original Perl returns (i - 2)
+                return i - 2;
             }
-
-            if (allEqual)
-                return timelineNum - 2;
         }
-
         return 0;
     }
 
+    // --------------------------------------------------------------------------
+    //   UnifyAll
+    // --------------------------------------------------------------------------
+    // merges *all* timeline slices into a single "any(...)" superposition
+    public void UnifyAll()
+    {
+        var combined = new List<T>();
+        foreach (var qb in timeline)
+        {
+            combined.AddRange(qb._qList);
+        }
+        var allStates = combined.Distinct().ToList();
+        var unified = new QuBit<T>(allStates);
+        unified.Any();
+        timeline.Add(unified);
+    }
 
+    // --------------------------------------------------------------------------
+    //   Unify
+    // --------------------------------------------------------------------------
+    // Unify the last 'count' timeline slices into one superposition.
+    // This method merges the states of the last count slices,
+    // takes only distinct states, and adds a new timeline slice.
+    public void Unify(int count)
+    {
+        if (count < 2 || timeline.Count < count)
+            return;
+
+        var combined = new List<T>();
+        int startIndex = timeline.Count - count;
+        for (int i = startIndex; i < timeline.Count; i++)
+        {
+            combined.AddRange(timeline[i]._qList);
+        }
+        // Remove duplicates and form a unified superposition.
+        var unifiedStates = combined.Distinct().ToList();
+        var unified = new QuBit<T>(unifiedStates);
+        unified.Any();
+        timeline.Add(unified);
+    }
+
+
+    private bool SameStates(QuBit<T> a, QuBit<T> b)
+    {
+        var av = a.ToValues().OrderBy(x => x).ToList();
+        var bv = b.ToValues().OrderBy(x => x).ToList();
+        if (av.Count != bv.Count) return false;
+        for (int i = 0; i < av.Count; i++)
+        {
+            if (!av[i].Equals(bv[i])) return false;
+        }
+        return true;
+    }
+
+    // --------------------------------------------------------------------------
+    //   Assign
+    // --------------------------------------------------------------------------
+    public void Assign(PositronicVariable<T> other)
+    {
+        var qb = other.GetCurrentQBit();
+        qb.Any();
+        timeline.Add(qb);
+    }
+
+    public void Assign(T scalarValue)
+    {
+        var qb = new QuBit<T>(new[] { scalarValue });
+        qb.Any();
+        timeline.Add(qb);
+    }
+
+    // --------------------------------------------------------------------------
+    //   Current QBit
+    // --------------------------------------------------------------------------
+    private QuBit<T> GetCurrentQBit() => timeline[^1];
+
+    // --------------------------------------------------------------------------
+    //   Value / ToValues
+    // --------------------------------------------------------------------------
+    public PositronicValueWrapper Value => new PositronicValueWrapper(GetCurrentQBit());
+    public IEnumerable<T> ToValues() => GetCurrentQBit().ToValues();
+
+    public class PositronicValueWrapper
+    {
+        private readonly QuBit<T> qb;
+        public PositronicValueWrapper(QuBit<T> q) => qb = q;
+        public IEnumerable<T> ToValues() => qb.ToValues();
+    }
+
+    // --------------------------------------------------------------------------
+    //   Operators +, %
+    // --------------------------------------------------------------------------
+    public static PositronicVariable<T> operator +(PositronicVariable<T> left, T right)
+    {
+        var leftQB = left.GetCurrentQBit();
+        var newStates = new List<T>();
+        foreach (var s in leftQB._qList)
+        {
+            dynamic ds = s;
+            dynamic dr = right;
+            newStates.Add((T)(ds + dr));
+        }
+        var combined = new QuBit<T>(newStates);
+        combined.Any();
+        return new PositronicVariable<T>(combined);
+    }
+
+    public static PositronicVariable<T> operator %(PositronicVariable<T> left, T right)
+    {
+        var leftQB = left.GetCurrentQBit();
+        var newStates = new List<T>();
+        foreach (var s in leftQB._qList)
+        {
+            dynamic ds = s;
+            dynamic dr = right;
+            newStates.Add((T)(ds % dr));
+        }
+        var combined = new QuBit<T>(newStates);
+        combined.Any();
+        return new PositronicVariable<T>(combined);
+    }
+
+    // --------------------------------------------------------------------------
+    //   ToString
+    // --------------------------------------------------------------------------
     public override string ToString()
     {
-        return Value.ToString();
+        var vals = GetCurrentQBit().ToValues().Distinct().ToList();
+        if (vals.Count == 1)
+            return vals[0].ToString();
+        return $"any({string.Join(", ", vals)})";
     }
 
-    /// <summary>
-    ///  Static methods for managing the convergence loop
-    /// </summary>
-    /// <param name="mainLogic"></param>
-    public static void RunConvergenceLoop(Action mainLogic)
+    public static bool AllConverged()
     {
-        _mainLogic = mainLogic;
-        _converged = false;
-        int iteration = 0;
-        int maxIterations = 1000; // Prevent infinite loops
-
-        // Start capturing console output
-        StartCapture();
-
-        while (!_converged && iteration < maxIterations)
-        {
-            ReverseArrowOfTime();
-            Console.WriteLine($"Iteration: {iteration}, Entropy: {_entropy}");
-
-
-            // Run the main logic
-            _currentOutput.GetStringBuilder().Clear();
-            _mainLogic.Invoke();
-
-            // Capture console output
-            CaptureConsoleOutput();
-
-            // Check for convergence when time is moving backward
-            if (_entropy < 0)
-            {
-                var convergences = _antivars.Select(v => v.Converged()).ToList();
-                int minConvergence = convergences.Min();
-                _converged = minConvergence > 0;
-                if (_converged)
-                    _convergence = minConvergence;
-            }
-
-            iteration++;
-        }
-
-        // Stop capturing console output
-        StopCapture();
-
-        if (_converged)
-        {
-            // Once converged, restore console output and run forward one last time
-            _entropy = 1;
-            _currentOutput.GetStringBuilder().Clear();
-            StartCapture();
-            _mainLogic.Invoke();
-            StopCapture();
-
-            // Output the final result
-            Console.Write(_currentOutput.ToString());
-        }
-        else
-        {
-            // Convergence not achieved within max iterations
-            Console.WriteLine("Convergence not achieved.");
-        }
+        return antivars.All(v => v.Converged() > 0);
     }
 
-    private static void ReverseArrowOfTime()
+    public static IEnumerable<PositronicVariable<T>> GetAllVariables()
     {
-        _entropy = -_entropy;
+        return antivars;
     }
 
-    private static TextWriter _originalConsoleOut = Console.Out;
-    private static StringWriter _currentOutput = new StringWriter();
-
-    private static void StartCapture()
-    {
-        _originalConsoleOut = Console.Out;
-        Console.SetOut(_currentOutput);
-    }
-
-    private static void StopCapture()
-    {
-        Console.SetOut(_originalConsoleOut);
-    }
-
-    private static void CaptureConsoleOutput()
-    {
-        // No need to store outputs for this implementation, as we output only after convergence
-    }
 }

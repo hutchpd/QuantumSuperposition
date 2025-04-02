@@ -63,6 +63,7 @@ sub converged {
 
 	my $max_state = max map { $#$_} @{self->{timeline}};
 
+	# Iterate through all of the timelines that I am in, until I find I find an older timeline that matches the current one (we've looped back to the beginning of the possible universes)
 	TIMELINE:
 	for my $timeline_num (3..@{$self->{timeline}}){
 		my $prev_tl = $self->{timeline}[-$timeline_num];
