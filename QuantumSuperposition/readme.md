@@ -1,6 +1,6 @@
 ﻿
 ## QuantumSuperposition (.NET Library)
-Parallel states, singular clarity.
+.NET’s most confident way to say “maybe”
 
 QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
 
