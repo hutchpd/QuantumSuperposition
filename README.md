@@ -97,10 +97,10 @@ support@findonsoftware.com
 Inspired by Damian Conway’s Quantum::Superpositions Perl module — where variables have been spooky since before it was cool.
 
 ## QuantumSuperposition Logo
-                ~   ~     ~     ~   ~    
-            ~    __Q__    ___     ~
-           ~    /  |  \  / _ \   ~    ~
-   ~       ~    |  |  | | |_| |       ~
-        ~       \__|__/  \___/    ~
+                 ~   ~     ~     ~   ~    
+             ~    __Q__    ___     ~
+            ~    /  |  \  / _ \   ~    ~
+    ~       ~    |  |  | | |_| |       ~
+         ~       \__|__/  \___/    ~
                 QuantumSuperposition
            Collapse your state. Collapse your doubts.
