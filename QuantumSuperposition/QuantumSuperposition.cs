@@ -44,8 +44,7 @@ public class IntOperators : IQuantumOperators<int>
     public bool NotEqual(int a, int b) => a != b;
 }
 
-// Chooses the appropriate operator set for a given type.
-// Currently supports int. Future support may include imaginary friends.
+// Currently supports int. Future support may include complex numbers, irrational hope, and emotional baggage.
 public static class QuantumOperatorsFactory
 {
     public static IQuantumOperators<T> GetOperators<T>()
@@ -311,7 +310,7 @@ public partial class QuBit<T>
 
     #region Evaluation / Collapse
     // Reality check: converts quantum indecision into a final verdict.
-    // Useful when you want your data to stop being philosophical.
+    // Basically forces the whole wavefunction to agree like it’s group therapy for particles.
 
     public bool EvaluateAll()
     {
@@ -323,8 +322,8 @@ public partial class QuBit<T>
 
     #region Weighting and Output
 
-    // Converts the tangled quantum mess into something you can actually print,
-    // while making you *feel* like you've accomplished something deterministic.
+    // Converts the tangled quantum mess into something printable,
+    // so you can lie to yourself and pretend you understand what's going on.
 
     public IEnumerable<T> ToValues()
     {
@@ -442,7 +441,8 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// Does a little dance, rolls a quantum die, picks a value. May cause minor existential dread.
+    // Does a little dance, rolls a quantum die, picks a value.
+    // May cause minor existential dread or major debugging regrets.
     /// </summary>
     public T SampleWeighted(Random? rng = null)
     {
@@ -477,10 +477,14 @@ public partial class QuBit<T>
         return _weights.Last().Key;
     }
 
-    private static readonly double _tolerance = 1e-12;
+    /// <summary>
+    /// Tolerance used for comparing weights in equality checks.
+    /// This allows for minor floating-point drift.
+    /// </summary>
+    private static readonly double _tolerance = 1e-9;
 
     /// <summary>
-    /// Compares two QuBits with a hypersensitive balance scale and emotional baggage tolerance.
+    /// Compares two QuBits with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
     /// </summary>
     public override bool Equals(object obj)
     {
@@ -554,7 +558,7 @@ public partial class QuBit<T>
     public static implicit operator T(QuBit<T> q) => q.SampleWeighted();
 
     // A convenient way to slap some probabilities onto your states after the fact.
-    // Like putting sprinkles on top of a Schrödinger cupcake.
+    // Like putting sprinkles on a Schrödinger cupcake — you won't know how it tastes until you eat it, and then it's too late.
     /// </summary>
     public QuBit<T> WithWeights(Dictionary<T, double> weights)
     {
@@ -600,9 +604,10 @@ public class Eigenstates<T>
 
     public Eigenstates(IEnumerable<T> Items, IQuantumOperators<T> ops)
     {
+        // same weight, then the waveform should collapse to the same value
         if (Items == null) throw new ArgumentNullException(nameof(Items));
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
-        _qDict = Items.ToDictionary(x => x, x => x);
+        _qDict = Items.Distinct().ToDictionary(x => x, x => x);
     }
 
     public Eigenstates(IEnumerable<T> Items)
@@ -683,9 +688,9 @@ public class Eigenstates<T>
         var newWeights = new Dictionary<T, double>();
 
         // Loop through all weighted values from both operands.
-        foreach (var (valA, wA) in a.ToWeightedValues())
+        foreach (var (valA, wA) in a.ToMappedWeightedValues())
         {
-            foreach (var (valB, wB) in b.ToWeightedValues())
+            foreach (var (valB, wB) in b.ToMappedWeightedValues())
             {
                 var newValue = op(valA, valB);
                 double combinedWeight = wA * wB;
@@ -721,12 +726,13 @@ public class Eigenstates<T>
 
         foreach (var kvp in a._qDict)
         {
-            result[kvp.Key] = op(kvp.Value, b);
+            var newVal = op(kvp.Value, b);
+            result[kvp.Key] = newVal;  // retain original key, update value
 
             if (newWeights != null)
             {
                 double wA = a._weights != null && a._weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
-                newWeights[kvp.Key] = wA;
+                newWeights[kvp.Key] = wA;  // use original key
             }
         }
 
@@ -752,12 +758,13 @@ public class Eigenstates<T>
 
         foreach (var kvp in b._qDict)
         {
-            result[kvp.Key] = op(a, kvp.Value);
+            var newVal = op(a, kvp.Value);
+            result[kvp.Key] = newVal;  // retain original key, update value
 
             if (newWeights != null)
             {
                 double wB = b._weights != null && b._weights.TryGetValue(kvp.Key, out var bw) ? bw : 1.0;
-                newWeights[kvp.Key] = wB;
+                newWeights[kvp.Key] = wB;  // use original key
             }
         }
 
@@ -765,6 +772,7 @@ public class Eigenstates<T>
         e._weights = newWeights;
         return e;
     }
+
 
     public static Eigenstates<T> operator %(T a, Eigenstates<T> b) =>
         b.Do_oper_type(a, b, (x, y) => b._ops.Mod(x, y));
@@ -896,37 +904,53 @@ public class Eigenstates<T>
 
     public IEnumerable<T> ToValues() => _qDict.Keys;
 
+    /// <summary>
+    /// Returns a string representation of the Eigenstates.
+    /// </summary>
+    /// <returns></returns>
     public override string ToString()
     {
+        var distinctKeys = _qDict.Keys.Distinct().ToList();
         if (_weights == null || AllWeightsEqual(_weights))
         {
+            // Return just the element if there is a single unique state
+            if (distinctKeys.Count == 1)
+                return distinctKeys.First().ToString();
+
             return _eType == QuantumStateType.Disjunctive
-                ? $"any({string.Join(", ", _qDict.Keys.Distinct())})"
-                : $"all({string.Join(", ", _qDict.Keys.Distinct())})";
+                ? $"any({string.Join(", ", distinctKeys)})"
+                : $"all({string.Join(", ", distinctKeys)})";
         }
         else
         {
-            var pairs = ToWeightedValues().Select(x => $"{x.value}:{x.weight}");
+            var pairs = ToMappedWeightedValues().Select(x => $"{x.value}:{x.weight}");
             return _eType == QuantumStateType.Disjunctive
                 ? $"any({string.Join(", ", pairs)})"
                 : $"all({string.Join(", ", pairs)})";
         }
     }
 
-    public IEnumerable<(T value, double weight)> ToWeightedValues()
+    /// <summary>
+    /// Returns a collection of (mapped value, weight) pairs,
+    /// where weights correspond to the original input keys.
+    /// </summary>
+    public IEnumerable<(T value, double weight)> ToMappedWeightedValues()
     {
         if (_weights == null)
         {
             foreach (var k in _qDict.Keys.Distinct())
-                yield return (k, 1.0);
+                yield return (_qDict[k], 1.0);
         }
         else
         {
             foreach (var kvp in _weights)
-                yield return (kvp.Key, kvp.Value);
+                yield return (_qDict[kvp.Key], kvp.Value);
         }
     }
 
+    /// <summary>
+    /// Normalizes the weights of the Eigenstates.
+    /// </summary>
     public void NormalizeWeights()
     {
         if (_weights == null) return;
@@ -938,6 +962,11 @@ public class Eigenstates<T>
             _weights[k] /= sum;
     }
 
+    /// <summary>
+    /// Checks if all weights are equal. If so, congratulations — your data achieved perfect balance, Thanos-style.
+    /// </summary>
+    /// <param name="dict"></param>
+    /// <returns></returns>
     private bool AllWeightsEqual(Dictionary<T, double> dict)
     {
         if (dict.Count <= 1) return true;
@@ -945,6 +974,11 @@ public class Eigenstates<T>
         return dict.Values.Skip(1).All(x => Math.Abs(x - first) < 1e-14);
     }
 
+    /// <summary>
+    /// Returns a string representation of the Eigenstates,
+    /// perfect for when your code works and you still don’t know why.
+    /// </summary>
+    /// <returns></returns>
     public string ToDebugString()
     {
         if (_weights == null)
@@ -1087,7 +1121,11 @@ public class Eigenstates<T>
         return _weights.Last().Key;
     }
 
-    private static readonly double _tolerance = 1e-12;
+    /// <summary>
+    /// Tolerance used for comparing weights in equality checks.
+    /// This allows for minor floating-point drift.
+    /// </summary>
+    private static readonly double _tolerance = 1e-9;
 
     /// <summary>
     /// Checks if two Eigenstates are truly the same deep down—or just pretending.

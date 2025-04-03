@@ -1,6 +1,6 @@
 
 ## QuantumSuperposition (.NET Library)
-Parallel states, singular clarity.
+.NET’s most confident way to say “maybe”
 
 QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
 
@@ -71,6 +71,27 @@ static int MinValue(IEnumerable<int> numbers)
     return result.ToValues().First();
 }
 ```
+
+###  QuBit<T> Enhancements
+- **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
+- **Sampling Methods**:
+  - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
+  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
+- **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
+- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
+- **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
+
+###  Eigenstates<T> Gets Fancy Too
+- **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
+- **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
+- **FilterByWeight(...)**: Drop the low-probability riff-raff.
+- **CollapseWeighted() / SampleWeighted()**: Similar to QuBit, these collapse to the most likely or randomly chosen key.
+- **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
+- **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
+
+###  Performance Note
+You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
+
 
 ## Advanced Concepts
 
