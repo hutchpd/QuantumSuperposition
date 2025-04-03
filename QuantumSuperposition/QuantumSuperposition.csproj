@@ -18,7 +18,7 @@
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <AssemblyVersion></AssemblyVersion>
     <FileVersion>1.1.0</FileVersion>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

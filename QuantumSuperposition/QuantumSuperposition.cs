@@ -1,16 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
+﻿// Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
 
+/// <summary>
+/// Represents the current mood of the QuBit. Is it feeling inclusive (All)?
+/// Or indecisive (Any)? Or has it finally made up its mind (Collapsed)?
+/// </summary>
 public enum QuantumStateType
 {
-    Conjunctive,      // All states must be true.
-    Disjunctive,      // Any state can be true.
-    CollapsedResult   // Only one state remains after collapse.
+    Conjunctive,      // All states must be true. Like group projects, but successful.
+    Disjunctive,      // Any state can be true. Like excuses for missing deadlines.
+    CollapsedResult   // Only one state remains after collapse. R.I.P. potential.
 }
 
+// A set of mathematical operations tailored for types that wish they were numbers.
 public interface IQuantumOperators<T>
 {
     T Add(T a, T b);
@@ -26,6 +28,7 @@ public interface IQuantumOperators<T>
     bool NotEqual(T a, T b);
 }
 
+// Like a gym trainer, but for ints. Does the usual heavy lifting.
 public class IntOperators : IQuantumOperators<int>
 {
     public int Add(int a, int b) => a + b;
@@ -41,6 +44,8 @@ public class IntOperators : IQuantumOperators<int>
     public bool NotEqual(int a, int b) => a != b;
 }
 
+// Chooses the appropriate operator set for a given type.
+// Currently supports int. Future support may include imaginary friends.
 public static class QuantumOperatorsFactory
 {
     public static IQuantumOperators<T> GetOperators<T>()
@@ -51,7 +56,7 @@ public static class QuantumOperatorsFactory
     }
 }
 
-// Helper class that factors out repetitive loops for arithmetic.
+// Utility for combining values. Think of it like a quantum kitchen mixer.
 public static class QuantumMathUtility<T>
 {
     public static IEnumerable<T> CombineAll(IEnumerable<T> a, IEnumerable<T> b, Func<T, T, T> op) =>
@@ -69,7 +74,8 @@ public static class QuantumMathUtility<T>
 #region QuBit<T> Implementation
 
 /// <summary>
-/// QuBit&lt;T&gt; represents a superposition of values of type T, optionally weighted.
+/// QuBit<T> represents a superposition of values of type T, optionally weighted.
+/// It's like Schrödinger's inbox: everything's unread and somehow also read.
 /// </summary>
 public partial class QuBit<T>
 {
@@ -85,7 +91,8 @@ public partial class QuBit<T>
     public IQuantumOperators<T> Operators => _ops;
 
     #region Constructors
-
+    // Constructors that enable you to manifest chaotic energy into a typed container.
+    // Also known as: Creating a mess in a mathematically defensible way.
     public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
     {
         if (Items == null) throw new ArgumentNullException(nameof(Items));
@@ -136,6 +143,9 @@ public partial class QuBit<T>
     #endregion
 
     #region State Type Helpers
+    // Lets you toggle between 'All must be true', 'Any might be true', and 'Reality is now a lie'.
+    // Think of it like mood settings, but for wavefunctions.
+    // Also, it helps you avoid existential crises by keeping track of your quantum state.
 
     public QuantumStateType GetCurrentType() => _eType;
     private void SetType(QuantumStateType t) => _eType = t;
@@ -166,7 +176,17 @@ public partial class QuBit<T>
     #endregion
 
     #region Arithmetic Helpers
+    // Implements arithmetic on superpositions, because regular math wasn't confusing enough.
+    // Bonus: Now you can multiply the feeling of indecision by a probability cloud.
+    // Also, it avoids full key-pair expansion (M×N growth) by combining outputs.
 
+    /// <summary>
+    /// Performs the specified operation on two QuBit<T> instances or a QuBit<T> and a scalar.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private QuBit<T> Do_oper_type(QuBit<T> a, QuBit<T> b, Func<T, T, T> op)
     {
         var newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
@@ -191,6 +211,13 @@ public partial class QuBit<T>
         return new QuBit<T>(newList, newWeights, _ops);
     }
 
+    /// <summary>
+    /// Performs the specified operation on a QuBit<T> and a scalar.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private QuBit<T> Do_oper_type(QuBit<T> a, T b, Func<T, T, T> op)
     {
         var newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
@@ -211,6 +238,13 @@ public partial class QuBit<T>
         return new QuBit<T>(newList, newWeights, _ops);
     }
 
+    /// <summary>
+    /// Performs the specified operation on a scalar and a QuBit<T>.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private QuBit<T> Do_oper_type(T a, QuBit<T> b, Func<T, T, T> op)
     {
         var newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
@@ -234,6 +268,9 @@ public partial class QuBit<T>
     #endregion
 
     #region Operator Overloads
+    // Overloads basic math ops so you can add, subtract, multiply your way through parallel universes.
+    // Because plain integers are too committed to a single outcome.
+
 
     public static QuBit<T> operator %(T a, QuBit<T> b) =>
         b.Do_oper_type(a, b, (x, y) => b._ops.Mod(x, y));
@@ -273,6 +310,8 @@ public partial class QuBit<T>
     #endregion
 
     #region Evaluation / Collapse
+    // Reality check: converts quantum indecision into a final verdict.
+    // Useful when you want your data to stop being philosophical.
 
     public bool EvaluateAll()
     {
@@ -283,6 +322,9 @@ public partial class QuBit<T>
     #endregion
 
     #region Weighting and Output
+
+    // Converts the tangled quantum mess into something you can actually print,
+    // while making you *feel* like you've accomplished something deterministic.
 
     public IEnumerable<T> ToValues()
     {
@@ -369,18 +411,15 @@ public partial class QuBit<T>
 
     #endregion
 
-    // ---------------------------------------------------------------
-    // NEW Enhancements Below
-    // ---------------------------------------------------------------
-
     /// <summary>
-    /// 1) Indicates if this QuBit is weighted.
+    /// Indicates if the QuBit is burdened with knowledge (i.e., weighted).
+    /// If not, it's just blissfully unaware of how much it should care.
     /// </summary>
     public bool IsWeighted => _weights != null;
 
     /// <summary>
-    /// 3) Return the key with the highest weight (if weighted),
-    /// otherwise fallback to the first value in ToValues().
+    /// Returns the most probable state, i.e., the one that's been yelling the loudest in the multiverse.
+    /// This is as close to democracy as quantum physics gets.
     /// </summary>
     public T MostProbable()
     {
@@ -403,8 +442,7 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// 3) Perform weighted random selection. If unweighted, 
-    /// fallback to ToValues().First().
+    /// Does a little dance, rolls a quantum die, picks a value. May cause minor existential dread.
     /// </summary>
     public T SampleWeighted(Random? rng = null)
     {
@@ -442,7 +480,7 @@ public partial class QuBit<T>
     private static readonly double _tolerance = 1e-12;
 
     /// <summary>
-    /// 4) Weight-aware equality check.
+    /// Compares two QuBits with a hypersensitive balance scale and emotional baggage tolerance.
     /// </summary>
     public override bool Equals(object obj)
     {
@@ -472,8 +510,8 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// 4) Weight-aware hashing.
-    /// Ensures consistency with Equals.
+    /// Creates a hash that reflects the spiritual essence of your quantum mess.
+    /// If you're lucky, two equal QuBits won't hash to the same black hole
     /// </summary>
     public override int GetHashCode()
     {
@@ -497,7 +535,7 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// 5) Debug helper for weight summary.
+    /// Provides a tiny status report that says: "Yes, you're still lost in the matrix."
     /// </summary>
     public string WeightSummary()
     {
@@ -508,18 +546,15 @@ public partial class QuBit<T>
         return $"Weighted: true, Sum: {sum}, Max: {max}, Min: {min}";
     }
 
-    // ---------------------------------------------------------------
-    // (1) Implicit Operator Overload for Weighted Sampling
-    // ---------------------------------------------------------------
+    /// <summary>
+    /// Implicit operator lets you pretend a QuBit is just a normal value.
+    /// It isn’t. But sure. Keep pretending.
+    /// </summary>
+    /// <param name="q"></param>
     public static implicit operator T(QuBit<T> q) => q.SampleWeighted();
 
-    // ---------------------------------------------------------------
-    // (2) WithWeights(...) Functional Constructor
-    // ---------------------------------------------------------------
-    /// <summary>
-    /// Returns a new QuBit&lt;T&gt; with the same states and operators,
-    /// but re-applies the provided weights to those existing states.
-    /// Extraneous keys are ignored. Original instance is not modified.
+    // A convenient way to slap some probabilities onto your states after the fact.
+    // Like putting sprinkles on top of a Schrödinger cupcake.
     /// </summary>
     public QuBit<T> WithWeights(Dictionary<T, double> weights)
     {
@@ -547,8 +582,8 @@ public partial class QuBit<T>
 #region Eigenstates<T> Implementation
 
 /// <summary>
-/// Eigenstates&lt;T&gt; preserves original input keys in a dictionary Key->Value,
-/// optionally with weights on the keys.
+/// Eigenstates<T> preserves original input keys in a dictionary Key->Value,
+/// because sometimes you just want your quantum states to stop changing the subject.
 /// </summary>
 public class Eigenstates<T>
 {
@@ -560,6 +595,8 @@ public class Eigenstates<T>
     public IReadOnlyCollection<T> States => _qDict.Keys;
 
     #region Constructors
+    // Constructors that let you map values to themselves or to other values.
+    // Also doubles as a safe space for anyone scared of full superposition commitment.
 
     public Eigenstates(IEnumerable<T> Items, IQuantumOperators<T> ops)
     {
@@ -618,6 +655,8 @@ public class Eigenstates<T>
     #endregion
 
     #region Filtering Mode
+    // Toggle between “any of these are fine” and “they all better agree”.
+    // Like relationship statuses but for probability distributions.
 
     public Eigenstates<T> Any() { _eType = QuantumStateType.Disjunctive; return this; }
     public Eigenstates<T> All() { _eType = QuantumStateType.Conjunctive; return this; }
@@ -626,8 +665,18 @@ public class Eigenstates<T>
 
     #region Arithmetic Operations
 
-    // NOTE: This avoids full key-pair expansion (M×N growth) by combining outputs.
-    // For full state pairing, use an explicit QuBit<(T1, T2)> structure via Zip.
+    // When you want to do math to your eigenstates and still feel like a functional adult.
+    // Avoids full combinatorial meltdown, unlike your weekend.
+    // Also, it’s like a quantum blender: it mixes everything together but still keeps the labels.
+    // Because who needs clarity when you can have chaos?
+
+    /// <summary>
+    /// Performs the specified operation on two Eigenstates<T> instances or an Eigenstates<T> and a scalar.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, T> op)
     {
         // Use a dictionary to accumulate combined weights keyed by the computed result value.
@@ -655,6 +704,13 @@ public class Eigenstates<T>
         return e;
     }
 
+    /// <summary>
+    /// Performs the specified operation on an Eigenstates<T> and a scalar.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, T b, Func<T, T, T> op)
     {
         var result = new Dictionary<T, T>();
@@ -679,6 +735,13 @@ public class Eigenstates<T>
         return e;
     }
 
+    /// <summary>
+    /// Performs the specified operation on a scalar and an Eigenstates<T>.
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <param name="op"></param>
+    /// <returns></returns>
     private Eigenstates<T> Do_oper_type(T a, Eigenstates<T> b, Func<T, T, T> op)
     {
         var result = new Dictionary<T, T>();
@@ -741,6 +804,8 @@ public class Eigenstates<T>
     #endregion
 
     #region Filtering (Comparison) Operators
+    // Let’s you ask “which of you is actually greater than 5?” in a very judgmental way.
+    // Returns a trimmed-down existential crisis with weights.
 
     private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, T value)
     {
@@ -826,6 +891,8 @@ public class Eigenstates<T>
     #endregion
 
     #region Weights / Output
+    // The part where we pretend our quantum data is readable by humans.
+    // Also provides debugging strings to impress people on code reviews.
 
     public IEnumerable<T> ToValues() => _qDict.Keys;
 
@@ -899,13 +966,14 @@ public class Eigenstates<T>
     #endregion
 
     /// <summary>
-    /// 1) Indicates if this Eigenstates is weighted.
+    /// Indicates whether your states have developed opinions (i.e., weights).
+    /// If false, they're blissfully indifferent.
     /// </summary>
     public bool IsWeighted => _weights != null;
 
     /// <summary>
-    /// 2) Return the top N keys by descending weight.
-    /// If unweighted, treat each as weight=1, so any stable order is fine.
+    /// Grabs the top N keys based on weight. 
+    /// Sort of like picking favorites, but mathematically justified.
     /// </summary>
     public IEnumerable<T> TopNByWeight(int n)
     {
@@ -925,8 +993,8 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// 2) Return a new Eigenstates with only those keys whose weight satisfies the predicate.
-    /// If unweighted, each has weight=1.
+    /// Filter your states by weight like you're trimming down party invites.
+    /// Only show up if your weight is greater than 0.75, Chad.”
     /// </summary>
     public Eigenstates<T> FilterByWeight(Func<double, bool> predicate)
     {
@@ -962,8 +1030,8 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// 3) Return the key with highest weight (if weighted).
-    /// If not weighted, fall back to first key in the dictionary.
+    /// Collapse the superposition by crowning the one true value.
+    /// It's democracy, but weighted and quantum, so basically rigged.
     /// </summary>
     public T CollapseWeighted()
     {
@@ -985,9 +1053,7 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// 3) Perform weighted random selection of a key. 
-    /// If not weighted, fallback to first key. 
-    /// Probability ~ weight / sum.
+    /// Sample from your state space in a way that introduces just enough chaos to ruin reproducibility.
     /// </summary>
     public T SampleWeighted(Random? rng = null)
     {
@@ -1024,11 +1090,8 @@ public class Eigenstates<T>
     private static readonly double _tolerance = 1e-12;
 
     /// <summary>
-    /// 4) Override to make equality weight-aware if either side is weighted.
-    /// Two Eigenstates are equal if:
-    ///   - They have the same keys
-    ///   - Their weights match within tolerance (if either side is weighted).
-    ///   - Their mapped values are also the same for each key
+    /// Checks if two Eigenstates are truly the same deep down—or just pretending.
+    /// Includes an existential tolerance value.
     /// </summary>
     public override bool Equals(object obj)
     {
@@ -1067,8 +1130,7 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// 4) Weight-aware GetHashCode. 
-    /// Combine all keys, their mapped values, and (optionally) their weights.
+    /// Makes a unique hash that somehow encodes the weight of your guilt, I mean, states.
     /// </summary>
     public override int GetHashCode()
     {
@@ -1094,7 +1156,7 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// 5) Debug helper summarizing weighting.
+    /// Returns a quick stats rundown so you can pretend you have control.
     /// </summary>
     public string WeightSummary()
     {
@@ -1105,13 +1167,9 @@ public class Eigenstates<T>
         return $"Weighted: true, Sum: {sum}, Max: {max}, Min: {min}";
     }
 
-    // ---------------------------------------------------------------
-    // (2) WithWeights(...) Functional Constructor
-    // ---------------------------------------------------------------
     /// <summary>
-    /// Returns a new Eigenstates&lt;T&gt; with the same keys/values and operators,
-    /// but re-applies the provided weights to those existing keys.
-    /// Extraneous keys are ignored. Original instance is not modified.
+    /// Applies new weights to the same old states. 
+    /// Like giving your data a glow-up without changing its personality.
     /// </summary>
     public Eigenstates<T> WithWeights(Dictionary<T, double> weights)
     {
