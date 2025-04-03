@@ -626,34 +626,32 @@ public class Eigenstates<T>
 
     #region Arithmetic Operations
 
+    // NOTE: This avoids full key-pair expansion (M×N growth) by combining outputs.
+    // For full state pairing, use an explicit QuBit<(T1, T2)> structure via Zip.
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, T> op)
     {
-        var result = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        // Use a dictionary to accumulate combined weights keyed by the computed result value.
+        var newWeights = new Dictionary<T, double>();
 
-        // If either side has weights, track them
-        if (a._weights != null || b._weights != null)
-            newWeights = new Dictionary<T, double>();
-
-        foreach (var kvp in a._qDict)
+        // Loop through all weighted values from both operands.
+        foreach (var (valA, wA) in a.ToWeightedValues())
         {
-            foreach (var kvp2 in b._qDict)
+            foreach (var (valB, wB) in b.ToWeightedValues())
             {
-                var newValue = op(kvp.Value, kvp2.Value);
-                // Overwrite for kvp.Key each time in this naive approach:
-                result[kvp.Key] = newValue;
-
-                if (newWeights != null)
-                {
-                    double wA = (a._weights != null && a._weights.TryGetValue(kvp.Key, out var aw)) ? aw : 1.0;
-                    double wB = (b._weights != null && b._weights.TryGetValue(kvp2.Key, out var bw)) ? bw : 1.0;
-                    newWeights[kvp.Key] = wA * wB;
-                }
+                var newValue = op(valA, valB);
+                double combinedWeight = wA * wB;
+                newWeights[newValue] = newWeights.TryGetValue(newValue, out var existing)
+                    ? existing + combinedWeight
+                    : combinedWeight;
             }
         }
 
-        var e = new Eigenstates<T>(result, a._ops);
-        e._weights = newWeights;
+        // Create a new key->value mapping where each key maps to itself.
+        var newDict = newWeights.Keys.ToDictionary(x => x, x => x);
+        var e = new Eigenstates<T>(newDict, a._ops)
+        {
+            _weights = newWeights
+        };
         return e;
     }
 
