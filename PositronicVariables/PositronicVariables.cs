@@ -315,14 +315,20 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         // Otherwise, append the new slice.
         timeline.Add(qb);
 
-        // Detect a repeating cycle of length 3:
-        // e.g. 0 -> 1 -> 2 -> (back to 0)
-        if (timeline.Count >= 4 && SameStates(timeline[^1], timeline[^4]))
+        // Enhanced cycle detection for 2- to 20-cycles:
+        for (int cycle = 2; cycle <= 20; cycle++)
         {
-            // We are repeating, unify last 3 slices to break the cycle
-            Unify(3);
+            // We need at least (cycle + 1) slices to compare the new slice
+            // against the one 'cycle' steps behind.
+            if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
+            {
+                // We found a repeating cycle of length 'cycle'
+                Unify(cycle);
+                break;
+            }
         }
     }
+
 
     /// <summary>
     /// Collapse the wavefunction into the last slice only.

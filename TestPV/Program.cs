@@ -26,7 +26,7 @@ internal static class Program
     private static void MainLogic()
     {
         Console.WriteLine($"The antival is {antival}");
-        var val = (antival + 1) % 3;
+        var val = (antival + 1) % 4;
         Console.WriteLine($"The value is {val}");
         antival.Assign(val);
     }
