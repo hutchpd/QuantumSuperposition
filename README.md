@@ -61,7 +61,7 @@ static Eigenstates<int> Factors(int number)
 }
 ```
 
-🪙 Minimum Value Calculation  
+### Minimum Value Calculation  
 Think of this like a quantum game show where only the smallest contestant survives:
 ```csharp
 static int MinValue(IEnumerable<int> numbers)
