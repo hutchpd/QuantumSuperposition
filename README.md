@@ -13,6 +13,7 @@ This repository contains two interlinked .NET libraries for working with uncerta
 ##  Included Libraries
 
 ###  QuantumSuperposition
+[![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 
 > “Maybe” as a first-class value.
 
