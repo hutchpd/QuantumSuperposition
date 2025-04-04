@@ -8,7 +8,7 @@
     <PackageId>QuantumSuperposition</PackageId>
     <Authors>HutchPD</Authors>
     <Company>FindonSoftware</Company>
-    <Description>`QuantumSuperposition` is a .NET library that introduces quantum mechanics-like superpositions into C#. Inspired by concepts in quantum computing, it allows developers to work with scalar values as if they are in multiple states simultaneously. This library is useful for advanced logical and mathematical operations, where parallelism and state superposition can simplify complex computations.</Description>
+    <Description>`QuantumSuperposition` is a .NET library that introduces quantum mechanics-like superpositions into C#. Inspired by concepts in quantum computing, it allows developers to work with scalar values as if they are in multiple states simultaneously. This library is useful for advanced logical and mathematical operations, where parallelism and state superposition can simplify complex computations. </Description>
     <Copyright>This is free and unencumbered software released into the public domain.</Copyright>
     <PackageProjectUrl>https://github.com/hutchpd/QuantumSuperposition</PackageProjectUrl>
     <RepositoryUrl>https://github.com/hutchpd/QuantumSuperposition</RepositoryUrl>
