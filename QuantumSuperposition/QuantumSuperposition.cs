@@ -1,4 +1,6 @@
-﻿// Because quantum code should be at least as confusing as quantum physics.
+﻿using System.Numerics;
+
+// Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
 
 /// <summary>
@@ -44,13 +46,36 @@ public class IntOperators : IQuantumOperators<int>
     public bool NotEqual(int a, int b) => a != b;
 }
 
-// Currently supports int. Future support may include complex numbers, irrational hope, and emotional baggage.
+public class ComplexOperators : IQuantumOperators<Complex>
+{
+    public Complex Add(Complex a, Complex b) => a + b;
+    public Complex Subtract(Complex a, Complex b) => a - b;
+    public Complex Multiply(Complex a, Complex b) => a * b;
+    public Complex Divide(Complex a, Complex b) => a / b;
+
+    // Modulo isn't mathematically defined for Complex, so we throw if attempted
+    public Complex Mod(Complex a, Complex b) => throw new NotSupportedException("Modulus not supported for complex numbers.");
+
+    // Comparisons on complex numbers are ambiguous, but we’ll define some heuristics based on magnitude:
+    public bool GreaterThan(Complex a, Complex b) => a.Magnitude > b.Magnitude;
+    public bool GreaterThanOrEqual(Complex a, Complex b) => a.Magnitude >= b.Magnitude;
+    public bool LessThan(Complex a, Complex b) => a.Magnitude < b.Magnitude;
+    public bool LessThanOrEqual(Complex a, Complex b) => a.Magnitude <= b.Magnitude;
+    public bool Equal(Complex a, Complex b) => a == b;
+    public bool NotEqual(Complex a, Complex b) => a != b;
+}
+
+// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
 public static class QuantumOperatorsFactory
 {
     public static IQuantumOperators<T> GetOperators<T>()
     {
         if (typeof(T) == typeof(int))
             return (IQuantumOperators<T>)(object)new IntOperators();
+
+        if (typeof(T) == typeof(Complex))
+            return (IQuantumOperators<T>)(object)new ComplexOperators();
+
         throw new NotImplementedException("Default operators not implemented for type " + typeof(T));
     }
 }
@@ -95,23 +120,30 @@ public partial class QuBit<T>
 
 
     #region Constructors
+    // Constructors that enable you to manifest chaotic energy into a typed container.
+    // Also known as: Creating a mess in a mathematically defensible way.
+
     public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
         : this(Items, ops)
     {
         _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
     }
+
     public QuBit(IEnumerable<T> Items, Func<T, bool>? valueValidator = null)
         : this(Items, _defaultOps, valueValidator)
     { }
-    public QuBit(IEnumerable<(T value, double weight)> weightedItems, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
+
+    public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
         : this(weightedItems, ops)
     {
         _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
     }
-    public QuBit(IEnumerable<(T value, double weight)> weightedItems, Func<T, bool>? valueValidator = null)
+
+    public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, Func<T, bool>? valueValidator = null)
         : this(weightedItems, _defaultOps, valueValidator)
     { }
-    internal QuBit(IEnumerable<T> items, Dictionary<T, double>? weights, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
+
+    internal QuBit(IEnumerable<T> items, Dictionary<T, Complex>? weights, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
         : this(items, weights, ops)
     {
         _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
@@ -120,14 +152,64 @@ public partial class QuBit<T>
     public static QuBit<T> Superposed(IEnumerable<T> states)
     {
         var qubit = new QuBit<T>(states);
-        // Forcibly mark it Disjunctive if there's more than one distinct value
         var distinctCount = qubit.States.Distinct().Count();
         if (distinctCount > 1)
             qubit._eType = QuantumStateType.Disjunctive;
         return qubit;
     }
 
+    // Main constructor for unweighted items
+    public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
+    {
+        if (Items == null) throw new ArgumentNullException(nameof(Items));
+        _ops = ops ?? throw new ArgumentNullException(nameof(ops));
+        _qList = Items;
+
+        if (_qList.Distinct().Count() > 1)
+            _eType = QuantumStateType.Disjunctive;
+    }
+
+    public QuBit(IEnumerable<T> Items)
+        : this(Items, _defaultOps)
+    { }
+
+
+    public QuBit(IEnumerable<(T value, Complex weight)> weightedItems)
+        : this(weightedItems, _defaultOps)
+    { }
+
+    public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops)
+    {
+        if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
+        _ops = ops ?? throw new ArgumentNullException(nameof(ops));
+
+        var dict = new Dictionary<T, Complex>();
+        foreach (var (val, w) in weightedItems)
+        {
+            if (!dict.ContainsKey(val))
+                dict[val] = 0.0;
+            dict[val] += w;
+        }
+        _weights = dict;
+        _qList = dict.Keys; // keep a fallback list of keys
+
+        if (_weights.Count > 1)
+            SetType(QuantumStateType.Disjunctive);
+    }
+
+    internal QuBit(IEnumerable<T> items, Dictionary<T, Complex>? weights, IQuantumOperators<T> ops)
+    {
+        _qList = items;
+        _weights = weights;
+        _ops = ops;
+
+        if (States.Distinct().Count() > 1)
+            SetType(QuantumStateType.Disjunctive);
+    }
+
+
     #endregion
+
 
     #region State Type Helpers
 
@@ -165,6 +247,14 @@ public partial class QuBit<T>
 
         return this;
     }
+
+    public static QuBit<T> WithEqualAmplitudes(IEnumerable<T> states)
+    {
+        var list = states.Distinct().ToList();
+        double amp = 1.0 / Math.Sqrt(list.Count);
+        var weighted = list.Select(s => (s, new Complex(amp, 0)));
+        return new QuBit<T>(weighted);
+    }
     #endregion
 
     #region Immutable Clone
@@ -175,7 +265,7 @@ public partial class QuBit<T>
     /// </summary>
     public QuBit<T> CloneMutable()
     {
-        var clonedWeights = _weights != null ? new Dictionary<T, double>(_weights) : null;
+        var clonedWeights = _weights != null ? new Dictionary<T, Complex>(_weights) : null;
         var clonedList = _qList.ToList();
         var clone = new QuBit<T>(clonedList, clonedWeights, _ops, _valueValidator)
         {
@@ -188,7 +278,7 @@ public partial class QuBit<T>
     #endregion
 
     private IEnumerable<T> _qList;
-    private Dictionary<T, double>? _weights; // optional weighting
+    private Dictionary<T, Complex>? _weights;
     private QuantumStateType _eType = QuantumStateType.Conjunctive;
     private readonly IQuantumOperators<T> _ops;
     private static readonly IQuantumOperators<T> _defaultOps = QuantumOperatorsFactory.GetOperators<T>();
@@ -214,57 +304,6 @@ public partial class QuBit<T>
 
     public IQuantumOperators<T> Operators => _ops;
 
-    #region Constructors
-    // Constructors that enable you to manifest chaotic energy into a typed container.
-    // Also known as: Creating a mess in a mathematically defensible way.
-    public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
-    {
-        if (Items == null) throw new ArgumentNullException(nameof(Items));
-        _ops = ops ?? throw new ArgumentNullException(nameof(ops));
-        _qList = Items;
-
-        // If multiple distinct items, treat it as a superposition:
-        if (_qList.Distinct().Count() > 1)
-            SetType(QuantumStateType.Disjunctive);
-    }
-
-    public QuBit(IEnumerable<T> Items) : this(Items, _defaultOps) { }
-
-    public QuBit(IEnumerable<(T value, double weight)> weightedItems, IQuantumOperators<T> ops)
-    {
-        if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
-        _ops = ops ?? throw new ArgumentNullException(nameof(ops));
-
-        var dict = new Dictionary<T, double>();
-        foreach (var (val, w) in weightedItems)
-        {
-            if (!dict.ContainsKey(val))
-                dict[val] = 0.0;
-            dict[val] += w;
-        }
-        _weights = dict;
-        _qList = dict.Keys; // keep a fallback list of keys
-
-        if (_weights.Count > 1)
-            SetType(QuantumStateType.Disjunctive);
-    }
-
-    public QuBit(IEnumerable<(T value, double weight)> weightedItems)
-        : this(weightedItems, _defaultOps)
-    {
-    }
-
-    internal QuBit(IEnumerable<T> items, Dictionary<T, double>? weights, IQuantumOperators<T> ops)
-    {
-        _qList = items;
-        _weights = weights;
-        _ops = ops;
-
-        if (States.Distinct().Count() > 1)
-            SetType(QuantumStateType.Disjunctive);
-    }
-
-    #endregion
 
     #region State Type Helpers
     // Lets you toggle between 'All must be true', 'Any might be true', and 'Reality is now a lie'.
@@ -296,10 +335,10 @@ public partial class QuBit<T>
     {
         var newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
 
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
         if (a._weights != null || b._weights != null)
         {
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
             foreach (var (valA, wA) in a.ToWeightedValues())
             {
                 foreach (var (valB, wB) in b.ToWeightedValues())
@@ -327,10 +366,10 @@ public partial class QuBit<T>
     {
         var newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
 
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
         if (a._weights != null)
         {
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
             foreach (var (valA, wA) in a.ToWeightedValues())
             {
                 var newVal = op(valA, b);
@@ -354,10 +393,10 @@ public partial class QuBit<T>
     {
         var newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
 
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
         if (b._weights != null)
         {
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
             foreach (var (valB, wB) in b.ToWeightedValues())
             {
                 var newVal = op(a, valB);
@@ -485,7 +524,7 @@ public partial class QuBit<T>
         _qList = new[] { picked };
         if (_weights != null)
         {
-            _weights = new Dictionary<T, double> { { picked, 1.0 } };
+            _weights = new Dictionary<T, Complex> { { picked, 1.0 } };
         }
         SetType(QuantumStateType.CollapsedResult);
 
@@ -578,7 +617,7 @@ public partial class QuBit<T>
     /// Returns a collection of tuples containing the values and their corresponding weights.
     /// </summary>
     /// <returns></returns>
-    public IEnumerable<(T value, double weight)> ToWeightedValues()
+    public IEnumerable<(T value, Complex weight)> ToWeightedValues()
     {
         if (_weights == null)
         {
@@ -595,18 +634,29 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// Normalizes the weights of the QuBit to sum to 1.0.
+    /// Normalises the amplitudes of the QuBit so that the sum of their squared magnitudes equals 1.
     /// </summary>
-    public void NormalizeWeights()
+    public void NormaliseWeights()
     {
         if (_weights == null) return;
-        double sum = _weights.Values.Sum();
-        if (Math.Abs(sum) < double.Epsilon) return; // avoid dividing by zero
 
-        var keys = _weights.Keys.ToList();
-        foreach (var k in keys)
-            _weights[k] /= sum;
+        // Compute the sum of the squared magnitudes (|a|²)
+        double totalProbability = _weights.Values
+            .Select(a => a.Magnitude * a.Magnitude)
+            .Sum();
+
+        if (totalProbability <= double.Epsilon)
+            return; // avoid division by zero
+
+        // Scale each amplitude by 1 / sqrt(totalProbability)
+        double normFactor = Math.Sqrt(totalProbability);
+
+        foreach (var key in _weights.Keys.ToList())
+        {
+            _weights[key] /= normFactor;
+        }
     }
+
 
     /// <summary>
     /// An explicit “WithNormalizedWeights()” 
@@ -618,7 +668,7 @@ public partial class QuBit<T>
 
 
 
-        var clonedWeights = new Dictionary<T, double>(_weights);
+        var clonedWeights = new Dictionary<T, Complex>(_weights);
 
         var clonedQList = _qList.ToList();  // or just _weights.Keys
 
@@ -630,7 +680,7 @@ public partial class QuBit<T>
 
         };
 
-        newQ.NormalizeWeights();
+        newQ.NormaliseWeights();
 
         return newQ;
 
@@ -642,14 +692,14 @@ public partial class QuBit<T>
     /// Optionally, modify WithWeights(...) to auto-normalize if desired:
     /// </summary>
 
-    public QuBit<T> WithWeights(Dictionary<T, double> weights, bool autoNormalize = false)
+    public QuBit<T> WithWeights(Dictionary<T, Complex> weights, bool autoNormalize = false)
     {
 
         if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         // Gather only the weights for keys we already have in States.
 
-        var filtered = new Dictionary<T, double>();
+        var filtered = new Dictionary<T, Complex>();
 
         foreach (var kvp in weights)
         {
@@ -663,7 +713,7 @@ public partial class QuBit<T>
         };
 
         if (autoNormalize)
-            newQ.NormalizeWeights();
+            newQ.NormaliseWeights();
 
         return newQ;
     }
@@ -711,12 +761,30 @@ public partial class QuBit<T>
     /// </summary>
     /// <param name="dict"></param>
     /// <returns></returns>
-    private bool AllWeightsEqual(Dictionary<T, double> dict)
+    private bool AllWeightsEqual(Dictionary<T, Complex> dict)
     {
         if (dict.Count <= 1) return true;
         var first = dict.Values.First();
-        return dict.Values.Skip(1).All(w => Math.Abs(w - first) < 1e-14);
+        return dict.Values.Skip(1).All(w => Complex.Abs(w - first) < 1e-14);
     }
+
+    /// <summary>
+    /// Check Equal Probabilities (|amplitude|²)
+    /// </summary>
+    /// <param name="dict"></param>
+    /// <returns></returns>
+    private bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
+    {
+        if (dict.Count <= 1) return true;
+
+        double firstProb = SquaredMagnitude(dict.Values.First());
+
+        return dict.Values
+            .Skip(1)
+            .All(w => Math.Abs(SquaredMagnitude(w) - firstProb) < 1e-14);
+    }
+
+    private double SquaredMagnitude(Complex c) => c.Real * c.Real + c.Imaginary * c.Imaginary;
 
     #endregion
 
@@ -767,24 +835,31 @@ public partial class QuBit<T>
             return ToCollapsedValues().First();
         }
 
-        double total = _weights!.Values.Sum();
-        if (total <= 1e-15)
+        // Use squared magnitude for probability
+        var probabilities = _weights!.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Magnitude * kvp.Value.Magnitude
+        );
+
+        double totalProb = probabilities.Values.Sum();
+        if (totalProb <= 1e-15)
         {
-            // If all zero, fallback
+            // All zero probabilities – fallback
             return ToCollapsedValues().First();
         }
 
-        double roll = rng.NextDouble() * total;
+        double roll = rng.NextDouble() * totalProb;
         double cumulative = 0.0;
-        foreach (var (key, weight) in _weights)
+
+        foreach (var (key, prob) in probabilities)
         {
-            cumulative += weight;
+            cumulative += prob;
             if (roll <= cumulative)
                 return key;
         }
 
-        // Fallback safety, though normally we should have returned inside the loop
-        return _weights.Last().Key;
+        // Fallback in case of rounding issues
+        return probabilities.Last().Key;
     }
 
     /// <summary>
@@ -795,33 +870,59 @@ public partial class QuBit<T>
 
     /// <summary>
     /// Compares two QuBits with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
+    /// Compare Squared Magnitudes (Probabilistic Equality)
     /// </summary>
-    public override bool Equals(object obj)
+    public override bool Equals(object? obj)
     {
         if (ReferenceEquals(this, obj)) return true;
         if (obj is not QuBit<T> other) return false;
 
-        // Compare distinct sets of states
         var mySet = States.Distinct().ToHashSet();
         var otherSet = other.States.Distinct().ToHashSet();
         if (!mySet.SetEquals(otherSet)) return false;
 
-        // If neither is weighted, they are equal as long as states match
         if (!this.IsWeighted && !other.IsWeighted)
-        {
             return true;
-        }
 
-        // If either is weighted, compare all matching weights within tolerance
         foreach (var s in mySet)
         {
-            double w1 = 1.0, w2 = 1.0;
-            if (_weights != null && _weights.TryGetValue(s, out var val1)) w1 = val1;
-            if (other._weights != null && other._weights.TryGetValue(s, out var val2)) w2 = val2;
-            if (Math.Abs(w1 - w2) > _tolerance) return false;
+            double p1 = 1.0, p2 = 1.0;
+            if (_weights != null && _weights.TryGetValue(s, out var amp1)) p1 = amp1.Magnitude * amp1.Magnitude;
+            if (other._weights != null && other._weights.TryGetValue(s, out var amp2)) p2 = amp2.Magnitude * amp2.Magnitude;
+            if (Math.Abs(p1 - p2) > _tolerance) return false;
         }
+
         return true;
     }
+
+    /// <summary>
+    /// Compares two QuBits with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
+    /// Compare Complex Amplitudes (Strict State Equality, as opposed to Probabilistic Equality)
+    /// </summary>
+    public bool StrictlyEquals(object? obj)
+    {
+        if (ReferenceEquals(this, obj)) return true;
+        if (obj is not QuBit<T> other) return false;
+
+        var mySet = States.Distinct().ToHashSet();
+        var otherSet = other.States.Distinct().ToHashSet();
+        if (!mySet.SetEquals(otherSet)) return false;
+
+        if (!this.IsWeighted && !other.IsWeighted)
+            return true;
+
+        foreach (var s in mySet)
+        {
+            Complex a1 = Complex.Zero, a2 = Complex.Zero;
+            if (_weights != null && _weights.TryGetValue(s, out var amp1)) a1 = amp1;
+            if (other._weights != null && other._weights.TryGetValue(s, out var amp2)) a2 = amp2;
+
+            if ((a1 - a2).Magnitude > _tolerance) return false;
+        }
+
+        return true;
+    }
+
 
     /// <summary>
     /// Creates a hash that reflects the spiritual essence of your quantum mess.
@@ -831,22 +932,32 @@ public partial class QuBit<T>
     {
         unchecked
         {
-            // Combine the hash of all distinct states plus their weights if weighted
             int hash = 17;
+
             foreach (var s in States.Distinct().OrderBy(x => x))
             {
-                hash = hash * 23 + s?.GetHashCode() ?? 0;
+                hash = hash * 23 + (s?.GetHashCode() ?? 0);
+
                 if (IsWeighted)
                 {
-                    double w = _weights != null && _weights.TryGetValue(s, out var ww) ? ww : 1.0;
-                    // Convert weight to a “rounded” form so that small changes won't produce different hashes
-                    long bits = BitConverter.DoubleToInt64Bits(Math.Round(w, 12));
-                    hash = hash * 23 + bits.GetHashCode();
+                    Complex amp = _weights != null && _weights.TryGetValue(s, out var w) ? w : Complex.One;
+
+                    // Round real and imaginary parts separately to avoid hash instability
+                    double real = Math.Round(amp.Real, 12);
+                    double imag = Math.Round(amp.Imaginary, 12);
+
+                    long realBits = BitConverter.DoubleToInt64Bits(real);
+                    long imagBits = BitConverter.DoubleToInt64Bits(imag);
+
+                    hash = hash * 23 + realBits.GetHashCode();
+                    hash = hash * 23 + imagBits.GetHashCode();
                 }
             }
+
             return hash;
         }
     }
+
 
     /// <summary>
     /// Provides a tiny status report that says: "Yes, you're still lost in the matrix."
@@ -854,11 +965,14 @@ public partial class QuBit<T>
     public string WeightSummary()
     {
         if (!IsWeighted) return "Weighted: false";
-        double sum = _weights!.Values.Sum();
-        double max = _weights.Values.Max();
-        double min = _weights.Values.Min();
-        return $"Weighted: true, Sum: {sum}, Max: {max}, Min: {min}";
+
+        double totalProbability = _weights.Values.Sum(amp => amp.Magnitude * amp.Magnitude);
+        double maxMagnitudeSquared = _weights.Values.Max(amp => amp.Magnitude * amp.Magnitude);
+        double minMagnitudeSquared = _weights.Values.Min(amp => amp.Magnitude * amp.Magnitude);
+
+        return $"Weighted: true, Sum(|amp|²): {totalProbability}, Max(|amp|²): {maxMagnitudeSquared}, Min(|amp|²): {minMagnitudeSquared}";
     }
+
 
     /// <summary>
     /// Implicitly collapses the QuBit and returns a single value.
@@ -877,12 +991,12 @@ public partial class QuBit<T>
     // A convenient way to slap some probabilities onto your states after the fact.
     // Like putting sprinkles on a Schrödinger cupcake — you won't know how it tastes until you eat it, and then it's too late.
     /// </summary>
-    public QuBit<T> WithWeightsNormalised(Dictionary<T, double> weights)
+    public QuBit<T> WithWeightsNormalised(Dictionary<T, Complex> weights)
     {
         if (weights == null) throw new ArgumentNullException(nameof(weights));
 
         // Gather only the weights for keys we already have in States.
-        var filtered = new Dictionary<T, double>();
+        var filtered = new Dictionary<T, Complex>();
         foreach (var kvp in weights)
         {
             if (States.Contains(kvp.Key))
@@ -911,7 +1025,7 @@ public class Eigenstates<T>
     private readonly Func<T, bool> _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
 
     private Dictionary<T, T> _qDict;
-    private Dictionary<T, double>? _weights; // optional weighting
+    private Dictionary<T, Complex>? _weights; // optional weighting
     private QuantumStateType _eType = QuantumStateType.Conjunctive;
     private readonly IQuantumOperators<T> _ops;
 
@@ -954,12 +1068,12 @@ public class Eigenstates<T>
     {
     }
 
-    public Eigenstates(IEnumerable<(T value, double weight)> weightedItems, IQuantumOperators<T> ops)
+    public Eigenstates(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops)
     {
         if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
 
-        var dict = new Dictionary<T, double>();
+        var dict = new Dictionary<T, Complex>();
         foreach (var (val, w) in weightedItems)
         {
             if (!dict.ContainsKey(val))
@@ -971,7 +1085,7 @@ public class Eigenstates<T>
         _weights = dict;
     }
 
-    public Eigenstates(IEnumerable<(T value, double weight)> weightedItems)
+    public Eigenstates(IEnumerable<(T value, Complex weight)> weightedItems)
         : this(weightedItems, QuantumOperatorsFactory.GetOperators<T>())
     {
     }
@@ -1010,7 +1124,7 @@ public class Eigenstates<T>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, T> op)
     {
         // Use a dictionary to accumulate combined weights keyed by the computed result value.
-        var newWeights = new Dictionary<T, double>();
+        var newWeights = new Dictionary<T, Complex>();
 
         // Loop through all weighted values from both operands.
         foreach (var (valA, wA) in a.ToMappedWeightedValues())
@@ -1018,7 +1132,7 @@ public class Eigenstates<T>
             foreach (var (valB, wB) in b.ToMappedWeightedValues())
             {
                 var newValue = op(valA, valB);
-                double combinedWeight = wA * wB;
+                Complex combinedWeight = wA * wB;
                 newWeights[newValue] = newWeights.TryGetValue(newValue, out var existing)
                     ? existing + combinedWeight
                     : combinedWeight;
@@ -1044,10 +1158,10 @@ public class Eigenstates<T>
     private Eigenstates<T> Do_oper_type(Eigenstates<T> a, T b, Func<T, T, T> op)
     {
         var result = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
 
         if (a._weights != null)
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
 
         foreach (var kvp in a._qDict)
         {
@@ -1056,7 +1170,7 @@ public class Eigenstates<T>
 
             if (newWeights != null)
             {
-                double wA = a._weights != null && a._weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
+                Complex wA = a._weights != null && a._weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
                 newWeights[kvp.Key] = wA;  // use original key
             }
         }
@@ -1076,10 +1190,10 @@ public class Eigenstates<T>
     private Eigenstates<T> Do_oper_type(T a, Eigenstates<T> b, Func<T, T, T> op)
     {
         var result = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
 
         if (b._weights != null)
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
 
         foreach (var kvp in b._qDict)
         {
@@ -1088,7 +1202,7 @@ public class Eigenstates<T>
 
             if (newWeights != null)
             {
-                double wB = b._weights != null && b._weights.TryGetValue(kvp.Key, out var bw) ? bw : 1.0;
+                Complex wB = b._weights != null && b._weights.TryGetValue(kvp.Key, out var bw) ? bw : 1.0;
                 newWeights[kvp.Key] = wB;  // use original key
             }
         }
@@ -1143,10 +1257,10 @@ public class Eigenstates<T>
     private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, T value)
     {
         var result = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
 
         if (_weights != null)
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
 
         foreach (var kvp in _qDict)
         {
@@ -1155,7 +1269,7 @@ public class Eigenstates<T>
                 result[kvp.Key] = kvp.Value;
                 if (newWeights != null)
                 {
-                    double wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
+                    Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
                     newWeights[kvp.Key] = wA;
                 }
             }
@@ -1168,10 +1282,10 @@ public class Eigenstates<T>
     private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, Eigenstates<T> other)
     {
         var result = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
 
         if (_weights != null || other._weights != null)
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
 
         foreach (var kvp in _qDict)
         {
@@ -1182,8 +1296,8 @@ public class Eigenstates<T>
                     result[kvp.Key] = kvp.Value;
                     if (newWeights != null)
                     {
-                        double wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
-                        double wB = other._weights != null && other._weights.TryGetValue(kvp2.Key, out var bw) ? bw : 1.0;
+                        Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
+                        Complex wB = other._weights != null && other._weights.TryGetValue(kvp2.Key, out var bw) ? bw : 1.0;
                         newWeights[kvp.Key] = wA * wB;
                     }
                     break; // break on first match
@@ -1259,7 +1373,7 @@ public class Eigenstates<T>
     /// Returns a collection of (mapped value, weight) pairs,
     /// where weights correspond to the original input keys.
     /// </summary>
-    public IEnumerable<(T value, double weight)> ToMappedWeightedValues()
+    public IEnumerable<(T value, Complex weight)> ToMappedWeightedValues()
     {
         if (_weights == null)
         {
@@ -1274,17 +1388,27 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// Normalizes the weights of the Eigenstates.
+    /// Normalises the weights of the Eigenstates.
     /// </summary>
-    public void NormalizeWeights()
+    public void NormaliseWeights()
     {
         if (_weights == null) return;
-        double sum = _weights.Values.Sum();
-        if (Math.Abs(sum) < double.Epsilon) return;
 
-        var keys = _weights.Keys.ToList();
-        foreach (var k in keys)
-            _weights[k] /= sum;
+        // Compute the sum of the squared magnitudes (|a|²)
+        double totalProbability = _weights.Values
+            .Select(a => a.Magnitude * a.Magnitude)
+            .Sum();
+
+        if (totalProbability <= double.Epsilon)
+            return; // avoid division by zero
+
+        // Scale each amplitude by 1 / sqrt(totalProbability)
+        double normFactor = Math.Sqrt(totalProbability);
+
+        foreach (var key in _weights.Keys.ToList())
+        {
+            _weights[key] /= normFactor;
+        }
     }
 
     /// <summary>
@@ -1292,12 +1416,30 @@ public class Eigenstates<T>
     /// </summary>
     /// <param name="dict"></param>
     /// <returns></returns>
-    private bool AllWeightsEqual(Dictionary<T, double> dict)
+    private bool AllWeightsEqual(Dictionary<T, Complex> dict)
     {
         if (dict.Count <= 1) return true;
-        double first = dict.Values.First();
-        return dict.Values.Skip(1).All(x => Math.Abs(x - first) < 1e-14);
+        var first = dict.Values.First();
+        return dict.Values.Skip(1).All(w => Complex.Abs(w - first) < 1e-14);
     }
+
+    /// <summary>
+    /// Checks if all weights are probably equal (i.e., squared magnitudes).
+    /// </summary>
+    /// <param name="dict"></param>
+    /// <returns></returns>
+    private bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
+    {
+        if (dict.Count <= 1) return true;
+
+        double firstProb = SquaredMagnitude(dict.Values.First());
+
+        return dict.Values
+            .Skip(1)
+            .All(w => Math.Abs(SquaredMagnitude(w) - firstProb) < 1e-14);
+    }
+
+    private double SquaredMagnitude(Complex c) => c.Real * c.Real + c.Imaginary * c.Imaginary;
 
     /// <summary>
     /// Returns a string representation of the Eigenstates,
@@ -1316,7 +1458,7 @@ public class Eigenstates<T>
             return string.Join(", ",
                 _qDict.Select(kvp =>
                 {
-                    double w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
+                    Complex w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
                     return $"{kvp.Key} => {kvp.Value} (weight: {w})";
                 }));
         }
@@ -1369,7 +1511,7 @@ public class Eigenstates<T>
         _qDict = newDict;
         if (_weights != null)
         {
-            _weights = new Dictionary<T, double> { { picked, 1.0 } };
+            _weights = new Dictionary<T, Complex> { { picked, 1.0 } };
         }
         _eType = QuantumStateType.CollapsedResult;
 
@@ -1448,14 +1590,14 @@ public class Eigenstates<T>
     /// Filter your states by weight like you're trimming down party invites.
     /// Only show up if your weight is greater than 0.75, Chad.”
     /// </summary>
-    public Eigenstates<T> FilterByWeight(Func<double, bool> predicate)
+    public Eigenstates<T> FilterByProbability(Func<Complex, bool> predicate)
     {
         var newDict = new Dictionary<T, T>();
-        Dictionary<T, double>? newWeights = null;
+        Dictionary<T, Complex>? newWeights = null;
 
         if (IsWeighted)
         {
-            newWeights = new Dictionary<T, double>();
+            newWeights = new Dictionary<T, Complex>();
             foreach (var (key, wt) in _weights)
             {
                 if (predicate(wt))
@@ -1470,6 +1612,45 @@ public class Eigenstates<T>
             // unweighted => each key has weight=1
             bool keep = predicate(1.0);
             if (keep)
+            {
+                foreach (var key in _qDict.Keys)
+                    newDict[key] = _qDict[key];
+            }
+        }
+
+        var e = new Eigenstates<T>(newDict, _ops);
+        e._weights = newWeights;
+        return e;
+    }
+
+    /// <summary>
+    /// Filter your states by amplitude like you're picking a favorite child.
+    /// Useful if you're interested in real/imaginary structure instead of probability.
+    /// </summary>
+    /// <param name="amplitudePredicate">A predicate applied directly to the complex amplitude.</param>
+    /// <returns>A filtered QuBit containing only states whose amplitude passes the test.</returns>
+    public Eigenstates<T> FilterByAmplitude(Func<Complex, bool> amplitudePredicate)
+    {
+        var newDict = new Dictionary<T, T>();
+        Dictionary<T, Complex>? newWeights = null;
+
+        if (IsWeighted)
+        {
+            newWeights = new Dictionary<T, Complex>();
+            foreach (var (key, amp) in _weights!)
+            {
+                if (amplitudePredicate(amp))
+                {
+                    newDict[key] = _qDict[key];
+                    newWeights[key] = amp;
+                }
+            }
+        }
+        else
+        {
+            // unweighted => treat each amplitude as 1 + 0i
+            Complex defaultAmp = Complex.One;
+            if (amplitudePredicate(defaultAmp))
             {
                 foreach (var key in _qDict.Keys)
                     newDict[key] = _qDict[key];
@@ -1519,25 +1700,31 @@ public class Eigenstates<T>
             return _qDict.Keys.First();
         }
 
-        double total = _weights!.Values.Sum();
-        if (total <= 1e-15)
+        // Compute total probability (sum of squared magnitudes)
+        double totalProb = _weights!.Values.Sum(amp => amp.Magnitude * amp.Magnitude);
+
+        if (totalProb <= 1e-15)
         {
-            // If all zero, fallback
+            // All amplitudes are effectively zero — fallback
             return _qDict.Keys.First();
         }
 
-        double roll = rng.NextDouble() * total;
-        double cumulative = 0.0;
-        foreach (var kvp in _weights)
+        // Roll a number between 0 and total probability
+        double roll = rng.NextDouble() * totalProb;
+        double cumulativeProb = 0.0;
+
+        // Accumulate probabilities from amplitudes
+        foreach (var (key, amp) in _weights)
         {
-            cumulative += kvp.Value;
-            if (roll <= cumulative)
-                return kvp.Key;
+            cumulativeProb += amp.Magnitude * amp.Magnitude;
+            if (roll <= cumulativeProb)
+                return key;
         }
 
-        // fallback
+        // Fallback safety
         return _weights.Last().Key;
     }
+
 
     /// <summary>
     /// Tolerance used for comparing weights in equality checks.
@@ -1548,42 +1735,78 @@ public class Eigenstates<T>
     /// <summary>
     /// Checks if two Eigenstates are truly the same deep down—or just pretending.
     /// Includes an existential tolerance value.
+    /// Compare Squared Magnitudes (Probabilistic Equality)
     /// </summary>
     public override bool Equals(object obj)
     {
         if (ReferenceEquals(this, obj)) return true;
         if (obj is not Eigenstates<T> other) return false;
 
-        // Compare keys
         var myKeys = _qDict.Keys.ToHashSet();
         var otherKeys = other._qDict.Keys.ToHashSet();
-        if (!myKeys.SetEquals(otherKeys))
-            return false;
+        if (!myKeys.SetEquals(otherKeys)) return false;
 
-        // Compare mapped values
         foreach (var k in myKeys)
         {
             if (!EqualityComparer<T>.Default.Equals(_qDict[k], other._qDict[k]))
                 return false;
         }
 
-        // If neither is weighted, done
-        if (!this.IsWeighted && !other.IsWeighted)
+        // If neither is weighted, treat as equal
+        if (!IsWeighted && !other.IsWeighted)
             return true;
 
-        // Otherwise, compare weights
+        // Compare squared magnitudes (probabilities)
         foreach (var k in myKeys)
         {
-            double w1 = 1.0, w2 = 1.0;
-            if (_weights != null && _weights.TryGetValue(k, out var wt1)) w1 = wt1;
-            if (other._weights != null && other._weights.TryGetValue(k, out var wt2)) w2 = wt2;
+            Complex a1 = _weights != null && _weights.TryGetValue(k, out var v1) ? v1 : Complex.One;
+            Complex a2 = other._weights != null && other._weights.TryGetValue(k, out var v2) ? v2 : Complex.One;
 
-            if (Math.Abs(w1 - w2) > _tolerance)
+            double prob1 = a1.Magnitude * a1.Magnitude;
+            double prob2 = a2.Magnitude * a2.Magnitude;
+
+            if (Math.Abs(prob1 - prob2) > _tolerance)
                 return false;
         }
 
         return true;
     }
+
+    /// <summary>
+    /// Checks if two Eigenstates are truly the same deep down—or just pretending.
+    /// Includes an existential tolerance value.
+    /// Compare Complex Amplitudes (Strict State Equality, as opposed to Probabilistic Equality)
+    /// </summary>
+    public bool StrictlyEquals(object? obj)
+    {
+        if (ReferenceEquals(this, obj)) return true;
+        if (obj is not Eigenstates<T> other) return false;
+
+        var myKeys = _qDict.Keys.ToHashSet();
+        var otherKeys = other._qDict.Keys.ToHashSet();
+        if (!myKeys.SetEquals(otherKeys)) return false;
+
+        foreach (var k in myKeys)
+        {
+            if (!EqualityComparer<T>.Default.Equals(_qDict[k], other._qDict[k]))
+                return false;
+        }
+
+        if (!IsWeighted && !other.IsWeighted)
+            return true;
+
+        foreach (var k in myKeys)
+        {
+            Complex a1 = _weights != null && _weights.TryGetValue(k, out var v1) ? v1 : Complex.One;
+            Complex a2 = other._weights != null && other._weights.TryGetValue(k, out var v2) ? v2 : Complex.One;
+
+            if ((a1 - a2).Magnitude > _tolerance)
+                return false;
+        }
+
+        return true;
+    }
+
 
     /// <summary>
     /// Makes a unique hash that somehow encodes the weight of your guilt, I mean, states.
@@ -1593,20 +1816,27 @@ public class Eigenstates<T>
         unchecked
         {
             int hash = 17;
-            // Sort keys so hashing is stable
+
             foreach (var k in _qDict.Keys.OrderBy(x => x))
             {
+                // Hash the key and its projected value
                 hash = hash * 23 + (k?.GetHashCode() ?? 0);
-                // incorporate the mapped value
                 hash = hash * 23 + (_qDict[k]?.GetHashCode() ?? 0);
 
-                if (IsWeighted)
+                if (IsWeighted && _weights != null && _weights.TryGetValue(k, out var amp))
                 {
-                    double w = _weights != null && _weights.TryGetValue(k, out var ww) ? ww : 1.0;
-                    long bits = BitConverter.DoubleToInt64Bits(Math.Round(w, 12));
-                    hash = hash * 23 + bits.GetHashCode();
+                    // Round both real and imaginary parts
+                    double real = Math.Round(amp.Real, 12);
+                    double imag = Math.Round(amp.Imaginary, 12);
+
+                    long realBits = BitConverter.DoubleToInt64Bits(real);
+                    long imagBits = BitConverter.DoubleToInt64Bits(imag);
+
+                    hash = hash * 23 + realBits.GetHashCode();
+                    hash = hash * 23 + imagBits.GetHashCode();
                 }
             }
+
             return hash;
         }
     }
@@ -1617,21 +1847,24 @@ public class Eigenstates<T>
     public string WeightSummary()
     {
         if (!IsWeighted) return "Weighted: false";
-        double sum = _weights!.Values.Sum();
-        double max = _weights.Values.Max();
-        double min = _weights.Values.Min();
-        return $"Weighted: true, Sum: {sum}, Max: {max}, Min: {min}";
+
+        var probs = _weights!.Values.Select(amp => amp.Magnitude * amp.Magnitude).ToList();
+        double sum = probs.Sum();
+        double max = probs.Max();
+        double min = probs.Min();
+
+        return $"Weighted: true (complex amplitudes), Total Prob: {sum:F4}, Max |amp|²: {max:F4}, Min |amp|²: {min:F4}";
     }
 
     /// <summary>
     /// Applies new weights to the same old states. 
     /// Like giving your data a glow-up without changing its personality.
     /// </summary>
-    public Eigenstates<T> WithWeights(Dictionary<T, double> weights)
+    public Eigenstates<T> WithWeights(Dictionary<T, Complex> weights)
     {
         if (weights == null) throw new ArgumentNullException(nameof(weights));
 
-        var filtered = new Dictionary<T, double>();
+        var filtered = new Dictionary<T, Complex>();
         foreach (var kvp in weights)
         {
             if (_qDict.ContainsKey(kvp.Key))
@@ -1653,7 +1886,7 @@ public class Eigenstates<T>
             ? string.Join(", ", _qDict.Select(kvp => $"{kvp.Key} => {kvp.Value}"))
             : string.Join(", ", _qDict.Select(kvp =>
             {
-                double w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
+                Complex w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
                 return $"{kvp.Key} => {kvp.Value} (weight: {w})";
             }));
 

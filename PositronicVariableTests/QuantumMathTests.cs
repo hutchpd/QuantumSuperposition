@@ -266,7 +266,7 @@ namespace QuantumMathTests
             var qubit = new QuBit<int>(new[] { (2, 0.5), (4, 2.0) }, intOps);
 
             // Act
-            qubit.NormalizeWeights();
+            qubit.NormaliseWeights();
             // new weights => 
             //   2 => 0.5/2.5 = 0.2
             //   4 => 2.0/2.5 = 0.8
@@ -396,7 +396,7 @@ namespace QuantumMathTests
             // sum of weights = 10.0
 
             // Act
-            e.NormalizeWeights();
+            e.NormaliseWeights();
             var dict = e.ToMappedWeightedValues().ToDictionary(x => x.value, x => x.weight);
 
             // Assert
@@ -431,7 +431,7 @@ namespace QuantumMathTests
 
             // Act
             // Keep only those with weight >= 0.1
-            var filtered = e.FilterByWeight(w => w >= 0.1);
+            var filtered = e.FilterByProbability(w => w >= 0.1);
             var keys = filtered.States.OrderBy(x => x).ToList();
 
             // Assert
