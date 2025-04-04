@@ -308,16 +308,114 @@ public partial class QuBit<T>
 
     #endregion
 
-    #region Evaluation / Collapse
+    #region Evaluation / Collapse & Introspection Enhancements
     // Reality check: converts quantum indecision into a final verdict.
     // Basically forces the whole wavefunction to agree like it’s group therapy for particles.
-
     public bool EvaluateAll()
     {
         SetType(QuantumStateType.Conjunctive);
         return States.All(state => !EqualityComparer<T>.Default.Equals(state, default(T)));
     }
 
+    // ---------------------------------------------------------------------
+    // Fields for supporting collapse, deterministic replay, and mocking
+    // ---------------------------------------------------------------------
+    private bool _mockCollapseEnabled;
+    private T? _mockCollapseValue;
+    private bool _isActuallyCollapsed;
+    private T? _collapsedValue;
+
+    /// <summary>
+    /// Observes (collapses) the QuBit with an optional Random instance for deterministic replay.
+    /// If the QuBit is already collapsed, returns the previously collapsed value.
+    /// If mock-collapse is enabled, returns the forced value without changing the underlying state.
+    /// </summary>
+    /// <param name="rng">Optional random instance for deterministic replay.</param>
+    /// <returns>The collapsed (observed) value.</returns>
+    public T Observe(Random? rng = null)
+    {
+        // If mock collapse is enabled, return the forced mock value
+        if (_mockCollapseEnabled)
+        {
+            if (_mockCollapseValue == null)
+                throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
+            return _mockCollapseValue;
+        }
+
+        // If already collapsed, return the same value
+        if (_isActuallyCollapsed && _collapsedValue != null && _eType == QuantumStateType.CollapsedResult)
+        {
+            return _collapsedValue;
+        }
+
+        // Perform a real probabilistic collapse using weighted sampling
+        rng ??= Random.Shared;
+        T picked = SampleWeighted(rng);
+
+        // Mark as collapsed
+        _collapsedValue = picked;
+        _isActuallyCollapsed = true;
+        _qList = new[] { picked };
+        if (_weights != null)
+        {
+            _weights = new Dictionary<T, double> { { picked, 1.0 } };
+        }
+        SetType(QuantumStateType.CollapsedResult);
+
+        return picked;
+    }
+
+    /// <summary>
+    /// Observes (collapses) the QuBit using a supplied integer seed for deterministic replay.
+    /// </summary>
+    public T Observe(int seed)
+    {
+        var rng = new Random(seed);
+        return Observe(rng);
+    }
+
+    /// <summary>
+    /// Returns true if this QuBit has actually collapsed (via a real observation).
+    /// </summary>
+    public bool IsActuallyCollapsed => _isActuallyCollapsed && _eType == QuantumStateType.CollapsedResult;
+
+    // ---------------------------------------------------------------------
+    // Collapse Mocking
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Enables mock collapse, causing Observe() to always return forcedValue
+    /// without modifying the underlying quantum state.
+    /// </summary>
+    public QuBit<T> WithMockCollapse(T forcedValue)
+    {
+        _mockCollapseEnabled = true;
+        _mockCollapseValue = forcedValue;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables mock collapse so that Observe() performs a real collapse.
+    /// </summary>
+    public QuBit<T> WithoutMockCollapse()
+    {
+        _mockCollapseEnabled = false;
+        _mockCollapseValue = default;
+        return this;
+    }
+
+    // ---------------------------------------------------------------------
+    // Introspection / Utilities
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns a string representation of the current superposition states and their weights
+    /// without triggering a collapse. Useful for debugging and introspection.
+    /// </summary>
+    public string show_states()
+    {
+        return ToDebugString();
+    }
     #endregion
 
     #region Weighting and Output
@@ -998,6 +1096,83 @@ public class Eigenstates<T>
     }
 
     #endregion
+
+    #region Observation & Collapse, Mocking, Introspection
+
+    private bool _mockCollapseEnabled;
+    private T? _mockCollapseValue;
+    private bool _isActuallyCollapsed;
+    private T? _collapsedValue;
+
+    /// <summary>
+    /// Observes (collapses) the Eigenstates with an optional random instance
+    /// If mock collapse is enabled, it will return the forced value without changing state.
+    /// Otherwise, perform a real probabilistic collapse.
+    /// </summary>
+    public T Observe(Random? rng = null)
+    {
+        if (_mockCollapseEnabled)
+        {
+            if (_mockCollapseValue == null)
+                throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
+            return _mockCollapseValue;
+        }
+
+        if (_isActuallyCollapsed && _collapsedValue != null && _eType == QuantumStateType.CollapsedResult)
+        {
+            return _collapsedValue;
+        }
+
+        rng ??= Random.Shared;
+        T picked = SampleWeighted(rng);
+
+        _collapsedValue = picked;
+        _isActuallyCollapsed = true;
+        var newDict = new Dictionary<T, T> { { picked, picked } };
+        _qDict = newDict;
+        if (_weights != null)
+        {
+            _weights = new Dictionary<T, double> { { picked, 1.0 } };
+        }
+        _eType = QuantumStateType.CollapsedResult;
+
+        return picked;
+    }
+
+    /// <summary>
+    /// Observes (collapses) using a supplied seed for deterministic behavior.
+    /// </summary>
+    public T Observe(int seed) => Observe(new Random(seed));
+
+    /// <summary>
+    /// Enables mock collapse for Eigenstates, forcing Observe() to return forcedValue.
+    /// </summary>
+    public Eigenstates<T> WithMockCollapse(T forcedValue)
+    {
+        _mockCollapseEnabled = true;
+        _mockCollapseValue = forcedValue;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables mock collapse for Eigenstates.
+    /// </summary>
+    public Eigenstates<T> WithoutMockCollapse()
+    {
+        _mockCollapseEnabled = false;
+        _mockCollapseValue = default;
+        return this;
+    }
+
+    /// <summary>
+    /// Returns a string representation of the current eigenstates without collapsing.
+    /// </summary>
+    public string show_states()
+    {
+        return ToDebugString();
+    }
+    #endregion
+
 
     /// <summary>
     /// Indicates whether your states have developed opinions (i.e., weights).

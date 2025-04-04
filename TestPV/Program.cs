@@ -12,7 +12,6 @@ internal static class Program
     private static void Main()
     {
         // Reset the runtime state to ensure a clean start. 
-        // In tests you could swap PositronicRuntime.Instance with a fake implementation.
         PositronicRuntime.Instance.Reset();
 
         // Initialize the positronic variable.
