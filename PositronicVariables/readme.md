@@ -12,11 +12,11 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ## Features
 
-- ✅ Temporal Journaling: Variables store their history like over-sharers in a group chat.
-- 🔁 Automatic Convergence: Run code until state stabilization without writing a while loop.
-- 🧠 NeuralNodule: Build quantum-flavored logic gates using positronic variables.
-- 🔀 Time Reversal: Temporarily run logic in negative entropy mode to simulate parallel timelines.
-- 🔗 Seamless with QuBit<T>: Because pretending a variable can hold many states is *your thing now*.
+- Temporal Journaling: Variables store their history like over-sharers in a group chat.
+- Automatic Convergence: Run code until state stabilization without writing a while loop.
+- NeuralNodule: Build quantum-flavored logic gates using positronic variables.
+- Time Reversal: Temporarily run logic in negative entropy mode to simulate parallel timelines.
+- Seamless with QuBit<T>: Because pretending a variable can hold many states is *your thing now*.
 
 ---
 
@@ -24,7 +24,8 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ### Installation
 
-Grab it from NuGet (coming soon):
+Grab it from NuGet (coming soon, or possibly already available in a future you haven't met yet).
+
 ```
 dotnet add package PositronicVariables
 ```
@@ -85,7 +86,7 @@ var x = v + 5;
 var y = x % 3;
 ```
 
-It’s all syntactic sugar for quantum nonsense.
+It’s all syntactic sugar for probabilistic anxiety
 
 ---
 

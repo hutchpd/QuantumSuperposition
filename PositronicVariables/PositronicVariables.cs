@@ -101,6 +101,10 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 /// </summary>
 public static class PositronicRuntime
 {
+    /// <summary>
+    /// The one global runtime to rule them all.
+    /// Swappable for testing, regrettably not swappable for existential stability.
+    /// </summary>
     public static IPositronicRuntime Instance { get; set; } = new DefaultPositronicRuntime();
 }
 
@@ -208,8 +212,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             iteration++;
         }
 
-        // Once everyone in the timeline agrees, we return to the real world
-        // and pretend none of this ever happened. Therapy complete.
+        // Once the variables stop arguing and everyone reaches emotional closure,
+        // we return to forward time like nothing happened.
         Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
         PositronicRuntime.Instance.Entropy = 1;
         code();
@@ -632,8 +636,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     public QuBit<T> GetCurrentQBit() => timeline[^1];
 
     /// <summary>
-    /// Compares two QuBits to see if they are... cosmically in sync.
-    /// Or at least contain the same values in a sorted, emotionless way.
+    /// Checks whether two QuBits share the same existential baggage.
+    /// Spoiler: they usually don't.
     /// </summary>
     /// <param name="a"></param>
     /// <param name="b"></param>
@@ -796,7 +800,8 @@ public class PositronicVariableRef<T> : IPositronicVariable
     }
 
     /// <summary>
-    /// Unifies the last 'count' timeline slices into one.
+    /// Smashes the last ‘count’ slices of the timeline into one.
+    /// Think: quantum sandwich compression.
     /// </summary>
     /// <param name="count"></param>
     public void Unify(int count)
@@ -882,6 +887,11 @@ public class PositronicVariableRef<T> : IPositronicVariable
     // For brevity, operator overloads (arithmetic, relational, equality) and multi-variable Apply
     // could be implemented similarly to PositronicVariable<T> if needed for reference types.
 
+    /// <summary>
+    /// Returns the current slice of quantum indecision.
+    /// Warning: contents may have collapsed under observation.
+    /// </summary>
+    /// <returns></returns>
     public QuBit<T> GetCurrentQBit() => timeline[^1];
 
     public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
