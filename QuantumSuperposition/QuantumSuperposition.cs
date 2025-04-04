@@ -115,6 +115,7 @@ public class ComplexOperators : IQuantumOperators<Complex>
     public bool NotEqual(Complex a, Complex b) => a != b;
 }
 
+
 /// <summary>
 /// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
 /// </summary>
@@ -182,14 +183,14 @@ public static class QuantumBasis
 
 public class QuantumSystem
 {
-    private Dictionary<(int, bool), Complex> _amplitudes = new Dictionary<(int, bool), Complex>();
+    private Dictionary<int[], Complex> _amplitudes = new Dictionary<int[], Complex>();
     private readonly List<IQuantumReference> _registered = new();
 
     /// <summary>
     /// Optionally construct the system with explicit amplitudes.
     /// </summary>
 
-    public QuantumSystem(Dictionary<(int, bool), Complex>? initialAmps = null)
+    public QuantumSystem(Dictionary<int[], Complex>? initialAmps = null)
 
     {
         if (initialAmps != null)
@@ -214,90 +215,167 @@ public class QuantumSystem
     /// <returns></returns>
     /// <exception cref="ArgumentNullException"></exception>
     /// <exception cref="InvalidOperationException"></exception>
-    public (int, bool) ObserveGlobal(int[] qubitIndices, Random rng)
+    public int[] ObserveGlobal(int[] qubitIndices, Random rng)
     {
-        // Weighted sampling based on amplitude magnitudes
+        if (qubitIndices == null || qubitIndices.Length == 0)
+            throw new ArgumentNullException(nameof(qubitIndices));
 
-        double totalProb = _amplitudes.Values.Sum(c => c.Magnitude * c.Magnitude);
+        // Group amplitudes by projected values on qubitIndices
+        var projectionGroups = new Dictionary<int[], List<(int[] state, Complex amplitude)>>(new IntArrayComparer());
+
+        foreach (var kvp in _amplitudes)
+        {
+            var fullState = kvp.Key;
+            var projected = qubitIndices.Select(i => fullState[i]).ToArray();
+
+            if (!projectionGroups.ContainsKey(projected))
+                projectionGroups[projected] = new();
+
+            projectionGroups[projected].Add((fullState, kvp.Value));
+        }
+
+        // Step 2: Compute total probabilities for each projection group
+        var probSums = projectionGroups.ToDictionary(
+            g => g.Key,
+            g => g.Value.Sum(x => x.amplitude.Magnitude * x.amplitude.Magnitude),
+            new IntArrayComparer()
+        );
+
+        double totalProb = probSums.Values.Sum();
         if (totalProb <= 1e-15)
             throw new InvalidOperationException("All probabilities are zero or wavefunction is empty.");
 
+        // Sample a group based on probability
         double roll = rng.NextDouble() * totalProb;
         double cumulative = 0.0;
 
-        // Group amplitudes by values at qubitIndices
-        var groupedProbabilities = new Dictionary<(int, bool), double>();
-
-        (int, bool) chosenKey = default;
-
-        foreach (var (key, amp) in _amplitudes)
+        int[] chosenProjection = Array.Empty<int>();
+        foreach (var (proj, p) in probSums)
         {
-            double p = amp.Magnitude * amp.Magnitude;
             cumulative += p;
             if (roll <= cumulative)
             {
-                chosenKey = key;
+                chosenProjection = proj;
                 break;
             }
         }
 
-        // Collapse: zero out all non-chosen states
-        foreach (var k in _amplitudes.Keys.ToList())
+        // Retain only amplitudes matching the chosen projection
+        var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
+        foreach (var (state, amp) in projectionGroups[chosenProjection])
         {
-            if (!k.Equals(chosenKey))
-            {
-                _amplitudes[k] = Complex.Zero;
-            }
+            newAmps[state] = amp;
         }
 
-        // Renormalize remaining amplitude
+        _amplitudes = newAmps;
+
+        // Renormalise
         NormaliseAmplitudes();
 
-        var newAmplitudes = new Dictionary<(int, bool), Complex>();
-
-        // Notify any qubits that the wavefunction changed
+        // Notify
         var collapseId = Guid.NewGuid();
         foreach (var refQ in _registered)
         {
             refQ.NotifyWavefunctionCollapsed(collapseId);
         }
 
-        //  Return collapsed result (int, bool)
-        return chosenKey;
+        // Return observed values
+        return chosenProjection;
     }
+
+
 
 
     /// <summary>
-    /// ApplyTwoQubitGate placeholder.
+    /// ApplyTwoQubitGate function.
     /// </summary>
-    public void ApplyTwoQubitGate(Complex[,] gate)
+    public void ApplyTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
     {
-        // Example: gate is a 4x4 matrix acting on the basis
-        //    ( (0,false), (0,true), (1,false), (1,true) ).
-        // We flatten them in a vector [amp(0,false), amp(0,true), amp(1,false), amp(1,true)].
-        var basisList = new (int, bool)[] { (0, false), (0, true), (1, false), (1, true) };
-        var oldVec = basisList.Select(k => _amplitudes.TryGetValue(k, out var v) ? v : Complex.Zero).ToArray();
+        if (gate.GetLength(0) != 4 || gate.GetLength(1) != 4)
+            throw new ArgumentException("Gate must be a 4x4 matrix.");
 
-        // Multiply gate * oldVec
-        int dim = 4;
-        var newVec = new Complex[dim];
-        for (int i = 0; i < dim; i++)
+        // 1. Group basis states by fixed values of all qubits *except* qubitA and qubitB
+        var grouped = new Dictionary<string, List<int[]>>();
+
+        foreach (var state in _amplitudes.Keys.ToList())
         {
-            newVec[i] = Complex.Zero;
-            for (int j = 0; j < dim; j++)
+            // Build a string key excluding qubitA and qubitB (used to group together the 4 basis states)
+            var key = string.Join(",", state.Select((val, idx) => (idx != qubitA && idx != qubitB) ? val.ToString() : "*"));
+
+            if (!grouped.ContainsKey(key))
+                grouped[key] = new();
+
+            grouped[key].Add(state);
+        }
+
+        var newAmplitudes = new Dictionary<int[], Complex>(new IntArrayComparer());
+
+        // 2. Process each group (should contain exactly 4 states representing the 2 qubits)
+        foreach (var group in grouped.Values)
+        {
+            // Build a 4-vector for current basis states
+            var basisMap = new Dictionary<(int, int), int[]>();
+            var vec = new Complex[4];
+
+            foreach (var basis in group)
             {
-                newVec[i] += gate[i, j] * oldVec[j];
+                int a = basis[qubitA];
+                int b = basis[qubitB];
+                int index = (a << 1) | b; // binary encoding: 00, 01, 10, 11 → 0–3
+
+                vec[index] = _amplitudes.TryGetValue(basis, out var amp) ? amp : Complex.Zero;
+                basisMap[(a, b)] = basis;
+            }
+
+            // 3. Apply the gate: newVec = gate * vec
+            var newVec = new Complex[4];
+            for (int i = 0; i < 4; i++)
+            {
+                newVec[i] = Complex.Zero;
+                for (int j = 0; j < 4; j++)
+                {
+                    newVec[i] += gate[i, j] * vec[j];
+                }
+            }
+
+            // 4. Store updated amplitudes back in _amplitudes
+            foreach (var ((a, b), state) in basisMap)
+            {
+                int idx = (a << 1) | b;
+                newAmplitudes[state] = newVec[idx];
             }
         }
 
-        // Store the result back
-        for (int i = 0; i < dim; i++)
-        {
-            _amplitudes[basisList[i]] = newVec[i];
-        }
-
+        _amplitudes = newAmplitudes;
         NormaliseAmplitudes();
     }
+
+    public void ApplySingleQubitGate(int qubit, Complex[,] gate)
+    {
+        if (gate.GetLength(0) != 2 || gate.GetLength(1) != 2)
+            throw new ArgumentException("Single-qubit gate must be a 2x2 matrix.");
+
+        var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
+
+        foreach (var state in _amplitudes.Keys.ToList())
+        {
+            int bit = state[qubit];
+
+            var basis0 = (int[])state.Clone(); basis0[qubit] = 0;
+            var basis1 = (int[])state.Clone(); basis1[qubit] = 1;
+
+            Complex a0 = _amplitudes.TryGetValue(basis0, out var amp0) ? amp0 : Complex.Zero;
+            Complex a1 = _amplitudes.TryGetValue(basis1, out var amp1) ? amp1 : Complex.Zero;
+
+            Complex newAmp = gate[bit, 0] * a0 + gate[bit, 1] * a1;
+
+            newAmps[state] = newAmp;
+        }
+
+        _amplitudes = newAmps;
+        NormaliseAmplitudes();
+    }
+
 
     private void NormaliseAmplitudes()
     {
@@ -318,9 +396,30 @@ public class QuantumSystem
     /// Exposes the dictionary for debugging or advanced usage.
     /// Be careful: direct modifications can break normalization.
     /// </summary>
-    public IReadOnlyDictionary<(int, bool), Complex> Amplitudes => _amplitudes;
+    public IReadOnlyDictionary<int[], Complex> Amplitudes => _amplitudes;
 }
 
+public class IntArrayComparer : IEqualityComparer<int[]>
+{
+    public bool Equals(int[]? x, int[]? y)
+    {
+        if (x == null || y == null) return false;
+        return x.SequenceEqual(y);
+    }
+
+    public int GetHashCode(int[] obj)
+    {
+        unchecked
+        {
+            int hash = 17;
+            foreach (int val in obj)
+            {
+                hash = hash * 31 + val;
+            }
+            return hash;
+        }
+    }
+}
 
 #endregion
 
@@ -1348,68 +1447,73 @@ public partial class QuBit<T> : IQuantumReference
 
     object IQuantumReference.Observe(Random? rng)
     {
-        // If we have a quantum system, do a system-wide collapse:
         if (_system != null)
         {
             if (IsCollapsed)
             {
-                // Already collapsed? return last known
                 if (_systemObservedValue != null) return _systemObservedValue;
                 if (_collapsedValue != null) return _collapsedValue;
             }
 
             rng ??= Random.Shared;
-            // For demonstration, we call a method that does a full measure of (int,bool)
-            // If T = (int,bool), that’s a direct match. If T = int only, you’d do partial measure.
-            // Simplify here:
-            var measured = _system.ObserveGlobal(rng);  // returns (int,bool)
 
-            // If T is indeed (int,bool), just store it:
-            if (typeof(T) == typeof((int, bool)))
+            // Measure only the qubits we span
+            int[] measured = _system.ObserveGlobal(_qubitIndices, rng);
+
+            object result;
+
+            if (typeof(T) == typeof(int))
             {
-                _systemObservedValue = measured;
-                return measured;
+                // If this qubit spans one qubit, return the single value
+                result = measured.Length == 1 ? measured[0] : measured;
+            }
+            else if (typeof(T) == typeof(bool))
+            {
+                // Interpret 0 => false, 1 => true (crude, but sufficient if binary)
+                result = measured.Length == 1 ? measured[0] != 0 : measured.Select(v => v != 0).ToArray();
+            }
+            else if (typeof(T) == typeof(int[]))
+            {
+                result = measured;
             }
             else
             {
-                // Example partial: if T = int, we read measured.Item1
-                // If T = bool, we read measured.Item2, etc.
-                // This is up to your design. We'll do a naive example:
-                if (typeof(T) == typeof(int))
-                {
-                    int subVal = measured.Item1;
-                    _systemObservedValue = subVal;
-                    return subVal;
-                }
-                if (typeof(T) == typeof(bool))
-                {
-                    bool subVal = measured.Item2;
-                    _systemObservedValue = subVal;
-                    return subVal;
-                }
-                // else we have no partial logic implemented, fallback:
-                _systemObservedValue = measured;
-                return measured;
+                // fallback: return raw int[]
+                result = measured;
             }
+
+            _systemObservedValue = result;
+            return result;
         }
 
-        // Otherwise, we do local collapse logic:
+        // Fall back to local collapse
         return ObserveLocal(rng);
     }
 
+
     public void ApplyLocalUnitary(Complex[,] gate)
     {
-        // If we are part of an entangled system, apply the gate to the system's wavefunction.
         if (_system != null)
         {
-            // For a single qubit gate, you'd do partial transform
-            // For a two-qubit gate, you can call _system.ApplyTwoQubitGate(gate)
-            // This is just a placeholder.
-            _system.ApplyTwoQubitGate(gate); // naive
+            if (_qubitIndices.Length == 1 && gate.GetLength(0) == 2 && gate.GetLength(1) == 2)
+            {
+                // Apply single-qubit gate
+                _system.ApplySingleQubitGate(_qubitIndices[0], gate);
+            }
+            else if (_qubitIndices.Length == 2 && gate.GetLength(0) == 4 && gate.GetLength(1) == 4)
+            {
+                // Apply two-qubit gate
+                _system.ApplyTwoQubitGate(_qubitIndices[0], _qubitIndices[1], gate);
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported gate size or qubit index count.");
+            }
+
             return;
         }
 
-        // If we have local storage, we can do the single-qubit transform if _weights has 2 states
+        // Local fallback for 2-state qubits
         if (_weights == null || _weights.Count != 2)
             throw new InvalidOperationException("Local unitary only supported for 2-state local qubits in this example.");
 
@@ -1422,8 +1526,10 @@ public partial class QuBit<T> : IQuantumReference
         {
             _weights[states[i]] = transformed[i];
         }
+
         NormaliseWeights();
     }
+
 
     #region Local Collapse Logic
 
@@ -2052,7 +2158,7 @@ public class Eigenstates<T>
 
         // Weighted => sort descending by weight
         return _weights!
-            .OrderByDescending(kvp => kvp.Value)
+            .OrderByDescending(kvp => kvp.Value.Magnitude * kvp.Value.Magnitude)
             .Take(n)
             .Select(kvp => kvp.Key);
     }
@@ -2149,9 +2255,7 @@ public class Eigenstates<T>
         }
         else
         {
-            var (key, _) = _weights!
-                .OrderByDescending(x => x.Value)
-                .First();
+            var key = _weights!.MaxBy(x => x.Value.Magnitude)!.Key;
             return key;
         }
     }

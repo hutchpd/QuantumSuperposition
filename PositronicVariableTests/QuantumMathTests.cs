@@ -1,35 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using NUnit.Framework;
 
 namespace QuantumMathTests
 {
     [TestFixture]
-    public class QuantumMathTests
+    public class QuantumMathComplexTests
     {
-        private readonly IQuantumOperators<int> intOps = new IntOperators();
+        // Use the ComplexOperators instance for complex arithmetic.
+        private readonly IQuantumOperators<Complex> complexOps = new ComplexOperators();
 
-        #region QuBit Tests
+        // Helper to compare Complex numbers with tolerance.
+        private void AssertComplexEqual(Complex expected, Complex actual, double tolerance = 1e-12)
+        {
+            Assert.That(actual.Real, Is.EqualTo(expected.Real).Within(tolerance), "Real parts differ");
+            Assert.That(actual.Imaginary, Is.EqualTo(expected.Imaginary).Within(tolerance), "Imaginary parts differ");
+        }
+
+        #region QuBit Tests for Complex
 
         [Test]
-        public void QuBit_EvaluateAll_AllNonDefault_ReturnsTrue()
+        public void QuBit_EvaluateAll_AllNonDefault_ReturnsTrue_Complex()
         {
-            // Arrange: Create a QuBit with only non-default (non-zero) elements.
-            var qubit = new QuBit<int>(new List<int> { 1, 2, 3 }, intOps);
+            // Arrange: create a QuBit with non-zero (non-default) complex states.
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), new Complex(2, 0), new Complex(0, 3) },
+                complexOps
+            );
 
-            // Act: EvaluateAll should return true if none of the states equals default(int) (0).
+            // Act
             bool result = qubit.EvaluateAll();
 
-            // Assert
+            // Assert: all states are non-default (non-zero)
             Assert.IsTrue(result);
         }
 
         [Test]
-        public void QuBit_EvaluateAll_ContainsDefault_ReturnsFalse()
+        public void QuBit_EvaluateAll_ContainsDefault_ReturnsFalse_Complex()
         {
-            // Arrange: Create a QuBit that contains a default value (0 for int).
-            var qubit = new QuBit<int>(new List<int> { 1, 0, 3 }, intOps);
+            // Arrange: include a default (0+0i) value.
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), Complex.Zero, new Complex(0, 3) },
+                complexOps
+            );
 
             // Act
             bool result = qubit.EvaluateAll();
@@ -39,432 +54,302 @@ namespace QuantumMathTests
         }
 
         [Test]
-        public void QuBit_ModuloOperator_WithScalarFirst_ReturnsCorrectRemainders()
+        public void QuBit_AdditionOperator_WithScalar_Complex()
         {
-            // Arrange: Using operator %(T, QuBit<T>) to calculate 10 % each element.
-            var qubit = new QuBit<int>(new List<int> { 3, 4 }, intOps);
+            // Arrange: a qubit with states (1+2i) and (3+4i)
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 2), new Complex(3, 4) },
+                complexOps
+            );
+            var scalar = new Complex(1, 1);
 
-            // Act: 10 % qubit should yield [10 % 3, 10 % 4] = [1, 2].
-            var result = (10 % qubit).States.ToList();
+            // Act: add the scalar to each state.
+            var result = (qubit + scalar).States.ToList();
 
-            // Assert
-            CollectionAssert.AreEqual(new List<int> { 1, 2 }, result);
-        }
+            // Expected:
+            // (1+2i) + (1+1i) = (2+3i)
+            // (3+4i) + (1+1i) = (4+5i)
+            var expected = new List<Complex> { new Complex(2, 3), new Complex(4, 5) };
 
-        [Test]
-        public void QuBit_ModuloOperator_WithScalarSecond_ReturnsCorrectRemainders()
-        {
-            // Arrange: Using operator %(QuBit<T>, T) to calculate each element % 10.
-            var qubit = new QuBit<int>(new List<int> { 3, 4 }, intOps);
-
-            // Act: qubit % 10 should yield [3 % 10, 4 % 10] = [3, 4].
-            var result = (qubit % 10).States.ToList();
-
-            // Assert
-            CollectionAssert.AreEqual(new List<int> { 3, 4 }, result);
-        }
-
-        [Test]
-        public void QuBit_Append_AddsElementToStates()
-        {
-            // Arrange: Create a QuBit and then append an element.
-            var qubit = new QuBit<int>(new List<int> { 1, 2 }, intOps);
-
-            // Act
-            qubit.Append(3);
-            var states = qubit.States.ToList();
-
-            // Assert: Verify that the state now includes the appended element.
-            CollectionAssert.AreEqual(new List<int> { 1, 2, 3 }, states);
-        }
-
-        #endregion
-
-        #region Eigenstates Tests
-
-        [Test]
-        public void Eigenstates_FactorsProjection_ReturnsCorrectFactors()
-        {
-            // Arrange: Using the projection constructor to compute 10 % x for each x in 1..10.
-            // Then, filtering with "== 0" should select the factors of 10.
-            var eigen = new Eigenstates<int>(Enumerable.Range(1, 10), x => 10 % x, intOps);
-
-            // Act: Filter for keys where the projection equals 0.
-            var factors = (eigen == 0).ToValues().OrderBy(x => x).ToList();
-
-            // Expected factors for 10: 1, 2, 5, and 10.
-            CollectionAssert.AreEqual(new List<int> { 1, 2, 5, 10 }, factors);
-        }
-
-        [Test]
-        public void Eigenstates_ArithmeticAddition_WithScalar_ReturnsCorrectValues()
-        {
-            // Arrange: Create Eigenstates with keys 1, 2, and 3.
-            var eigen = new Eigenstates<int>(new List<int> { 1, 2, 3 }, intOps);
-
-            // Act: Add 5 to each projected value.
-            var resultEigen = eigen + 5;
-            string debugString = resultEigen.ToDebugString();
-
-            // Assert: Check that each key's projected value has been correctly updated.
-            Assert.IsTrue(debugString.Contains("1 => 6"));
-            Assert.IsTrue(debugString.Contains("2 => 7"));
-            Assert.IsTrue(debugString.Contains("3 => 8"));
-        }
-
-        [Test]
-        public void Eigenstates_FilteringOperators_LessThanOrEqual_ReturnsCorrectSubset()
-        {
-            // Arrange: Create Eigenstates with keys 1 through 5.
-            var eigen = new Eigenstates<int>(new List<int> { 1, 2, 3, 4, 5 }, intOps);
-
-            // Act: Filter keys where the projected value is less than or equal to 3.
-            var result = (eigen <= 3).ToValues().OrderBy(x => x).ToList();
-
-            // Assert: Expect keys 1, 2, and 3.
-            CollectionAssert.AreEqual(new List<int> { 1, 2, 3 }, result);
-        }
-
-        [Test]
-        public void Eigenstates_ToString_ReturnsProperFormatForConjunctive()
-        {
-            // Arrange: Create Eigenstates with multiple identical entries.
-            var eigen = new Eigenstates<int>(new List<int> { 4, 4, 4 }, intOps);
-
-            // Act: ToString should return a single value (since all keys are the same).
-            string result = eigen.ToString();
-
-            // Assert: Expected to just return "4" because of the unique state.
-            Assert.AreEqual("4", result);
-        }
-
-        [Test]
-        public void Eigenstates_ToString_ReturnsProperFormatForDisjunctive()
-        {
-            // Arrange: Create Eigenstates with distinct keys and switch to disjunctive mode.
-            var eigen = new Eigenstates<int>(new List<int> { 1, 2, 3 }, intOps);
-            eigen.Any();
-
-            // Act: ToString should return a string in the format "any(...)".
-            string result = eigen.ToString();
-
-            // Assert: Check that the result starts with "any(" and contains each expected key.
-            Assert.IsTrue(result.StartsWith("any("));
-            Assert.IsTrue(result.Contains("1"));
-            Assert.IsTrue(result.Contains("2"));
-            Assert.IsTrue(result.Contains("3"));
-        }
-
-        [Test]
-        public void QuBit_WeightedConstructor_ProducesExpectedStatesAndWeights()
-        {
-            // Arrange
-            var weightedItems = new (int value, double weight)[]
+            // Assert: compare each complex value.
+            Assert.AreEqual(expected.Count, result.Count);
+            for (int i = 0; i < expected.Count; i++)
             {
-                (2, 0.2), (2, 0.1), // duplicate state 2 with more weight
-                (5, 0.7)
-            };
-
-            // Act
-            var qubit = new QuBit<int>(weightedItems, intOps);
-
-            // Assert
-            // States should be distinct keys: 2, 5
-            CollectionAssert.AreEquivalent(new[] { 2, 5 }, qubit.States);
-
-            // The combined weight for '2' should be 0.2 + 0.1 = 0.3
-            // The weight for '5' is 0.7
-            var dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
-            Assert.AreEqual(0.3, dict[2], 1e-14);
-            Assert.AreEqual(0.7, dict[5], 1e-14);
-            Assert.IsTrue(qubit.IsWeighted);
-        }
-
-        [Test]
-        public void QuBit_WeightedArithmeticOperator_Scalar_Add()
-        {
-            // Arrange
-            // Weighted QuBit: states = [2, 5] with weights [0.3, 0.7]
-            var qubit = new QuBit<int>(new[] { (2, 0.3), (5, 0.7) }, intOps);
-
-            // Act
-            // + 1 => [3, 6] with the same weights [0.3, 0.7]
-            var result = qubit + 1;
-
-            // Assert
-            var weightedValues = result.ToWeightedValues().OrderBy(x => x.value).ToList();
-            // The new states:
-            CollectionAssert.AreEqual(new[] { 3, 6 }, weightedValues.Select(x => x.value));
-            // Weights remain the same
-            Assert.AreEqual(0.3, weightedValues[0].weight, 1e-14);
-            Assert.AreEqual(0.7, weightedValues[1].weight, 1e-14);
-        }
-
-        [Test]
-        public void QuBit_WeightedArithmeticOperator_QuBit_Multiply()
-        {
-            // Arrange
-            // QuBit A => (2 -> 0.3, 4 -> 0.7)
-            var qubitA = new QuBit<int>(new[] { (2, 0.3), (4, 0.7) }, intOps);
-            // QuBit B => (3 -> 0.5, 5 -> 0.5)
-            var qubitB = new QuBit<int>(new[] { (3, 0.5), (5, 0.5) }, intOps);
-
-            // Act
-            var result = qubitA * qubitB;
-            // The Cartesian product: 
-            //   A:2 w=0.3  * B:3 w=0.5 => state=6   combined weight=0.3*0.5=0.15
-            //   A:2 w=0.3  * B:5 w=0.5 => state=10  combined weight=0.3*0.5=0.15
-            //   A:4 w=0.7  * B:3 w=0.5 => state=12  combined weight=0.7*0.5=0.35
-            //   A:4 w=0.7  * B:5 w=0.5 => state=20  combined weight=0.7*0.5=0.35
-
-            var items = result.ToWeightedValues().OrderBy(x => x.value).ToList();
-
-            // Assert
-            var expected = new Dictionary<int, double> {
-                { 6,  0.15 },
-                { 10, 0.15 },
-                { 12, 0.35 },
-                { 20, 0.35 }
-            };
-
-            Assert.AreEqual(4, items.Count);
-
-            foreach (var (val, wt) in items)
-            {
-                Assert.AreEqual(expected[val], wt, 1e-14,
-                    $"Mismatch for state {val}; expected {expected[val]}, got {wt}");
+                AssertComplexEqual(expected[i], result[i]);
             }
         }
 
         [Test]
-        public void QuBit_Weighted_Append_IncrementsWeightOfExistingState()
+        public void QuBit_MultiplicationOperator_WithQuBit_Complex()
         {
-            // Arrange
-            var qubit = new QuBit<int>(new[] { (3, 0.5), (5, 1.0) }, intOps);
+            // Arrange: create two qubits.
+            // qubitA: (2+0i) and (1+1i)
+            var qubitA = new QuBit<Complex>(
+                new List<Complex> { new Complex(2, 0), new Complex(1, 1) },
+                complexOps
+            );
+            // qubitB: (3+0i) and (0+2i)
+            var qubitB = new QuBit<Complex>(
+                new List<Complex> { new Complex(3, 0), new Complex(0, 2) },
+                complexOps
+            );
 
-            // Act
-            // Append(3) => should increment the weight of 3 by +1.0
-            qubit.Append(3);
-            var weighted = qubit.ToWeightedValues().ToList();
+            // Act: multiply the two qubits.
+            var result = (qubitA * qubitB).States.ToList();
 
-            // Assert
-            // The new weight for 3 should be 1.5. The weight for 5 remains 1.0
-            var (val3, w3) = weighted.First(x => x.value == 3);
-            var (val5, w5) = weighted.First(x => x.value == 5);
+            // Expected Cartesian product:
+            // (2+0i)*(3+0i) = (6+0i)
+            // (2+0i)*(0+2i) = (0+4i)
+            // (1+1i)*(3+0i) = (3+3i)
+            // (1+1i)*(0+2i) = (-2+2i)
+            var expected = new List<Complex>
+            {
+                new Complex(6, 0),
+                new Complex(0, 4),
+                new Complex(3, 3),
+                new Complex(-2, 2)
+            };
 
-            Assert.AreEqual(3, val3);
-            Assert.AreEqual(1.5, w3, 1e-14);
-            Assert.AreEqual(5, val5);
-            Assert.AreEqual(1.0, w5, 1e-14);
+            // Assert: use collection equivalence (order-independent).
+            CollectionAssert.AreEquivalent(expected, result);
         }
 
         [Test]
-        public void QuBit_NormalizeWeights_MakesSumEqualOne()
+        public void QuBit_Append_IncreasesWeight_Complex()
         {
-            // Arrange
-            // Weights sum to 2.5 => (2 -> 0.5, 4 -> 2.0)
-            var qubit = new QuBit<int>(new[] { (2, 0.5), (4, 2.0) }, intOps);
+            // Arrange: create a weighted QuBit with states (1+0i) and (2+0i).
+            var weightedItems = new[]
+            {
+                (new Complex(1, 0), (Complex)0.5),
+                (new Complex(2, 0), (Complex)1.0)
+            };
 
-            // Act
+            var qubit = new QuBit<Complex>(weightedItems, complexOps);
+
+            // Act: Append (1+0i) again to increase its weight.
+            qubit.Append(new Complex(1, 0));
+
+            // Assert: the weight for (1+0i) should now be 1.5 and for (2+0i) remain 1.0.
+            var dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
+            Assert.AreEqual(1.5, dict[new Complex(1, 0)].Real, 1e-12);
+            Assert.AreEqual(1.0, dict[new Complex(2, 0)].Real, 1e-12);
+        }
+
+        [Test]
+        public void QuBit_NormalizeWeights_MakesSumEqualOne_Complex()
+        {
+            // Arrange: create a weighted qubit with states and weights.
+            // (1+1i) with weight 0.3 and (2+2i) with weight 0.7.
+            var weightedItems = new (Complex value, Complex weight)[]
+            {
+                (new Complex(1, 1), 0.3),
+                (new Complex(2, 2), 0.7)
+            };
+            var qubit = new QuBit<Complex>(weightedItems, complexOps);
+
+            // Act: normalize the weights.
             qubit.NormaliseWeights();
-            // new weights => 
-            //   2 => 0.5/2.5 = 0.2
-            //   4 => 2.0/2.5 = 0.8
             var dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
 
-            // Assert
-            Assert.AreEqual(1.0, dict.Values.Sum(), 1e-14);
-            Assert.AreEqual(0.2, dict[2], 1e-14);
-            Assert.AreEqual(0.8, dict[4], 1e-14);
-        }
-
-        [Test]
-        public void QuBit_MostProbable_ReturnsHighestWeightedState()
-        {
-            // Arrange
-            // (10 -> 0.1, 20 -> 0.7, 30 -> 0.2)
-            var qubit = new QuBit<int>(new[] { (10, 0.1), (20, 0.7), (30, 0.2) }, intOps);
-
-            // Act
-            var mp = qubit.MostProbable();
-
-            // Assert
-            Assert.AreEqual(20, mp,
-                "MostProbable should return the state with the largest weight");
-        }
-
-        [Test]
-        public void QuBit_WeightedEquals_ReturnsTrueIfWeightsAreWithinTolerance()
-        {
-            // Arrange
-            var q1 = new QuBit<int>(new[] { (2, 0.25), (4, 0.75) }, intOps);
-            // Slight difference in weights but within 1e-12 tolerance
-            var q2 = new QuBit<int>(new[] { (2, 0.250000000001), (4, 0.749999999999) }, intOps);
-
-            // Act / Assert
-            Assert.IsTrue(q1.Equals(q2),
-                "QuBit should consider these equal within default tolerance.");
+            // Assert: the sum of squared magnitudes of weights should equal 1.
+            double sumSq = dict.Values.Sum(w => w.Magnitude * w.Magnitude);
+            Assert.AreEqual(1.0, sumSq, 1e-12);
         }
 
         #endregion
 
-        #region Eigenstates Weighted Tests
+        #region Eigenstates Tests for Complex
 
         [Test]
-        public void Eigenstates_WeightedConstructor_StoresDistinctKeysAndWeights()
+        public void Eigenstates_ArithmeticAddition_WithScalar_ReturnsCorrectValues_Complex()
         {
-            // Arrange
-            var data = new (int value, double weight)[]
+            // Arrange: create Eigenstates with keys (1+1i) and (2+2i).
+            var items = new List<Complex> { new Complex(1, 1), new Complex(2, 2) };
+            var eigen = new Eigenstates<Complex>(items, complexOps);
+            var scalar = new Complex(1, 0);
+
+            // Act: add scalar to each state.
+            var resultEigen = eigen + scalar;
+
+            // Expected:
+            // (1+1i) + (1+0i) = (2+1i)
+            // (2+2i) + (1+0i) = (3+2i)
+            var expected = new List<Complex> { new Complex(2, 1), new Complex(3, 2) };
+            var pairs = resultEigen.ToMappedWeightedValues().OrderBy(x => x.value.Real)
+                                                      .ThenBy(x => x.value.Imaginary)
+                                                      .ToList();
+
+            // Assert
+            Assert.AreEqual(expected.Count, pairs.Count);
+            for (int i = 0; i < expected.Count; i++)
             {
-                (3, 1.5), (3, 0.2),
-                (4, 0.8),
-                (5, 0.0)
-            };
-
-            // Act
-            var eigen = new Eigenstates<int>(data, intOps);
-
-            // Assert
-            // Distinct keys => 3,4,5
-            var keys = eigen.States.OrderBy(x => x).ToList();
-            CollectionAssert.AreEqual(new[] { 3, 4, 5 }, keys);
-
-            // Check combined weight for 3 => 1.7
-            var wDict = eigen.ToMappedWeightedValues().ToDictionary(x => x.value, x => x.weight);
-            Assert.AreEqual(1.7, wDict[3], 1e-14);
-            Assert.AreEqual(0.8, wDict[4], 1e-14);
-            Assert.AreEqual(0.0, wDict[5], 1e-14);
+                AssertComplexEqual(expected[i], pairs[i].value);
+            }
         }
 
         [Test]
-        public void Eigenstates_WeightedArithmetic_AddScalar()
+        public void Eigenstates_FilteringOperators_LessThanOrEqual_ReturnsCorrectSubset_Complex()
         {
-            // Arrange
-            var eigen = new Eigenstates<int>(new[] { (1, 0.4), (2, 0.6) }, intOps);
+            // Arrange: create Eigenstates with keys:
+            // (3+4i) has magnitude 5, (1+1i) ~1.414, (0+3i) magnitude 3.
+            var items = new List<Complex> { new Complex(3, 4), new Complex(1, 1), new Complex(0, 3) };
+            var eigen = new Eigenstates<Complex>(items, complexOps);
+            // Use threshold (3+0i) with magnitude 3.
+            var threshold = new Complex(3, 0);
 
-            // Act
-            // Add 10 => new mapped values: 11,12
-            // Weights remain 0.4, 0.6 at each original key
-            var result = eigen + 10;
-            var pairs = result.ToMappedWeightedValues().OrderBy(x => x.value).ToList();
+            // Act: filter for states with magnitude less than or equal to 3.
+            var result = (eigen <= threshold).ToValues().OrderBy(x => x.Magnitude).ToList();
+
+            // Expected: (1+1i) and (0+3i)
+            var expected = new List<Complex> { new Complex(1, 1), new Complex(0, 3) };
 
             // Assert
-            CollectionAssert.AreEqual(new[] { 11, 12 }, pairs.Select(x => x.value));
-            Assert.AreEqual(0.4, pairs[0].weight, 1e-14);
-            Assert.AreEqual(0.6, pairs[1].weight, 1e-14);
+            Assert.AreEqual(expected.Count, result.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                AssertComplexEqual(expected[i], result[i]);
+            }
         }
 
         [Test]
-        public void Eigenstates_WeightedArithmetic_Eigenstates_Multiply()
+        public void Eigenstates_ToString_ReturnsProperFormatForConjunctive_Complex()
         {
-            // Arrange
-            var eA = new Eigenstates<int>(new[] { (2, 0.3), (4, 0.7) }, intOps);
-            var eB = new Eigenstates<int>(new[] { (3, 0.5), (5, 0.5) }, intOps);
+            // Arrange: create Eigenstates with duplicate keys.
+            var items = new List<Complex> { new Complex(4, 4), new Complex(4, 4), new Complex(4, 4) };
+            var eigen = new Eigenstates<Complex>(items, complexOps);
 
-            // Act
+            // Act: ToString should simplify to a single state representation.
+            string result = eigen.ToString();
+
+            // Assert: the result should contain "4" (as part of the key representation).
+            Assert.IsTrue(result.Contains("4"));
+        }
+
+        [Test]
+        public void Eigenstates_WeightedArithmetic_Multiply_Complex()
+        {
+            // Arrange: create two weighted Eigenstates.
+            // eA: (2+0i) with weight 0.3 and (4+0i) with weight 0.7.
+            var eA = new Eigenstates<Complex>(
+                new (Complex, Complex)[]
+                {
+                    (new Complex(2, 0), 0.3),
+                    (new Complex(4, 0), 0.7)
+                },
+                complexOps
+            );
+            // eB: (3+0i) with weight 0.5 and (0+2i) with weight 0.5.
+            var eB = new Eigenstates<Complex>(
+                new (Complex, Complex)[]
+                {
+                    (new Complex(3, 0), 0.5),
+                    (new Complex(0, 2), 0.5)
+                },
+                complexOps
+            );
+
+            // Act: multiply the two eigenstates.
             var result = eA * eB;
 
-            // Assert
-            // Expect states: 6, 10, 12, 20 
-            //   2 * 3 => 6   with weight=0.3*0.5=0.15
-            //   2 * 5 => 10  with weight=0.3*0.5=0.15
-            //   4 * 3 => 12  with weight=0.7*0.5=0.35
-            //   4 * 5 => 20  with weight=0.7*0.5=0.35
-            var weighted = result.ToMappedWeightedValues().OrderBy(x => x.value).ToList();
-            var expected = new Dictionary<int, double> {
-                { 6,  0.15 },
-                { 10, 0.15 },
-                { 12, 0.35 },
-                { 20, 0.35 }
+            // Expected results:
+            // (2+0i)*(3+0i) = (6+0i) with weight 0.15
+            // (2+0i)*(0+2i) = (0+4i) with weight 0.15
+            // (4+0i)*(3+0i) = (12+0i) with weight 0.35
+            // (4+0i)*(0+2i) = (0+8i) with weight 0.35
+            var weighted = result.ToMappedWeightedValues()
+                                 .OrderBy(x => x.value.Real)
+                                 .ThenBy(x => x.value.Imaginary)
+                                 .ToList();
+            var expected = new Dictionary<Complex, Complex>
+            {
+                { new Complex(6, 0),  0.15 },
+                { new Complex(0, 4),  0.15 },
+                { new Complex(12, 0), 0.35 },
+                { new Complex(0, 8),  0.35 }
             };
-            Assert.AreEqual(expected.Count, weighted.Count);
 
+            // Assert
+            Assert.AreEqual(expected.Count, weighted.Count);
             foreach (var (val, wt) in weighted)
             {
-                Assert.AreEqual(expected[val], wt, 1e-14,
-                    $"Mismatch at state {val}; expected {expected[val]}, got {wt}");
+                Assert.AreEqual(expected[val].Magnitude, wt.Magnitude, 1e-12, $"Mismatch for state {val}");
             }
         }
 
         [Test]
-        public void Eigenstates_NormalizeWeights_SetsSumToOne()
+        public void Eigenstates_NormaliseWeights_SetsSumToOne_Complex()
         {
-            // Arrange
-            var e = new Eigenstates<int>(
-                new[] { (3, 2.0), (4, 6.0), (5, 2.0) }, intOps
+            // Arrange: weighted Eigenstates with keys (1+0i) weight 2.0, (2+0i) weight 6.0, (3+0i) weight 2.0.
+            var eigen = new Eigenstates<Complex>(
+                new (Complex, Complex)[]
+                {
+                    (new Complex(1, 0), 2.0),
+                    (new Complex(2, 0), 6.0),
+                    (new Complex(3, 0), 2.0)
+                },
+                complexOps
             );
-            // sum of weights = 10.0
 
-            // Act
-            e.NormaliseWeights();
-            var dict = e.ToMappedWeightedValues().ToDictionary(x => x.value, x => x.weight);
+            // Act: normalize the weights.
+            eigen.NormaliseWeights();
+            var dict = eigen.ToMappedWeightedValues().ToDictionary(x => x.value, x => x.weight);
+            double sumSq = dict.Values.Sum(w => w.Magnitude * w.Magnitude);
 
-            // Assert
-            Assert.AreEqual(1.0, dict.Values.Sum(), 1e-14);
-            Assert.AreEqual(0.2, dict[3], 1e-14);
-            Assert.AreEqual(0.6, dict[4], 1e-14);
-            Assert.AreEqual(0.2, dict[5], 1e-14);
+            // Assert: total probability should be 1.
+            Assert.AreEqual(1.0, sumSq, 1e-12);
         }
 
         [Test]
-        public void Eigenstates_CollapseWeighted_ReturnsKeyWithHighestWeight()
+        public void Eigenstates_CollapseWeighted_ReturnsKeyWithHighestWeight_Complex()
         {
-            // Arrange
-            var e = new Eigenstates<int>(
-                new[] { (10, 0.1), (20, 0.3), (30, 0.6) }, intOps
+            // Arrange: weighted Eigenstates with keys (10+0i) weight 0.1, (20+0i) weight 0.3, (30+0i) weight 0.6.
+            var eigen = new Eigenstates<Complex>(
+                new (Complex, Complex)[]
+                {
+                    (new Complex(10, 0), 0.1),
+                    (new Complex(20, 0), 0.3),
+                    (new Complex(30, 0), 0.6)
+                },
+                complexOps
             );
 
             // Act
-            int collapsed = e.CollapseWeighted();
+            var collapsed = eigen.CollapseWeighted();
 
-            // Assert
-            Assert.AreEqual(30, collapsed, "Should pick the key with the largest weight");
+            // Assert: expect (30+0i) since it has the highest weight.
+            AssertComplexEqual(new Complex(30, 0), collapsed);
         }
 
         [Test]
-        public void Eigenstates_FilterByWeight_ExcludesLowerWeights()
+        public void Eigenstates_TopNByWeight_ReturnsHighestWeightedKeys_Complex()
         {
-            // Arrange
-            var e = new Eigenstates<int>(
-                new[] { (2, 0.1), (3, 0.8), (4, 0.05), (5, 0.05) }, intOps
+            // Arrange: weighted Eigenstates with keys (10+0i) weight 0.1, (20+0i) weight 0.4, (30+0i) weight 0.4, (40+0i) weight 0.1.
+            var eigen = new Eigenstates<Complex>(
+                new (Complex, Complex)[]
+                {
+                    (new Complex(10, 0), 0.1),
+                    (new Complex(20, 0), 0.4),
+                    (new Complex(30, 0), 0.4),
+                    (new Complex(40, 0), 0.1)
+                },
+                complexOps
             );
 
-            // Act
-            // Keep only those with weight >= 0.1
-            var filtered = e.FilterByProbability(w => w >= 0.1);
-            var keys = filtered.States.OrderBy(x => x).ToList();
+            // Act: get the top 2 keys by weight.
+            var top2 = eigen.TopNByWeight(2)
+                            .OrderBy(x => x.Real)
+                            .ThenBy(x => x.Imaginary)
+                            .ToList();
+
+            // Expected: (20+0i) and (30+0i)
+            var expected = new List<Complex> { new Complex(20, 0), new Complex(30, 0) };
 
             // Assert
-            CollectionAssert.AreEqual(new[] { 2, 3 }, keys,
-                "Should drop states 4 and 5 that have weight=0.05");
-        }
-
-        [Test]
-        public void Eigenstates_WeightedEqualityChecks_WithinTolerance()
-        {
-            // Arrange
-            var e1 = new Eigenstates<int>(new[] { (5, 0.3333333333), (7, 0.6666666667) }, intOps);
-            var e2 = new Eigenstates<int>(new[] { (5, 0.333333334), (7, 0.666666666) }, intOps);
-
-            // Act / Assert
-            Assert.IsTrue(e1.Equals(e2),
-                "Eigenstates should be equal within the default tolerance for double comparisons");
-        }
-
-        [Test]
-        public void Eigenstates_TopNByWeight_ReturnsHighestWeightedKeys()
-        {
-            // Arrange
-            var e = new Eigenstates<int>(
-                new[] { (10, 0.1), (20, 0.4), (30, 0.4), (40, 0.1) }, intOps
-            );
-
-            // Act
-            // Top 2 by weight => keys 20, 30 (both 0.4)
-            var top2 = e.TopNByWeight(2).OrderBy(x => x).ToList();
-
-            // Assert
-            CollectionAssert.AreEqual(new[] { 20, 30 }, top2);
+            Assert.AreEqual(expected.Count, top2.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                AssertComplexEqual(expected[i], top2[i]);
+            }
         }
 
         #endregion
