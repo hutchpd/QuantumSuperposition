@@ -30,6 +30,7 @@ A library that allows .NET variables to hold multiple values at once — like Sc
 ---
 
 ### PositronicVariables
+[![NuGet](https://img.shields.io/nuget/v/PositronicVariables.svg)](https://www.nuget.org/packages/PositronicVariables)
 
 > Temporal state machines with quantum journaling.
 
