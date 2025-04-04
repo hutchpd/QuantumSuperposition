@@ -10,9 +10,9 @@ This repository contains two interlinked .NET libraries for working with uncerta
 
 ---
 
-## 🌌 Included Libraries
+##  Included Libraries
 
-### 🧠 QuantumSuperposition
+###  QuantumSuperposition
 
 > “Maybe” as a first-class value.
 
@@ -24,11 +24,11 @@ A library that allows .NET variables to hold multiple values at once — like Sc
 - Clean APIs for set operations, filtering, and observation.
 - Optional probabilistic behavior with amplitude weighting.
 
-📖 [Full README](QuantumSuperposition/README.md)
+ [Full README](QuantumSuperposition/README.md)
 
 ---
 
-### 🕒 PositronicVariables
+### PositronicVariables
 
 > Temporal state machines with quantum journaling.
 
@@ -44,11 +44,11 @@ A framework built atop `QuBit<T>` that enables variables to evolve across simula
 - Lets you simulate “what if” before committing to a result.
 - `RunConvergenceLoop` executes your logic until everyone agrees. It’s like couple’s therapy, but for variables.
 
-📖 [Full README](PositronicVariables/README.md)
+[Full README](PositronicVariables/README.md)
 
 ---
 
-## 🧪 Example Use Case
+##  Example Use Case
 
 ```csharp
 var x = new PositronicVariable<int>(0);
@@ -71,7 +71,7 @@ Console.WriteLine($"Final Output: {node.Output}");
 
 ---
 
-## 🛠 Development
+## Development
 
 - C# 10 / .NET 6+
 - NuGet-ready projects (soon™)
@@ -79,7 +79,7 @@ Console.WriteLine($"Final Output: {node.Output}");
 
 ---
 
-## 🧘 Philosophy
+## Philosophy
 
 This project was born out of a deeply unhealthy desire to simulate philosophical paradoxes in enterprise-grade C#. Here’s what we believe:
 
@@ -90,7 +90,7 @@ This project was born out of a deeply unhealthy desire to simulate philosophical
 
 ---
 
-## 🧑‍💻 Contributing
+## Contributing
 
 Pull requests are welcome. Just remember: every change you make spawns another universe.
 
@@ -102,14 +102,14 @@ Open an issue if:
 
 ---
 
-## 🪪 License
+## License
 
 This code is released under the [Unlicense](https://unlicense.org/).  
 Do whatever. Just don’t blame us when your compiler becomes sentient.
 
 ---
 
-## 🙃 Final Thoughts
+## Final Thoughts
 
 This repo is for people who:
 
