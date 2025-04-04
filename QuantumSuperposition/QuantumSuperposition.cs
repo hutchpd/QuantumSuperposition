@@ -32,6 +32,34 @@ public interface IQuantumOperators<T>
 }
 
 /// <summary>
+/// acts as a “marker” for consumers, so they know which methods are available for interacting with quantum observables
+/// </summary>
+/// <typeparam name="T"></typeparam>
+public interface IQuantumObservable<T>
+{
+    /// <summary>
+    /// Performs an observation (i.e. collapse) of the quantum state using an optional Random instance.
+    /// </summary>
+    T Observe(Random? rng = null);
+
+    /// <summary>
+    /// Collapses the quantum state based on weighted probabilities.
+    /// </summary>
+    T CollapseWeighted();
+
+    /// <summary>
+    /// Samples the quantum state probabilistically, without collapsing it.
+    /// </summary>
+    T SampleWeighted(Random? rng = null);
+
+    /// <summary>
+    /// Returns the weighted values of the quantum states.
+    /// </summary>
+    IEnumerable<(T value, Complex weight)> ToWeightedValues();
+}
+
+
+/// <summary>
 /// A common interface for all qubits that participate in an entangled system. 
 /// It acts as a “handle” that the QuantumSystem can use to communicate with individual qubits.
 /// </summary>
@@ -144,6 +172,46 @@ public static class QuantumMathUtility<T>
 
     public static IEnumerable<T> Combine(T a, IEnumerable<T> b, Func<T, T, T> op) =>
         b.Select(x => op(a, x));
+
+    public static Complex[] ApplyMatrix(Complex[] vector, Complex[,] matrix)
+    {
+        int dim = vector.Length;
+
+        if (matrix.GetLength(0) != dim || matrix.GetLength(1) != dim)
+            throw new ArgumentException($"Matrix must be square with size {dim}×{dim}.");
+
+        var result = new Complex[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            result[i] = Complex.Zero;
+            for (int j = 0; j < dim; j++)
+            {
+                result[i] += matrix[i, j] * vector[j];
+            }
+        }
+
+        return result;
+    }
+    public static Complex[] ApplyGate(Complex[] vector, Complex[,] gate)
+    {
+        int dim = vector.Length;
+
+        if (gate.GetLength(0) != dim || gate.GetLength(1) != dim)
+            throw new ArgumentException($"Gate must be square with dimension {dim}");
+
+        var result = new Complex[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            result[i] = Complex.Zero;
+            for (int j = 0; j < dim; j++)
+            {
+                result[i] += gate[i, j] * vector[j];
+            }
+        }
+
+        return result;
+    }
+
 }
 
 /// <summary>
@@ -283,9 +351,6 @@ public class QuantumSystem
         return chosenProjection;
     }
 
-
-
-
     /// <summary>
     /// ApplyTwoQubitGate function.
     /// </summary>
@@ -294,7 +359,7 @@ public class QuantumSystem
         if (gate.GetLength(0) != 4 || gate.GetLength(1) != 4)
             throw new ArgumentException("Gate must be a 4x4 matrix.");
 
-        // 1. Group basis states by fixed values of all qubits *except* qubitA and qubitB
+        // Group basis states by fixed values of all qubits *except* qubitA and qubitB
         var grouped = new Dictionary<string, List<int[]>>();
 
         foreach (var state in _amplitudes.Keys.ToList())
@@ -310,7 +375,7 @@ public class QuantumSystem
 
         var newAmplitudes = new Dictionary<int[], Complex>(new IntArrayComparer());
 
-        // 2. Process each group (should contain exactly 4 states representing the 2 qubits)
+        // Process each group (should contain exactly 4 states representing the 2 qubits)
         foreach (var group in grouped.Values)
         {
             // Build a 4-vector for current basis states
@@ -327,18 +392,10 @@ public class QuantumSystem
                 basisMap[(a, b)] = basis;
             }
 
-            // 3. Apply the gate: newVec = gate * vec
-            var newVec = new Complex[4];
-            for (int i = 0; i < 4; i++)
-            {
-                newVec[i] = Complex.Zero;
-                for (int j = 0; j < 4; j++)
-                {
-                    newVec[i] += gate[i, j] * vec[j];
-                }
-            }
+            // Apply the gate: newVec = gate * vec
+            var newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
 
-            // 4. Store updated amplitudes back in _amplitudes
+            // Store updated amplitudes back in _amplitudes
             foreach (var ((a, b), state) in basisMap)
             {
                 int idx = (a << 1) | b;
@@ -433,16 +490,251 @@ public static class QuantumConfig
 
 #endregion
 
+#region QuantumSoup
+public abstract class QuantumSoup<T> : IQuantumObservable<T>
+{
+    protected Dictionary<T, Complex>? _weights;
+    protected bool _isActuallyCollapsed;
+    protected T? _collapsedValue;
+    protected bool _mockCollapseEnabled;
+    protected T? _mockCollapseValue;
+    protected Guid? _collapseHistoryId;
+    protected int? _lastCollapseSeed;
+    protected Func<T, bool> _valueValidator = _ => true;
+    protected QuantumStateType _eType;
+    protected IQuantumOperators<T> _ops = QuantumOperatorsFactory.GetOperators<T>();
+    protected bool _weightsAreNormalized;
+    protected static readonly double _tolerance = 1e-9;
+    private bool _isFrozen => _isActuallyCollapsed;
+
+    public abstract IReadOnlyCollection<T> States { get; }
+
+    public bool IsWeighted => _weights != null;
+    public bool IsActuallyCollapsed => _isActuallyCollapsed && _eType == QuantumStateType.CollapsedResult;
+    public Guid? LastCollapseHistoryId => _collapseHistoryId;
+    public int? LastCollapseSeed => _lastCollapseSeed;
+    public QuantumStateType GetCurrentType() => _eType;
+
+    public void SetType(QuantumStateType t)
+    {
+        EnsureMutable();
+        _eType = t;
+    }
+
+    /// <summary>
+    /// Guard to ensure mutable operations are only allowed when not collapsed.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"></exception>
+    public void EnsureMutable()
+    {
+        if (_isFrozen)
+            throw new InvalidOperationException("Cannot modify a collapsed QuBit.");
+    }
+
+    /// <summary>
+    /// Normalises the amplitudes of the QuBit so that the sum of their squared magnitudes equals 1.
+    /// </summary>
+    public void NormaliseWeights()
+    {
+        if (_weights == null || _weightsAreNormalized) return;
+        double totalProbability = _weights.Values.Select(a => a.Magnitude * a.Magnitude).Sum();
+        if (totalProbability <= double.Epsilon) return;
+        double normFactor = Math.Sqrt(totalProbability);
+        foreach (var k in _weights.Keys.ToList())
+        {
+            _weights[k] /= normFactor;
+        }
+        _weightsAreNormalized = true;
+    }
+
+
+    /// <summary>
+    /// Reality check: converts quantum indecision into a final verdict.
+    /// Basically forces the whole wavefunction to agree like it’s group therapy for particles.
+    /// </summary>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    public bool EvaluateAll()
+    {
+        SetType(QuantumStateType.Conjunctive);
+
+        // More descriptive exception if empty
+        if (!States.Any())
+        {
+            throw new InvalidOperationException(
+                $"No states to evaluate. IsCollapsed={_isActuallyCollapsed}, StateCount={States.Count}, Type={_eType}."
+            );
+        }
+
+        return States.All(state => !EqualityComparer<T>.Default.Equals(state, default(T)));
+    }
+
+    public virtual IEnumerable<(T value, Complex weight)> ToWeightedValues()
+    {
+        if (_weights == null)
+        {
+            foreach (var v in States.Distinct()) yield return (v, Complex.One);
+        }
+        else
+        {
+            foreach (var kvp in _weights)
+            {
+                yield return (kvp.Key, kvp.Value);
+            }
+        }
+    }
+
+    // Does a little dance, rolls a quantum die, picks a value.
+    // May cause minor existential dread or major debugging regrets.
+    public virtual T SampleWeighted(Random? rng = null)
+    {
+        rng ??= Random.Shared;
+        if (!States.Any()) throw new InvalidOperationException("No states available.");
+        if (!IsWeighted) return States.First();
+        NormaliseWeights();
+        var probabilities = _weights.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Magnitude * kvp.Value.Magnitude);
+        double totalProb = probabilities.Values.Sum();
+        if (totalProb <= 1e-15) return States.First();
+        double roll = rng.NextDouble() * totalProb;
+        double cumulative = 0.0;
+        foreach (var (key, prob) in probabilities)
+        {
+            cumulative += prob;
+            if (roll <= cumulative) return key;
+        }
+        return probabilities.Last().Key;
+    }
+
+    public virtual QuantumSoup<T> WithWeights(Dictionary<T, Complex> weights, bool autoNormalize = false)
+    {
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        var filtered = new Dictionary<T, Complex>();
+        foreach (var kvp in weights)
+        {
+            if (States.Contains(kvp.Key)) filtered[kvp.Key] = kvp.Value;
+        }
+        var clone = Clone();
+        clone._weights = filtered;
+        clone._weightsAreNormalized = false;
+        if (autoNormalize) clone.NormaliseWeights();
+        return clone;
+    }
+
+    public virtual T CollapseWeighted()
+    {
+        if (!States.Any()) throw new InvalidOperationException("No states available for collapse.");
+        if (!IsWeighted) return States.First();
+        var key = _weights.MaxBy(x => x.Value.Magnitude)!.Key;
+        return key;
+    }
+
+    protected bool AllWeightsEqual(Dictionary<T, Complex> dict)
+    {
+        if (dict.Count <= 1) return true;
+        var first = dict.Values.First();
+        return dict.Values.Skip(1).All(w => Complex.Abs(w - first) < 1e-14);
+    }
+
+    protected bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
+    {
+        if (dict.Count <= 1) return true;
+        double firstProb = dict.Values.First().Magnitude * dict.Values.First().Magnitude;
+        return dict.Values.Skip(1).All(w => Math.Abs((w.Magnitude * w.Magnitude) - firstProb) < 1e-14);
+    }
+
+    /// <summary>
+    /// Compares with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
+    /// Compare Squared Magnitudes (Probabilistic Equality)
+    /// </summary>
+    public override bool Equals(object? obj)
+    {
+        if (obj == null || obj.GetType() != GetType()) return false;
+        var other = (QuantumSoup<T>)obj;
+        var mySet = States.Distinct().ToHashSet();
+        var otherSet = other.States.Distinct().ToHashSet();
+        if (!mySet.SetEquals(otherSet)) return false;
+        if (!IsWeighted && !other.IsWeighted) return true;
+        foreach (var s in mySet)
+        {
+            double p1 = 1.0, p2 = 1.0;
+            if (_weights != null && _weights.TryGetValue(s, out var amp1)) p1 = amp1.Magnitude * amp1.Magnitude;
+            if (other._weights != null && other._weights.TryGetValue(s, out var amp2)) p2 = amp2.Magnitude * amp2.Magnitude;
+            if (Math.Abs(p1 - p2) > _tolerance) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Checks to see if two things are really the same, or just pretending to be.
+    /// Compare Complex Amplitudes (Strict State Equality, as opposed to Probabilistic Equality)
+    /// </summary>
+    public virtual bool StrictlyEquals(object? obj)
+    {
+        if (obj == null || obj.GetType() != GetType()) return false;
+        var other = (QuantumSoup<T>)obj;
+        var mySet = States.Distinct().ToHashSet();
+        var otherSet = other.States.Distinct().ToHashSet();
+        if (!mySet.SetEquals(otherSet)) return false;
+        if (!IsWeighted && !other.IsWeighted) return true;
+        foreach (var s in mySet)
+        {
+            Complex a1 = Complex.One, a2 = Complex.One;
+            if (_weights != null && _weights.TryGetValue(s, out var w1)) a1 = w1;
+            if (other._weights != null && other._weights.TryGetValue(s, out var w2)) a2 = w2;
+            if ((a1 - a2).Magnitude > _tolerance) return false;
+        }
+        return true;
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = 17;
+            foreach (var s in States.Distinct().OrderBy(x => x))
+            {
+                hash = hash * 23 + (s?.GetHashCode() ?? 0);
+                if (IsWeighted && _weights != null && _weights.TryGetValue(s, out var amp))
+                {
+                    double real = Math.Round(amp.Real, 12);
+                    double imag = Math.Round(amp.Imaginary, 12);
+                    long realBits = BitConverter.DoubleToInt64Bits(real);
+                    long imagBits = BitConverter.DoubleToInt64Bits(imag);
+                    hash = hash * 23 + realBits.GetHashCode();
+                    hash = hash * 23 + imagBits.GetHashCode();
+                }
+            }
+            return hash;
+        }
+    }
+
+    public virtual string WeightSummary()
+    {
+        if (!IsWeighted) return "Weighted: false";
+        double totalProbability = _weights.Values.Sum(a => a.Magnitude * a.Magnitude);
+        double maxP = _weights.Values.Max(a => a.Magnitude * a.Magnitude);
+        double minP = _weights.Values.Min(a => a.Magnitude * a.Magnitude);
+        return $"Weighted: true, Sum(|amp|²): {totalProbability}, Max(|amp|²): {maxP}, Min(|amp|²): {minP}";
+    }
+
+    public abstract QuantumSoup<T> Clone();
+
+    public T Observe(Random? rng = null)
+    {
+        throw new NotImplementedException();
+    }
+}
+#endregion
+
 #region QuBit<T> Implementation
 
 /// <summary>
 /// QuBit<T> represents a superposition of values of type T, optionally weighted.
 /// It's like Schrödinger's inbox: everything's unread and somehow also read.
 /// </summary>
-public partial class QuBit<T> : IQuantumReference
+public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 {
     private readonly Func<T, bool> _valueValidator;
-    private bool _isFrozen => _isActuallyCollapsed;
     public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
 
     private readonly QuantumSystem? _system;    // if non-null, this qubit is in a shared system
@@ -587,19 +879,6 @@ public partial class QuBit<T> : IQuantumReference
 
     #region State Type Helpers
 
-    // Guard to ensure mutable operations are only allowed when not collapsed.
-    private void EnsureMutable()
-    {
-        if (_isFrozen)
-            throw new InvalidOperationException("Cannot modify a collapsed QuBit.");
-    }
-
-    private void SetType(QuantumStateType t)
-    {
-        EnsureMutable();
-        _eType = t;
-    }
-
     public QuBit<T> Append(T element)
     {
         EnsureMutable();
@@ -622,6 +901,7 @@ public partial class QuBit<T> : IQuantumReference
         return this;
     }
 
+
     public static QuBit<T> WithEqualAmplitudes(IEnumerable<T> states)
     {
         var list = states.Distinct().ToList();
@@ -634,49 +914,31 @@ public partial class QuBit<T> : IQuantumReference
     #region Immutable Clone
 
     /// <summary>
-    /// Creates a mutable clone of the QuBit – copying current states and weights,
-    /// but resetting the collapsed (immutable) flag so you can start over.
+    /// This quantum decision was final… but I copied it into a new universe where it wasn’t
+    /// Cloning a collapsed QuBit resets its collapse status. The new instance retains the amplitudes and quantum state type, but is mutable and behaves as if never observed.
     /// </summary>
-    public QuBit<T> CloneMutable()
+    public override QuantumSoup<T> Clone()
     {
         var clonedWeights = _weights != null ? new Dictionary<T, Complex>(_weights) : null;
         var clonedList = _qList.ToList();
-        var clone = new QuBit<T>(clonedList, clonedWeights, _ops, _valueValidator)
-        {
-            _eType = this._eType
-            // Note: collapse-related fields are not copied, so the clone is mutable.
-        };
+        var clone = new QuBit<T>(clonedList, clonedWeights, _ops, _valueValidator);
+        clone._isActuallyCollapsed = false;
+        clone._isCollapsedFromSystem = false;
+        clone._collapsedValue = default;
+        clone._collapseHistoryId = null;
+        clone._lastCollapseSeed = null;
+        clone._eType = this._eType == QuantumStateType.CollapsedResult ? QuantumStateType.Disjunctive : this._eType;
         return clone;
     }
+
 
     #endregion
 
     #region Fields for Local Storage (used if _system == null)
 
     private IEnumerable<T> _qList;
-    private Dictionary<T, Complex>? _weights;
-    private QuantumStateType _eType = QuantumStateType.Conjunctive;
-    private readonly IQuantumOperators<T> _ops = QuantumOperatorsFactory.GetOperators<T>();
     private static readonly IQuantumOperators<T> _defaultOps = QuantumOperatorsFactory.GetOperators<T>();
 
-    // Track the last seed (if used) and a unique collapse ID
-    private Guid? _collapseHistoryId;
-    private int? _lastCollapseSeed;
-
-    // For debugging or replay purposes, you can track the last collapse history ID and seed.
-    public Guid? LastCollapseHistoryId => _collapseHistoryId;
-    public int? LastCollapseSeed => _lastCollapseSeed;
-
-    // Fields for supporting mock collapse
-    private bool _mockCollapseEnabled;
-    private T? _mockCollapseValue;
-
-    // Track actual collapse
-    private bool _isActuallyCollapsed;
-    private T? _collapsedValue;
-
-    public IReadOnlyCollection<T> States =>
-        _weights != null ? (IReadOnlyCollection<T>)_weights.Keys : _qList.ToList();
 
     public IQuantumOperators<T> Operators => _ops;
 
@@ -829,23 +1091,7 @@ public partial class QuBit<T> : IQuantumReference
 
     #endregion
 
-    #region Evaluation / Collapse & Introspection Enhancements
-    // Reality check: converts quantum indecision into a final verdict.
-    // Basically forces the whole wavefunction to agree like it’s group therapy for particles.
-    public bool EvaluateAll()
-    {
-        SetType(QuantumStateType.Conjunctive);
-
-        // More descriptive exception if empty
-        if (!States.Any())
-        {
-            throw new InvalidOperationException(
-                $"No states to evaluate. IsCollapsed={_isActuallyCollapsed}, StateCount={States.Count}, Type={_eType}."
-            );
-        }
-
-        return States.All(state => !EqualityComparer<T>.Default.Equals(state, default(T)));
-    }
+    #region Introspection
 
     /// <summary>
     /// Observes (collapses) the QuBit with an optional Random instance for deterministic replay.
@@ -896,13 +1142,14 @@ public partial class QuBit<T> : IQuantumReference
 
         // Mark as collapsed
         _collapsedValue = picked;
-        _isActuallyCollapsed = true;
+        
         _qList = new[] { picked };
         if (_weights != null)
         {
             _weights = new Dictionary<T, Complex> { { picked, 1.0 } };
         }
         SetType(QuantumStateType.CollapsedResult);
+        _isActuallyCollapsed = true;
 
         return picked;
     }
@@ -920,26 +1167,33 @@ public partial class QuBit<T> : IQuantumReference
         return Observe(rng);
     }
 
-    public T ObserveInBasis(Complex[,] basis, Random? rng = null)
+    public T ObserveInBasis(Complex[,] basisMatrix, Random? rng = null)
     {
-        if (_weights == null || _weights.Count != 2)
-            throw new InvalidOperationException("Basis transformations currently only support 2-state qubits.");
+        if (_weights == null || _weights.Count == 0)
+            throw new InvalidOperationException("No amplitudes available for basis transform.");
 
+        int dimension = _weights.Count;
+
+        if (basisMatrix.GetLength(0) != dimension || basisMatrix.GetLength(1) != dimension)
+            throw new ArgumentException($"Basis transform must be a {dimension}×{dimension} square matrix.");
+
+        // Capture the states and their amplitudes
         var states = _weights.Keys.ToArray();
         var amplitudes = states.Select(s => _weights[s]).ToArray();
 
-        // Apply the basis transform
-        var transformed = QuantumBasis.ApplyBasis(amplitudes, basis);
+        // Apply the unitary basis transformation
+        var transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, basisMatrix);
 
-        // Rebuild a new qubit with these amplitudes
-        var newWeights = new Dictionary<T, Complex>
-        {
-            [states[0]] = transformed[0],
-            [states[1]] = transformed[1]
-        };
+        // Construct new weights
+        var newWeights = new Dictionary<T, Complex>();
+        for (int i = 0; i < states.Length; i++)
+            newWeights[states[i]] = transformed[i];
 
-        return new QuBit<T>(states, newWeights, _ops).Observe(rng);
+        // Create a temporary qubit in the new basis and observe
+        var newQubit = new QuBit<T>(states, newWeights, _ops).WithNormalizedWeights();
+        return newQubit.Observe(rng);
     }
+
 
 
     /// <summary>
@@ -1028,32 +1282,6 @@ public partial class QuBit<T> : IQuantumReference
         {
             foreach (var kvp in _weights)
                 yield return (kvp.Key, kvp.Value);
-        }
-    }
-
-    private bool _weightsAreNormalized = false;
-
-    /// <summary>
-    /// Normalises the amplitudes of the QuBit so that the sum of their squared magnitudes equals 1.
-    /// </summary>
-    public void NormaliseWeights()
-    {
-        if (_weights == null || _weightsAreNormalized) return;
-
-        // Compute the sum of the squared magnitudes (|a|²)
-        double totalProbability = _weights.Values
-            .Select(a => a.Magnitude * a.Magnitude)
-            .Sum();
-
-        if (totalProbability <= double.Epsilon)
-            return; // avoid division by zero
-
-        // Scale each amplitude by 1 / sqrt(totalProbability)
-        double normFactor = Math.Sqrt(totalProbability);
-
-        foreach (var key in _weights.Keys.ToList())
-        {
-            _weights[key] /= normFactor;
         }
     }
 
@@ -1196,6 +1424,9 @@ public partial class QuBit<T> : IQuantumReference
 
     public bool IsCollapsed => _isCollapsedFromSystem || _isActuallyCollapsed;
 
+    public override IReadOnlyCollection<T> States =>
+    _weights != null ? (IReadOnlyCollection<T>)_weights.Keys : _qList.ToList();
+
     /// <summary>
     /// Returns the most probable state, i.e., the one that's been yelling the loudest in the multiverse.
     /// This is as close to democracy as quantum physics gets.
@@ -1221,114 +1452,12 @@ public partial class QuBit<T> : IQuantumReference
     }
 
     /// <summary>
-    // Does a little dance, rolls a quantum die, picks a value.
-    // May cause minor existential dread or major debugging regrets.
-    /// </summary>
-    public T SampleWeighted(Random? rng = null)
-    {
-        if (!States.Any())
-            throw new InvalidOperationException("No states available to sample.");
-
-        rng ??= Random.Shared;
-
-        if (!IsWeighted)
-        {
-            return ToCollapsedValues().First();
-        }
-        else
-        {
-            NormaliseWeights();
-        }
-
-        // Use squared magnitude for probability
-        var probabilities = _weights!.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.Magnitude * kvp.Value.Magnitude
-        );
-
-        double totalProb = probabilities.Values.Sum();
-        if (totalProb <= 1e-15)
-        {
-            // All zero probabilities – fallback
-            return ToCollapsedValues().First();
-        }
-
-        double roll = rng.NextDouble() * totalProb;
-        double cumulative = 0.0;
-
-        foreach (var (key, prob) in probabilities)
-        {
-            cumulative += prob;
-            if (roll <= cumulative)
-                return key;
-        }
-
-        // Fallback in case of rounding issues
-        return probabilities.Last().Key;
-    }
-
-    /// <summary>
     /// Tolerance used for comparing weights in equality checks.
     /// This allows for minor floating-point drift.
     /// </summary>
     private static readonly double _tolerance = 1e-9;
 
-    /// <summary>
-    /// Compares two QuBits with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
-    /// Compare Squared Magnitudes (Probabilistic Equality)
-    /// </summary>
-    public override bool Equals(object? obj)
-    {
-        if (ReferenceEquals(this, obj)) return true;
-        if (obj is not QuBit<T> other) return false;
-
-        var mySet = States.Distinct().ToHashSet();
-        var otherSet = other.States.Distinct().ToHashSet();
-        if (!mySet.SetEquals(otherSet)) return false;
-
-        if (!this.IsWeighted && !other.IsWeighted)
-            return true;
-
-        foreach (var s in mySet)
-        {
-            double p1 = 1.0, p2 = 1.0;
-            if (_weights != null && _weights.TryGetValue(s, out var amp1)) p1 = amp1.Magnitude * amp1.Magnitude;
-            if (other._weights != null && other._weights.TryGetValue(s, out var amp2)) p2 = amp2.Magnitude * amp2.Magnitude;
-            if (Math.Abs(p1 - p2) > _tolerance) return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Compares two QuBits with the grace of a therapist and the precision of a passive-aggressive spreadsheet.
-    /// Compare Complex Amplitudes (Strict State Equality, as opposed to Probabilistic Equality)
-    /// </summary>
-    public bool StrictlyEquals(object? obj)
-    {
-        if (ReferenceEquals(this, obj)) return true;
-        if (obj is not QuBit<T> other) return false;
-
-        var mySet = States.Distinct().ToHashSet();
-        var otherSet = other.States.Distinct().ToHashSet();
-        if (!mySet.SetEquals(otherSet)) return false;
-
-        if (!this.IsWeighted && !other.IsWeighted)
-            return true;
-
-        foreach (var s in mySet)
-        {
-            Complex a1 = Complex.Zero, a2 = Complex.Zero;
-            if (_weights != null && _weights.TryGetValue(s, out var amp1)) a1 = amp1;
-            if (other._weights != null && other._weights.TryGetValue(s, out var amp2)) a2 = amp2;
-
-            if ((a1 - a2).Magnitude > _tolerance) return false;
-        }
-
-        return true;
-    }
-
-
+    
     /// <summary>
     /// Creates a hash that reflects the spiritual essence of your quantum mess.
     /// If you're lucky, two equal QuBits won't hash to the same black hole
@@ -1520,7 +1649,7 @@ public partial class QuBit<T> : IQuantumReference
         var states = _weights.Keys.ToArray();
         var amplitudes = states.Select(s => _weights[s]).ToArray();
 
-        var transformed = QuantumBasis.ApplyBasis(amplitudes, gate);
+        var transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, gate);
 
         for (int i = 0; i < states.Length; i++)
         {
@@ -1595,22 +1724,11 @@ public partial class QuBit<T> : IQuantumReference
 /// Eigenstates<T> preserves original input keys in a dictionary Key->Value,
 /// because sometimes you just want your quantum states to stop changing the subject.
 /// </summary>
-public class Eigenstates<T>
+public class Eigenstates<T> : QuantumSoup<T>
 {
     private readonly Func<T, bool> _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
 
     private Dictionary<T, T> _qDict;
-    private Dictionary<T, Complex>? _weights; // optional weighting
-    private QuantumStateType _eType = QuantumStateType.Conjunctive;
-    private readonly IQuantumOperators<T> _ops;
-
-    // Track the last seed (if used) and a unique collapse ID
-    private Guid? _collapseHistoryId;
-    private int? _lastCollapseSeed;
-    private bool _isActuallyCollapsed;
-    private T? _collapsedValue;
-
-    public IReadOnlyCollection<T> States => _qDict.Keys;
 
     #region Constructors
     // Constructors that let you map values to themselves or to other values.
@@ -1962,31 +2080,6 @@ public class Eigenstates<T>
         }
     }
 
-    private bool _weightsAreNormalized = false;
-
-    /// <summary>
-    /// Normalises the weights of the Eigenstates.
-    /// </summary>
-    public void NormaliseWeights()
-    {
-        if (_weights == null || _weightsAreNormalized) return;
-
-        // Compute the sum of the squared magnitudes (|a|²)
-        double totalProbability = _weights.Values
-            .Select(a => a.Magnitude * a.Magnitude)
-            .Sum();
-
-        if (totalProbability <= double.Epsilon)
-            return; // avoid division by zero
-
-        // Scale each amplitude by 1 / sqrt(totalProbability)
-        double normFactor = Math.Sqrt(totalProbability);
-
-        foreach (var key in _weights.Keys.ToList())
-        {
-            _weights[key] /= normFactor;
-        }
-    }
 
     /// <summary>
     /// Checks if all weights are equal. If so, congratulations — your data achieved perfect balance, Thanos-style.
@@ -2142,6 +2235,8 @@ public class Eigenstates<T>
     /// </summary>
     public bool IsWeighted => _weights != null;
 
+    public override IReadOnlyCollection<T> States => _qDict.Keys;
+
     /// <summary>
     /// Grabs the top N keys based on weight. 
     /// Sort of like picking favorites, but mathematically justified.
@@ -2261,133 +2356,6 @@ public class Eigenstates<T>
     }
 
     /// <summary>
-    /// Sample from your state space in a way that introduces just enough chaos to ruin reproducibility.
-    /// </summary>
-    public T SampleWeighted(Random? rng = null)
-    {
-        if (!States.Any())
-            throw new InvalidOperationException("No states to sample.");
-
-        rng ??= Random.Shared;
-
-        if (!IsWeighted)
-        {
-            return _qDict.Keys.First();
-        }
-        else
-        {
-            NormaliseWeights();
-        }
-
-        // Compute total probability (sum of squared magnitudes)
-        double totalProb = _weights!.Values.Sum(amp => amp.Magnitude * amp.Magnitude);
-
-        if (totalProb <= 1e-15)
-        {
-            // All amplitudes are effectively zero — fallback
-            return _qDict.Keys.First();
-        }
-
-        // Roll a number between 0 and total probability
-        double roll = rng.NextDouble() * totalProb;
-        double cumulativeProb = 0.0;
-
-        // Accumulate probabilities from amplitudes
-        foreach (var (key, amp) in _weights)
-        {
-            cumulativeProb += amp.Magnitude * amp.Magnitude;
-            if (roll <= cumulativeProb)
-                return key;
-        }
-
-        // Fallback safety
-        return _weights.Last().Key;
-    }
-
-
-    /// <summary>
-    /// Tolerance used for comparing weights in equality checks.
-    /// This allows for minor floating-point drift.
-    /// </summary>
-    private static readonly double _tolerance = 1e-9;
-
-    /// <summary>
-    /// Checks if two Eigenstates are truly the same deep down—or just pretending.
-    /// Includes an existential tolerance value.
-    /// Compare Squared Magnitudes (Probabilistic Equality)
-    /// </summary>
-    public override bool Equals(object obj)
-    {
-        if (ReferenceEquals(this, obj)) return true;
-        if (obj is not Eigenstates<T> other) return false;
-
-        var myKeys = _qDict.Keys.ToHashSet();
-        var otherKeys = other._qDict.Keys.ToHashSet();
-        if (!myKeys.SetEquals(otherKeys)) return false;
-
-        foreach (var k in myKeys)
-        {
-            if (!EqualityComparer<T>.Default.Equals(_qDict[k], other._qDict[k]))
-                return false;
-        }
-
-        // If neither is weighted, treat as equal
-        if (!IsWeighted && !other.IsWeighted)
-            return true;
-
-        // Compare squared magnitudes (probabilities)
-        foreach (var k in myKeys)
-        {
-            Complex a1 = _weights != null && _weights.TryGetValue(k, out var v1) ? v1 : Complex.One;
-            Complex a2 = other._weights != null && other._weights.TryGetValue(k, out var v2) ? v2 : Complex.One;
-
-            double prob1 = a1.Magnitude * a1.Magnitude;
-            double prob2 = a2.Magnitude * a2.Magnitude;
-
-            if (Math.Abs(prob1 - prob2) > _tolerance)
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if two Eigenstates are truly the same deep down—or just pretending.
-    /// Includes an existential tolerance value.
-    /// Compare Complex Amplitudes (Strict State Equality, as opposed to Probabilistic Equality)
-    /// </summary>
-    public bool StrictlyEquals(object? obj)
-    {
-        if (ReferenceEquals(this, obj)) return true;
-        if (obj is not Eigenstates<T> other) return false;
-
-        var myKeys = _qDict.Keys.ToHashSet();
-        var otherKeys = other._qDict.Keys.ToHashSet();
-        if (!myKeys.SetEquals(otherKeys)) return false;
-
-        foreach (var k in myKeys)
-        {
-            if (!EqualityComparer<T>.Default.Equals(_qDict[k], other._qDict[k]))
-                return false;
-        }
-
-        if (!IsWeighted && !other.IsWeighted)
-            return true;
-
-        foreach (var k in myKeys)
-        {
-            Complex a1 = _weights != null && _weights.TryGetValue(k, out var v1) ? v1 : Complex.One;
-            Complex a2 = other._weights != null && other._weights.TryGetValue(k, out var v2) ? v2 : Complex.One;
-
-            if ((a1 - a2).Magnitude > _tolerance)
-                return false;
-        }
-
-        return true;
-    }
-
-
-    /// <summary>
     /// Makes a unique hash that somehow encodes the weight of your guilt, I mean, states.
     /// </summary>
     public override int GetHashCode()
@@ -2475,6 +2443,32 @@ public class Eigenstates<T>
                $"Seed: {_lastCollapseSeed}, ID: {_collapseHistoryId}";
     }
 
+    public override QuantumSoup<T> Clone()
+    {
+        // Deep clone the key-to-value mapping.
+        var clonedDict = new Dictionary<T, T>(_qDict);
+
+        // Clone the weights if available.
+        Dictionary<T, Complex>? clonedWeights = null;
+        if (_weights != null)
+        {
+            clonedWeights = new Dictionary<T, Complex>(_weights);
+        }
+
+        // Create a new Eigenstates<T> instance with the cloned dictionary and operators.
+        var clone = new Eigenstates<T>(clonedDict, _ops)
+        {
+            _weights = clonedWeights,
+            _eType = this._eType,
+            // Optionally, copy over collapse-related metadata.
+            _collapseHistoryId = this._collapseHistoryId,
+            _lastCollapseSeed = this._lastCollapseSeed,
+            _isActuallyCollapsed = this._isActuallyCollapsed,
+            _collapsedValue = this._collapsedValue
+        };
+
+        return clone;
+    }
 }
 
 #endregion

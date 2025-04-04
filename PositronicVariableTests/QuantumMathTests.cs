@@ -353,5 +353,109 @@ namespace QuantumMathTests
         }
 
         #endregion
+
+        #region SchrödingerKnowsNow
+        [Test]
+        public void QuBit_Observe_WithSeed_IsDeterministic()
+        {
+            // Arrange: Create a qubit with two states.
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+                complexOps
+            );
+
+            // Act: Collapse deterministically with a seed.
+            var observed1 = qubit.Observe(42);
+            var observed2 = qubit.Observe(42);
+
+            // Assert: The same value should be observed both times.
+            Assert.AreEqual(observed1, observed2);
+        }
+
+        [Test]
+        public void QuBit_WithMockCollapse_ReturnsForcedValue()
+        {
+            // Arrange: Define a forced value.
+            var forcedValue = new Complex(5, 5);
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+                complexOps
+            ).WithMockCollapse(forcedValue);
+
+            // Act: Observe the qubit.
+            var observed = qubit.Observe();
+
+            // Assert: The observed value should be the forced one.
+            Assert.AreEqual(forcedValue, observed);
+        }
+
+        [Test]
+        public void QuBit_ObserveInBasis_AppliesHadamardAndCollapses()
+        {
+            // Arrange: Create a weighted 2-state qubit: |0⟩ = 1 + 0i, |1⟩ = 0 + 1i
+            var weightedStates = new List<(Complex value, Complex weight)>
+            {
+                (new Complex(1, 0), new Complex(1, 0)),
+                (new Complex(0, 1), new Complex(0, 1))
+            };
+
+            var qubit = new QuBit<Complex>(weightedStates, complexOps);
+
+            // Act: Observe in the Hadamard basis
+            var observed = qubit.ObserveInBasis(QuantumBasis.Hadamard);
+
+            // Assert: The observed value must be one of the original states
+            var originalStates = weightedStates.Select(ws => ws.value).ToList();
+            CollectionAssert.Contains(originalStates, observed);
+        }
+
+        [Test]
+        public void QuBit_ModificationAfterCollapse_ThrowsException()
+        {
+            // Arrange: Collapse a qubit.
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+                complexOps
+            );
+            var _ = qubit.Observe();  // Collapse the qubit.
+
+            // Act & Assert: Attempting to append should throw an exception.
+            Assert.Throws<InvalidOperationException>(() => qubit.Append(new Complex(1, 1)));
+        }
+
+        [Test]
+        public void QuBit_CloneMutable_AllowsModificationsAfterCollapse()
+        {
+            // Arrange: Collapse a qubit.
+            var qubit = new QuBit<Complex>(
+                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+                complexOps
+            );
+
+            var mutableClone = (QuBit<Complex>)qubit.Clone(); // Clone while still mutable.
+            var collapsedValue = qubit.Observe(); // Collapse the original qubit.
+
+            // Assert: The clone should allow modification without throwing.
+            Assert.DoesNotThrow(() => mutableClone.Append(new Complex(3, 3)));
+        }
+
+        [Test]
+        public void Eigenstates_Equality_Checks()
+        {
+            // Arrange: Create two eigenstate instances with the same values and weights.
+            var weightedItems = new (Complex, Complex)[]
+            {
+        (new Complex(10, 0), 0.1),
+        (new Complex(20, 0), 0.3)
+            };
+            var eigenA = new Eigenstates<Complex>(weightedItems, complexOps);
+            var eigenB = new Eigenstates<Complex>(weightedItems, complexOps);
+
+            // Act & Assert: They should be considered equal.
+            Assert.IsTrue(eigenA.Equals(eigenB));
+            Assert.IsTrue(eigenA.StrictlyEquals(eigenB));
+        }
+
+        #endregion
     }
 }
