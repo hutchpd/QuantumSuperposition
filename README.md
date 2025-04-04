@@ -24,7 +24,7 @@ A library that allows .NET variables to hold multiple values at once — like Sc
 - Clean APIs for set operations, filtering, and observation.
 - Optional probabilistic behavior with amplitude weighting.
 
- [Full README](QuantumSuperposition/README.md)
+ [Full README](QuantumSuperposition/readme.md)
 
 ---
 
@@ -44,7 +44,7 @@ A framework built atop `QuBit<T>` that enables variables to evolve across simula
 - Lets you simulate “what if” before committing to a result.
 - `RunConvergenceLoop` executes your logic until everyone agrees. It’s like couple’s therapy, but for variables.
 
-[Full README](PositronicVariables/README.md)
+[Full README](PositronicVariables/readme.md)
 
 ---
 
