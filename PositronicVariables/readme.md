@@ -1,5 +1,6 @@
 ﻿# PositronicVariable (.NET Library)
 A time-looping variable container for quantum misfits and deterministic dreamers.
+[![NuGet](https://img.shields.io/nuget/v/PositronicVariables.svg)](https://www.nuget.org/packages/PositronicVariables)
 
 ---
 
