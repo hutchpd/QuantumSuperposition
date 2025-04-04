@@ -1,138 +1,120 @@
-## QuantumSuperposition (.NET Library)
-.NET’s most confident way to say “maybe”
+# Positronic .NET Playground  
+**QuantumSuperposition** + **PositronicVariables**  
+_AKA: Two libraries walk into a multiverse and forget which one was real._
 
-QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
+---
 
-### Why Use QuantumSuperposition?
-In quantum mechanics, superposition means a system can be in many states at once — until observed. In your code, this means:
+This repository contains two interlinked .NET libraries for working with uncertainty, multistate computation, and time-looped logic in elegant, brain-melting ways.
 
-- Want to check if a number is divisible by any value in a set?
-- Need to assert that all values match a condition, without a loop forest?
-- Want to write math expressions that magically apply to all possible inputs at once?
+> Think of it as functional programming, but with way more existential doubt.
 
-Congratulations. You want quantum variables. And now you can have them, without building a particle accelerator in your garage.
+---
 
-## Features
+##  Included Libraries
 
-- Superposition Modes: Conjunctive (All) and Disjunctive (Any) states.  
-- Arithmetic Ops: Use +, -, *, /, % on entire sets of possibilities.  
-- Smart Comparisons: Logical ops like <, >=, == work across superpositions and scalars.  
-- Eigenstates: Maintain original inputs even after transformation (yes, you’re basically a quantum historian).  
-- State Filtering: Find what you want without lifting a foreach.  
+###  QuantumSuperposition
 
-## Core Quantum Behavior
+> “Maybe” as a first-class value.
 
-- **Superposition**: Variables can exist in multiple states simultaneously.
-- **Probability Amplitudes**: Support for complex amplitudes per state.
-- **Amplitude Normalization**: Normalize amplitude vectors before sampling.
-- **Observation & Collapse**: Cause probabilistic collapse on inspection.
-- **Multi-Basis Sampling**: Observe directly within a non-default basis (e.g., Hadamard).
-- **Collapse Effects**: Observation affects entangled variables appropriately.
-- **Collapse Replay**: Deterministically replay collapse using a seed or fixed random source.
-- **Collapse Mocking**: Inject fixed collapse result for tests, demos, or chaos.
+A library that allows .NET variables to hold multiple values at once — like Schrödinger’s cat, but without the vet bills.
 
-## Getting Started
+- Define `QuBit<T>` superpositions: sets of possible values with optional weights.
+- Perform arithmetic, comparisons, and logic across all values.
+- Collapse to a specific value or sample based on weights.
+- Clean APIs for set operations, filtering, and observation.
+- Optional probabilistic behavior with amplitude weighting.
 
-### Installation  
-Via .NET CLI:
-```
-dotnet add package QuantumSuperposition
-```
-Or with NuGet Package Manager Console:
-```
-Install-Package QuantumSuperposition
-```
+ [Full README](QuantumSuperposition/readme.md)
 
-## Usage Examples
+---
 
-### Prime Number Checking  
-Want to find primes without making your code look like a cryptography dissertation?
+### PositronicVariables
+
+> Temporal state machines with quantum journaling.
+
+A framework built atop `QuBit<T>` that enables variables to evolve across simulated timelines. Useful for:
+
+- Looping feedback networks
+- Converging neural nodes
+- Simulating systems until stabilized
+- Hitting *Undo* on reality and trying again
+
+- Automatically detects cycles across timelines.
+- Merges diverging states into unified multiverses.
+- Lets you simulate “what if” before committing to a result.
+- `RunConvergenceLoop` executes your logic until everyone agrees. It’s like couple’s therapy, but for variables.
+
+[Full README](PositronicVariables/readme.md)
+
+---
+
+##  Example Use Case
+
 ```csharp
-static bool IsPrime(int number)
-{
-    var divisors = new QuBit<int>(Enumerable.Range(2, number - 2));
-    return (number % divisors).EvaluateAll();
-}
+var x = new PositronicVariable<int>(0);
+var y = new PositronicVariable<int>(1);
 
-for (int i = 1; i <= 100; i++)
+var node = new NeuralNodule<int>(inputs =>
 {
-    if (IsPrime(i))
-        Console.WriteLine($"{i} is prime!");
-}
+    var sum = inputs.Sum();
+    return new QuBit<int>(new[] { sum % 5, (sum + 1) % 5 });
+});
+
+node.Inputs.Add(x);
+node.Inputs.Add(y);
+
+// Fires and mutates across time
+NeuralNodule<int>.ConvergeNetwork(node);
+
+Console.WriteLine($"Final Output: {node.Output}");
 ```
 
-### Finding Factors  
-You can treat divisors as states and filter by computed results:
-```csharp
-static Eigenstates<int> Factors(int number)
-{
-    var candidates = new Eigenstates<int>(Enumerable.Range(1, number), x => number % x);
-    return candidates == 0; // Give me the ones that divide cleanly
-}
-```
+---
 
-### Minimum Value Calculation  
-Think of this like a quantum game show where only the smallest contestant survives:
-```csharp
-static int MinValue(IEnumerable<int> numbers)
-{
-    var eigen = new Eigenstates<int>(numbers);
-    var result = eigen.Any() <= eigen.All(); // anyone less than or equal to everyone
-    return result.ToValues().First();
-}
-```
+## Development
 
-## QuBit<T> Enhancements
+- C# 10 / .NET 6+
+- NuGet-ready projects (soon™)
+- Tests included for quantum math and timeline logic
 
-- **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
-- **Sampling Methods**:
-  - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
-  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
-- **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
-- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
-- **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
+---
 
-## Eigenstates<T> Gets Fancy Too
+## Philosophy
 
-- **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
-- **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
-- **FilterByWeight(...)**: Drop the low-probability riff-raff.
-- **CollapseWeighted() / SampleWeighted()**: Similar to QuBit, these collapse to the most likely or randomly chosen key.
-- **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
-- **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
+This project was born out of a deeply unhealthy desire to simulate philosophical paradoxes in enterprise-grade C#. Here’s what we believe:
 
-## Performance Note
-You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
+- Uncertainty is not a bug — it’s a feature.
+- A variable should be allowed to have an identity crisis.
+- Time should be a reversible concept in your runtime.
+- Your code deserves to collapse its own quantum wavefunction.
 
-## Advanced Concepts
+---
 
-### Superposition Modes
-- Disjunctive (Any) — “Any of these values might work.”  
-- Conjunctive (All) — “They all better pass, or we riot.”
+## Contributing
 
-### Arithmetic & Logic That Feels Like Sorcery
-Math just works across your whole quantum cloud.  
-No loops. No boilerplate. Just operations that make sense across many states.
+Pull requests are welcome. Just remember: every change you make spawns another universe.
 
-## Contributing  
-Bug spotted in the matrix?  
-Submit an issue. Write a pull request. We’d love your brain on this.
+Open an issue if:
 
-## License  
-This library is released under the Unlicense. That means it's free, unshackled, and yours to tinker with.
+- The quantum logic doesn't behave
+- The temporal recursion loops forever
+- You accidentally converged your boss into a `null`
 
-## Contact  
-Questions, fan mail, obscure quantum jokes?  
-support@findonsoftware.com
+---
 
-## Acknowledgements  
-Inspired by Damian Conway’s Quantum::Superpositions Perl module — where variables have been spooky since before it was cool.
+## License
 
-## QuantumSuperposition Logo
-                 ~   ~     ~     ~   ~    
-             ~    __Q__    ___     ~
-            ~    /  |  \  / _ \   ~    ~
-    ~       ~    |  |  | | |_| |       ~
-         ~       \__|__/  \___/    ~
-                QuantumSuperposition
-           Collapse your state. Collapse your doubts.
+This code is released under the [Unlicense](https://unlicense.org/).  
+Do whatever. Just don’t blame us when your compiler becomes sentient.
+
+---
+
+## Final Thoughts
+
+This repo is for people who:
+
+- Think recursion is a lifestyle.
+- Are disappointed that LINQ doesn't support parallel universes.
+- Yell “collapse!” at their variables and expect them to listen.
+
+Congratulations. You’re one of us now.
