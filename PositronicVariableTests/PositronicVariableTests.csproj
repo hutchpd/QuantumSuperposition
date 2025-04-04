@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PositronicVariables\PositronicVariables.csproj" />
+    <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
   </ItemGroup>
 
   <ItemGroup>

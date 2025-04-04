@@ -1,36 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+      <TargetFramework>net8.0</TargetFramework>
+  <Version>1.0.0</Version>
+  <PackageId>PositronicVariables</PackageId>
+  <Authors>Paul Hutchinson</Authors>
+  <Company>Findon Software</Company>
+  <Description>A time-looping variable container for quantum misfits and deterministic dreamers.</Description>
+  <PackageTags>quantum, convergence, simulation, time-loop, multiverse, neural, feedback</PackageTags>
+  <RepositoryUrl>https://github.com/hutchpd/QuantumSuperposition</RepositoryUrl>
+  <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
+  <PackageProjectUrl>https://github.com/hutchpd/QuantumSuperposition</PackageProjectUrl>
+  <PackageReadmeFile>readme.md</PackageReadmeFile>
+  <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="readme.md">
-      <Generator>TextTemplatingFilePreprocessor</Generator>
-      <LastGenOutput>readme.cs</LastGenOutput>
-    </None>
+    <PackageReference Include="QuantumSuperposition" Version="1.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="readme.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>readme.md</DependentUpon>
-    </Compile>
   </ItemGroup>
 
 </Project>
