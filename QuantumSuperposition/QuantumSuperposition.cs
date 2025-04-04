@@ -31,7 +31,53 @@ public interface IQuantumOperators<T>
     bool NotEqual(T a, T b);
 }
 
-// Like a gym trainer, but for ints. Does the usual heavy lifting.
+/// <summary>
+/// A common interface for all qubits that participate in an entangled system. 
+/// It acts as a “handle” that the QuantumSystem can use to communicate with individual qubits.
+/// </summary>
+public interface IQuantumReference
+{
+    /// <summary>
+    /// Returns the indices within the global quantum system this qubit spans.
+    /// For example, a single qubit may be index 0, or a 2-qubit register may be [0,1].
+    /// </summary>
+    int[] GetQubitIndices();
+
+    /// <summary>
+    /// Called by QuantumSystem after a collapse or update.
+    /// Used to refresh local views, cached states, or flags like IsCollapsed.
+    /// </summary>
+    void NotifyWavefunctionCollapsed(Guid collapseId);
+
+    /// <summary>
+    /// Whether this reference is currently collapsed.
+    /// </summary>
+    bool IsCollapsed { get; }
+
+    /// <summary>
+    /// Gets the current observed value, if already collapsed.
+    /// Otherwise throws or returns default depending on implementation.
+    /// </summary>
+    object? GetObservedValue();
+
+    /// <summary>
+    /// Collapse this reference and return a value from the superposition.
+    /// The return type is object for type-agnostic access. Use typed qubits to get T.
+    /// </summary>
+    object Observe(Random? rng = null);
+
+    /// <summary>
+    /// Applies a unitary gate matrix (e.g. Hadamard, Pauli-X) to the local qubit state.
+    /// Or subspace of the global wavefunction if entangled.
+    /// </summary>
+    void ApplyLocalUnitary(Complex[,] gate);
+}
+
+
+
+/// <summary>
+/// Like a gym trainer, but for ints. Does the usual heavy lifting.
+/// </summary>
 public class IntOperators : IQuantumOperators<int>
 {
     public int Add(int a, int b) => a + b;
@@ -47,6 +93,9 @@ public class IntOperators : IQuantumOperators<int>
     public bool NotEqual(int a, int b) => a != b;
 }
 
+/// <summary>
+/// Like a quantum therapist, but for complex numbers. Helps them add, subtract, and multiply their feelings.
+/// </summary>
 public class ComplexOperators : IQuantumOperators<Complex>
 {
     public Complex Add(Complex a, Complex b) => a + b;
@@ -66,7 +115,9 @@ public class ComplexOperators : IQuantumOperators<Complex>
     public bool NotEqual(Complex a, Complex b) => a != b;
 }
 
-// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
+/// <summary>
+/// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
+/// </summary>
 public static class QuantumOperatorsFactory
 {
     public static IQuantumOperators<T> GetOperators<T>()
@@ -95,7 +146,7 @@ public static class QuantumMathUtility<T>
 }
 
 /// <summary>
-/// static class to hold basis transforms (start with Hadamard):
+/// static class to hold basis transforms (e.g. Hadamard):
 /// </summary>
 public static class QuantumBasis
 {
@@ -118,7 +169,7 @@ public static class QuantumBasis
 
         for (int i = 0; i < dim; i++)
         {
-            result[i] = 0;
+            result[i] = Complex.Zero;
             for (int j = 0; j < dim; j++)
             {
                 result[i] += basisMatrix[i, j] * amplitudes[j];
@@ -129,6 +180,146 @@ public static class QuantumBasis
     }
 }
 
+public class QuantumSystem
+{
+    private Dictionary<(int, bool), Complex> _amplitudes = new Dictionary<(int, bool), Complex>();
+    private readonly List<IQuantumReference> _registered = new();
+
+    /// <summary>
+    /// Optionally construct the system with explicit amplitudes.
+    /// </summary>
+
+    public QuantumSystem(Dictionary<(int, bool), Complex>? initialAmps = null)
+
+    {
+        if (initialAmps != null)
+        {
+
+            _amplitudes = initialAmps;
+            NormaliseAmplitudes();
+        }
+    }
+
+    public void Register(IQuantumReference qubitRef)
+    {
+        _registered.Add(qubitRef);
+    }
+
+    /// <summary>
+    /// A simple “observe everything fully” method.
+    /// TODO: for partial measurement, expand this to do partial sums.
+    /// </summary>
+    /// <param name="qubitIndices"></param>
+    /// <param name="rng"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentNullException"></exception>
+    /// <exception cref="InvalidOperationException"></exception>
+    public (int, bool) ObserveGlobal(int[] qubitIndices, Random rng)
+    {
+        // Weighted sampling based on amplitude magnitudes
+
+        double totalProb = _amplitudes.Values.Sum(c => c.Magnitude * c.Magnitude);
+        if (totalProb <= 1e-15)
+            throw new InvalidOperationException("All probabilities are zero or wavefunction is empty.");
+
+        double roll = rng.NextDouble() * totalProb;
+        double cumulative = 0.0;
+
+        // Group amplitudes by values at qubitIndices
+        var groupedProbabilities = new Dictionary<(int, bool), double>();
+
+        (int, bool) chosenKey = default;
+
+        foreach (var (key, amp) in _amplitudes)
+        {
+            double p = amp.Magnitude * amp.Magnitude;
+            cumulative += p;
+            if (roll <= cumulative)
+            {
+                chosenKey = key;
+                break;
+            }
+        }
+
+        // Collapse: zero out all non-chosen states
+        foreach (var k in _amplitudes.Keys.ToList())
+        {
+            if (!k.Equals(chosenKey))
+            {
+                _amplitudes[k] = Complex.Zero;
+            }
+        }
+
+        // Renormalize remaining amplitude
+        NormaliseAmplitudes();
+
+        var newAmplitudes = new Dictionary<(int, bool), Complex>();
+
+        // Notify any qubits that the wavefunction changed
+        var collapseId = Guid.NewGuid();
+        foreach (var refQ in _registered)
+        {
+            refQ.NotifyWavefunctionCollapsed(collapseId);
+        }
+
+        //  Return collapsed result (int, bool)
+        return chosenKey;
+    }
+
+
+    /// <summary>
+    /// ApplyTwoQubitGate placeholder.
+    /// </summary>
+    public void ApplyTwoQubitGate(Complex[,] gate)
+    {
+        // Example: gate is a 4x4 matrix acting on the basis
+        //    ( (0,false), (0,true), (1,false), (1,true) ).
+        // We flatten them in a vector [amp(0,false), amp(0,true), amp(1,false), amp(1,true)].
+        var basisList = new (int, bool)[] { (0, false), (0, true), (1, false), (1, true) };
+        var oldVec = basisList.Select(k => _amplitudes.TryGetValue(k, out var v) ? v : Complex.Zero).ToArray();
+
+        // Multiply gate * oldVec
+        int dim = 4;
+        var newVec = new Complex[dim];
+        for (int i = 0; i < dim; i++)
+        {
+            newVec[i] = Complex.Zero;
+            for (int j = 0; j < dim; j++)
+            {
+                newVec[i] += gate[i, j] * oldVec[j];
+            }
+        }
+
+        // Store the result back
+        for (int i = 0; i < dim; i++)
+        {
+            _amplitudes[basisList[i]] = newVec[i];
+        }
+
+        NormaliseAmplitudes();
+    }
+
+    private void NormaliseAmplitudes()
+    {
+        double total = _amplitudes.Values.Sum(a => a.Magnitude * a.Magnitude);
+        if (total < 1e-15)
+        {
+            // All zero => do nothing or reset
+            return;
+        }
+        double norm = Math.Sqrt(total);
+        foreach (var k in _amplitudes.Keys.ToList())
+        {
+            _amplitudes[k] /= norm;
+        }
+    }
+
+    /// <summary>
+    /// Exposes the dictionary for debugging or advanced usage.
+    /// Be careful: direct modifications can break normalization.
+    /// </summary>
+    public IReadOnlyDictionary<(int, bool), Complex> Amplitudes => _amplitudes;
+}
 
 
 #endregion
@@ -149,17 +340,49 @@ public static class QuantumConfig
 /// QuBit<T> represents a superposition of values of type T, optionally weighted.
 /// It's like Schrödinger's inbox: everything's unread and somehow also read.
 /// </summary>
-public partial class QuBit<T>
+public partial class QuBit<T> : IQuantumReference
 {
     private readonly Func<T, bool> _valueValidator;
     private bool _isFrozen => _isActuallyCollapsed;
     public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
 
+    private readonly QuantumSystem? _system;    // if non-null, this qubit is in a shared system
+    private readonly int[] _qubitIndices;       // which qubit(s) in that system we represent
+
+    // For IQuantumReference:
+
+    private bool _isCollapsedFromSystem;        // if the system has collapsed on us
+    private object? _systemObservedValue;
 
     #region Constructors
     // Constructors that enable you to manifest chaotic energy into a typed container.
     // Also known as: Creating a mess in a mathematically defensible way.
 
+
+    // A simpler constructor for the entangled case:
+
+    public QuBit(QuantumSystem system, int[] qubitIndices)
+
+    {
+
+        // If T = (int,bool) then qubitIndices might be new[] {0,1}.
+        // If T = int only, maybe qubitIndices = new[] {0}, etc.
+
+        _system = system;
+        _qubitIndices = qubitIndices ?? Array.Empty<int>();
+        _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
+
+        // I exist yelled the qubit, and the system is my parent! Daddy!!!
+        _system.Register(this);
+
+        // This qubit is in superposition until a collapse occurs
+        _eType = QuantumStateType.Disjunctive;
+
+    }
+
+
+
+    // If we have no quantum system, we fallback to local states:
     public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
         : this(Items, ops)
     {
@@ -195,7 +418,7 @@ public partial class QuBit<T>
         return qubit;
     }
 
-    // Main constructor for unweighted items
+    // Main constructor for unweighted items (local useage)
     public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
     {
         if (Items == null) throw new ArgumentNullException(nameof(Items));
@@ -204,6 +427,11 @@ public partial class QuBit<T>
 
         if (_qList.Distinct().Count() > 1)
             _eType = QuantumStateType.Disjunctive;
+
+        // no system
+        _system = null;
+        _qubitIndices = Array.Empty<int>();
+        _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
     }
 
     public QuBit(IEnumerable<T> Items)
@@ -224,7 +452,7 @@ public partial class QuBit<T>
         foreach (var (val, w) in weightedItems)
         {
             if (!dict.ContainsKey(val))
-                dict[val] = 0.0;
+                dict[val] = Complex.Zero;
             dict[val] += w;
         }
         _weights = dict;
@@ -232,6 +460,11 @@ public partial class QuBit<T>
 
         if (_weights.Count > 1)
             SetType(QuantumStateType.Disjunctive);
+
+        // no system
+        _system = null;
+        _qubitIndices = Array.Empty<int>();
+        _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
     }
 
     internal QuBit(IEnumerable<T> items, Dictionary<T, Complex>? weights, IQuantumOperators<T> ops)
@@ -242,6 +475,11 @@ public partial class QuBit<T>
 
         if (States.Distinct().Count() > 1)
             SetType(QuantumStateType.Disjunctive);
+
+        // no system
+        _system = null;
+        _qubitIndices = Array.Empty<int>();
+        _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
     }
 
 
@@ -314,10 +552,12 @@ public partial class QuBit<T>
 
     #endregion
 
+    #region Fields for Local Storage (used if _system == null)
+
     private IEnumerable<T> _qList;
     private Dictionary<T, Complex>? _weights;
     private QuantumStateType _eType = QuantumStateType.Conjunctive;
-    private readonly IQuantumOperators<T> _ops;
+    private readonly IQuantumOperators<T> _ops = QuantumOperatorsFactory.GetOperators<T>();
     private static readonly IQuantumOperators<T> _defaultOps = QuantumOperatorsFactory.GetOperators<T>();
 
     // Track the last seed (if used) and a unique collapse ID
@@ -341,7 +581,7 @@ public partial class QuBit<T>
 
     public IQuantumOperators<T> Operators => _ops;
 
-
+    #endregion
     #region State Type Helpers
     // Lets you toggle between 'All must be true', 'Any might be true', and 'Reality is now a lie'.
     // Think of it like mood settings, but for wavefunctions.
@@ -855,6 +1095,8 @@ public partial class QuBit<T>
     /// </summary>
     public bool IsWeighted => _weights != null;
 
+    public bool IsCollapsed => _isCollapsedFromSystem || _isActuallyCollapsed;
+
     /// <summary>
     /// Returns the most probable state, i.e., the one that's been yelling the loudest in the multiverse.
     /// This is as close to democracy as quantum physics gets.
@@ -1074,8 +1316,171 @@ public partial class QuBit<T>
         };
         return newQ;
     }
-}
 
+    public int[] GetQubitIndices() => _qubitIndices;
+
+    public void NotifyWavefunctionCollapsed(Guid collapseId)
+    {
+        // This is called by the QuantumSystem if a global collapse occurs.
+        // We'll set a flag so we know we can't do local modifications now.
+        _isCollapsedFromSystem = true;
+        // We could also store the collapseId, in case we want to track it
+        // or do something with it in logs.
+        _collapseHistoryId = collapseId;
+    }
+
+    public object? GetObservedValue()
+    {
+        if (IsCollapsed)
+        {
+            // If we collapsed locally, return _collapsedValue
+            if (_collapsedValue != null) return _collapsedValue;
+
+            // If the system forced the collapse, we might do a lazy read:
+            // For a real partial measurement approach, you'd query
+            // the system's wavefunction. Here we do a simplified approach
+            // if T == (int,bool).
+            if (_systemObservedValue != null) return _systemObservedValue;
+        }
+
+        return null;
+    }
+
+    object IQuantumReference.Observe(Random? rng)
+    {
+        // If we have a quantum system, do a system-wide collapse:
+        if (_system != null)
+        {
+            if (IsCollapsed)
+            {
+                // Already collapsed? return last known
+                if (_systemObservedValue != null) return _systemObservedValue;
+                if (_collapsedValue != null) return _collapsedValue;
+            }
+
+            rng ??= Random.Shared;
+            // For demonstration, we call a method that does a full measure of (int,bool)
+            // If T = (int,bool), that’s a direct match. If T = int only, you’d do partial measure.
+            // Simplify here:
+            var measured = _system.ObserveGlobal(rng);  // returns (int,bool)
+
+            // If T is indeed (int,bool), just store it:
+            if (typeof(T) == typeof((int, bool)))
+            {
+                _systemObservedValue = measured;
+                return measured;
+            }
+            else
+            {
+                // Example partial: if T = int, we read measured.Item1
+                // If T = bool, we read measured.Item2, etc.
+                // This is up to your design. We'll do a naive example:
+                if (typeof(T) == typeof(int))
+                {
+                    int subVal = measured.Item1;
+                    _systemObservedValue = subVal;
+                    return subVal;
+                }
+                if (typeof(T) == typeof(bool))
+                {
+                    bool subVal = measured.Item2;
+                    _systemObservedValue = subVal;
+                    return subVal;
+                }
+                // else we have no partial logic implemented, fallback:
+                _systemObservedValue = measured;
+                return measured;
+            }
+        }
+
+        // Otherwise, we do local collapse logic:
+        return ObserveLocal(rng);
+    }
+
+    public void ApplyLocalUnitary(Complex[,] gate)
+    {
+        // If we are part of an entangled system, apply the gate to the system's wavefunction.
+        if (_system != null)
+        {
+            // For a single qubit gate, you'd do partial transform
+            // For a two-qubit gate, you can call _system.ApplyTwoQubitGate(gate)
+            // This is just a placeholder.
+            _system.ApplyTwoQubitGate(gate); // naive
+            return;
+        }
+
+        // If we have local storage, we can do the single-qubit transform if _weights has 2 states
+        if (_weights == null || _weights.Count != 2)
+            throw new InvalidOperationException("Local unitary only supported for 2-state local qubits in this example.");
+
+        var states = _weights.Keys.ToArray();
+        var amplitudes = states.Select(s => _weights[s]).ToArray();
+
+        var transformed = QuantumBasis.ApplyBasis(amplitudes, gate);
+
+        for (int i = 0; i < states.Length; i++)
+        {
+            _weights[states[i]] = transformed[i];
+        }
+        NormaliseWeights();
+    }
+
+    #region Local Collapse Logic
+
+    /// <summary>
+    /// The original local collapse logic.
+    /// </summary>
+    private object ObserveLocal(Random? rng)
+    {
+        // If mock collapse is enabled, return the forced mock value
+        if (_mockCollapseEnabled)
+        {
+            if (_mockCollapseValue == null)
+                throw new InvalidOperationException(
+                    $"Mock collapse enabled but no mock value is set. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
+                );
+            return _mockCollapseValue;
+        }
+
+        // If already collapsed, return the same value
+        if (_isActuallyCollapsed && _collapsedValue != null && _eType == QuantumStateType.CollapsedResult)
+        {
+            return _collapsedValue;
+        }
+
+        rng ??= Random.Shared;
+
+        T picked = SampleWeighted(rng);
+
+        // Use the configuration flag and value validator to protect against default(T)
+        if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
+        {
+            throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
+        }
+
+        if (EqualityComparer<T>.Default.Equals(picked, default(T)))
+        {
+            throw new InvalidOperationException(
+                $"Collapse resulted in default value. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
+            );
+        }
+
+        // Mark as collapsed
+        _collapsedValue = picked;
+        _isActuallyCollapsed = true;
+        _qList = new[] { picked };
+        if (_weights != null)
+        {
+            _weights = new Dictionary<T, Complex> { { picked, Complex.One } };
+        }
+        SetType(QuantumStateType.CollapsedResult);
+
+        return picked!;
+    }
+
+    #endregion
+
+}
 #endregion
 
 #region Eigenstates<T> Implementation
