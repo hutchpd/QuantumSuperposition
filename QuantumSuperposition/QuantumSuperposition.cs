@@ -91,6 +91,8 @@ public partial class QuBit<T>
 {
     private readonly Func<T, bool> _valueValidator;
     private bool _isFrozen => _isActuallyCollapsed;
+    public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
+
 
     #region Constructors
     public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
@@ -114,6 +116,17 @@ public partial class QuBit<T>
     {
         _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
     }
+
+    public static QuBit<T> Superposed(IEnumerable<T> states)
+    {
+        var qubit = new QuBit<T>(states);
+        // Forcibly mark it Disjunctive if there's more than one distinct value
+        var distinctCount = qubit.States.Distinct().Count();
+        if (distinctCount > 1)
+            qubit._eType = QuantumStateType.Disjunctive;
+        return qubit;
+    }
+
     #endregion
 
     #region State Type Helpers
@@ -210,7 +223,7 @@ public partial class QuBit<T>
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
         _qList = Items;
 
-        // If multiple distinct items, set to Disjunctive
+        // If multiple distinct items, treat it as a superposition:
         if (_qList.Distinct().Count() > 1)
             SetType(QuantumStateType.Disjunctive);
     }
