@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Numerics;
 
 // Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
@@ -92,6 +93,42 @@ public static class QuantumMathUtility<T>
     public static IEnumerable<T> Combine(T a, IEnumerable<T> b, Func<T, T, T> op) =>
         b.Select(x => op(a, x));
 }
+
+/// <summary>
+/// static class to hold basis transforms (start with Hadamard):
+/// </summary>
+public static class QuantumBasis
+{
+    public static Complex[,] Hadamard => new Complex[,]
+    {
+        { 1 / Math.Sqrt(2),  1 / Math.Sqrt(2) },
+        { 1 / Math.Sqrt(2), -1 / Math.Sqrt(2) }
+    };
+
+    public static Complex[,] Identity => new Complex[,]
+    {
+        { 1, 0 },
+        { 0, 1 }
+    };
+
+    public static Complex[] ApplyBasis(Complex[] amplitudes, Complex[,] basisMatrix)
+    {
+        int dim = amplitudes.Length;
+        Complex[] result = new Complex[dim];
+
+        for (int i = 0; i < dim; i++)
+        {
+            result[i] = 0;
+            for (int j = 0; j < dim; j++)
+            {
+                result[i] += basisMatrix[i, j] * amplitudes[j];
+            }
+        }
+
+        return result;
+    }
+}
+
 
 
 #endregion
@@ -543,6 +580,28 @@ public partial class QuBit<T>
         var rng = new Random(seed);
         return Observe(rng);
     }
+
+    public T ObserveInBasis(Complex[,] basis, Random? rng = null)
+    {
+        if (_weights == null || _weights.Count != 2)
+            throw new InvalidOperationException("Basis transformations currently only support 2-state qubits.");
+
+        var states = _weights.Keys.ToArray();
+        var amplitudes = states.Select(s => _weights[s]).ToArray();
+
+        // Apply the basis transform
+        var transformed = QuantumBasis.ApplyBasis(amplitudes, basis);
+
+        // Rebuild a new qubit with these amplitudes
+        var newWeights = new Dictionary<T, Complex>
+        {
+            [states[0]] = transformed[0],
+            [states[1]] = transformed[1]
+        };
+
+        return new QuBit<T>(states, newWeights, _ops).Observe(rng);
+    }
+
 
     /// <summary>
     /// Returns true if this QuBit has actually collapsed (via a real observation).
