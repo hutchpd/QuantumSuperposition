@@ -14,4 +14,23 @@
     <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="readme.md">
+      <Generator>TextTemplatingFilePreprocessor</Generator>
+      <LastGenOutput>readme.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="readme.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>readme.md</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
 </Project>
