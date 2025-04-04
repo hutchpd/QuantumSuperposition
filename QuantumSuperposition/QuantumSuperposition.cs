@@ -633,12 +633,14 @@ public partial class QuBit<T>
         }
     }
 
+    private bool _weightsAreNormalized = false;
+
     /// <summary>
     /// Normalises the amplitudes of the QuBit so that the sum of their squared magnitudes equals 1.
     /// </summary>
     public void NormaliseWeights()
     {
-        if (_weights == null) return;
+        if (_weights == null || _weightsAreNormalized) return;
 
         // Compute the sum of the squared magnitudes (|a|²)
         double totalProbability = _weights.Values
@@ -831,8 +833,11 @@ public partial class QuBit<T>
 
         if (!IsWeighted)
         {
-            // fallback
             return ToCollapsedValues().First();
+        }
+        else
+        {
+            NormaliseWeights();
         }
 
         // Use squared magnitude for probability
@@ -1387,12 +1392,14 @@ public class Eigenstates<T>
         }
     }
 
+    private bool _weightsAreNormalized = false;
+
     /// <summary>
     /// Normalises the weights of the Eigenstates.
     /// </summary>
     public void NormaliseWeights()
     {
-        if (_weights == null) return;
+        if (_weights == null || _weightsAreNormalized) return;
 
         // Compute the sum of the squared magnitudes (|a|²)
         double totalProbability = _weights.Values
@@ -1698,6 +1705,10 @@ public class Eigenstates<T>
         if (!IsWeighted)
         {
             return _qDict.Keys.First();
+        }
+        else
+        {
+            NormaliseWeights();
         }
 
         // Compute total probability (sum of squared magnitudes)
