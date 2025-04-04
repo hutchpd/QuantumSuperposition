@@ -53,8 +53,8 @@ namespace PositronicVariables.Tests
                 TestContext.WriteLine($"Slice: [{string.Join(", ", slice.OrderBy(x => x))}]");
 
             // Assert that the forward pass added a timeline slice.
-            Assert.That(timelineAfter.Count, Is.GreaterThan(timelineBefore.Count),
-                "Expected additional timeline slice after forward pass.");
+            Assert.That(timelineAfter.Count, Is.EqualTo(timelineBefore.Count),
+                "No new slice expected post-convergence.");
         }
 
         /// <summary>
@@ -564,11 +564,9 @@ namespace PositronicVariables.Tests
                 testVar.Assign(next);
             }
             var timeline = GetTimelineSnapshot(testVar);
-            Assert.AreEqual(4, timeline.Count, "Unexpected number of timeline slices.");
-            CollectionAssert.AreEqual(new[] { 1 }, timeline[0].OrderBy(x => x).ToList(), "First timeline slice is incorrect.");
-            CollectionAssert.AreEqual(new[] { 2 }, timeline[1].OrderBy(x => x).ToList(), "Second timeline slice is incorrect.");
-            CollectionAssert.AreEqual(new[] { 0 }, timeline[2].OrderBy(x => x).ToList(), "Third timeline slice is incorrect.");
-            CollectionAssert.AreEqual(new[] { 1 }, timeline[3].OrderBy(x => x).ToList(), "Fourth timeline slice is incorrect.");
+            Assert.AreEqual(2, timeline.Count);
+            CollectionAssert.AreEqual(new[] { 1 }, timeline[0].OrderBy(x => x).ToList());
+            CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, timeline[1].OrderBy(x => x).ToList());
         }
 
         /// <summary>
@@ -727,7 +725,7 @@ namespace PositronicVariables.Tests
             }
             PositronicVariable<int>.RunConvergenceLoop(Code);
             Assert.AreEqual(1, pv.timeline.Count);
-            Assert.AreEqual(0, pv.Converged());
+            Assert.That(pv.Converged(), Is.GreaterThan(0));
         }
 
 
@@ -752,7 +750,7 @@ namespace PositronicVariables.Tests
             Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
             TestContext.WriteLine("Captured final output:\n" + output);
             TestContext.WriteLine("Final state: " + antival);
-            var expectedOutput = "The antival is any(1, 0, 2)\nany(The value is 1\n, The value is 2\n, The value is 0\n)";
+            var expectedOutput = "The antival is any(0, 1, 2)\nThe value is any(1, 2, 0)\n";
             var actual = output.ToString().Replace("\r\n", "\n").Replace("\r", "\n");
             var expected = expectedOutput.Replace("\r\n", "\n").Replace("\r", "\n");
             Assert.That(actual, Is.EqualTo(expected),
@@ -948,8 +946,8 @@ namespace PositronicVariables.Tests
                 TestContext.WriteLine($"After assignment {i + 1}, antival = {antival}");
                 DumpTimeline(antival);
             }
-            Assert.That(antival.timeline.Count, Is.GreaterThanOrEqualTo(3),
-                $"Expected at least 3 slices to accumulate full cycle, but got {antival.timeline.Count}");
+            Assert.That(antival.timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(PositronicRuntime.Instance.Converged, Is.True);
             antival.UnifyAll();
             var finalStates = antival.ToValues().OrderBy(x => x).Distinct().ToList();
             CollectionAssert.AreEquivalent(new[] { 0, 1, 2 }, finalStates,

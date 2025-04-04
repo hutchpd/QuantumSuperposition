@@ -203,19 +203,22 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     // --------------------------------------------------------------------------
     public int Converged()
     {
+        if (PositronicRuntime.Instance.Converged)
+            return 1;
+
         if (timeline.Count < 2)
             return 0;
 
         var current = timeline[^1];
-        // Compare the current slice with older slices:
         for (int i = 2; i <= timeline.Count; i++)
         {
             var older = timeline[timeline.Count - i];
             if (SameStates(older, current))
-                return i - 1; // how far back we matched
+                return i - 1;
         }
         return 0;
     }
+
 
     /// <summary>
     /// Unifies all timeline slices into a single multi-state slice ("any(...)").
