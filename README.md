@@ -1,4 +1,3 @@
-
 ## QuantumSuperposition (.NET Library)
 .NET’s most confident way to say “maybe”
 
@@ -20,6 +19,17 @@ Congratulations. You want quantum variables. And now you can have them, without 
 - Smart Comparisons: Logical ops like <, >=, == work across superpositions and scalars.  
 - Eigenstates: Maintain original inputs even after transformation (yes, you’re basically a quantum historian).  
 - State Filtering: Find what you want without lifting a foreach.  
+
+## Core Quantum Behavior
+
+- **Superposition**: Variables can exist in multiple states simultaneously.
+- **Probability Amplitudes**: Support for complex amplitudes per state.
+- **Amplitude Normalization**: Normalize amplitude vectors before sampling.
+- **Observation & Collapse**: Cause probabilistic collapse on inspection.
+- **Multi-Basis Sampling**: Observe directly within a non-default basis (e.g., Hadamard).
+- **Collapse Effects**: Observation affects entangled variables appropriately.
+- **Collapse Replay**: Deterministically replay collapse using a seed or fixed random source.
+- **Collapse Mocking**: Inject fixed collapse result for tests, demos, or chaos.
 
 ## Getting Started
 
@@ -72,7 +82,8 @@ static int MinValue(IEnumerable<int> numbers)
 }
 ```
 
-###  QuBit<T> Enhancements
+## QuBit<T> Enhancements
+
 - **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
 - **Sampling Methods**:
   - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
@@ -81,7 +92,8 @@ static int MinValue(IEnumerable<int> numbers)
 - **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
 - **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
 
-###  Eigenstates<T> Gets Fancy Too
+## Eigenstates<T> Gets Fancy Too
+
 - **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
 - **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
 - **FilterByWeight(...)**: Drop the low-probability riff-raff.
@@ -89,17 +101,16 @@ static int MinValue(IEnumerable<int> numbers)
 - **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
 - **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
 
-###  Performance Note
+## Performance Note
 You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
-
 
 ## Advanced Concepts
 
-Superposition Modes  
+### Superposition Modes
 - Disjunctive (Any) — “Any of these values might work.”  
 - Conjunctive (All) — “They all better pass, or we riot.”
 
-Arithmetic & Logic That Feels Like Sorcery  
+### Arithmetic & Logic That Feels Like Sorcery
 Math just works across your whole quantum cloud.  
 No loops. No boilerplate. Just operations that make sense across many states.
 
