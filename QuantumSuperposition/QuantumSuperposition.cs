@@ -143,6 +143,55 @@ public class ComplexOperators : IQuantumOperators<Complex>
     public bool NotEqual(Complex a, Complex b) => a != b;
 }
 
+/// <summary>
+/// 
+/// </summary>
+public class EntanglementManager
+{
+    private readonly Dictionary<Guid, List<IQuantumReference>> _groups = new();
+
+    /// <summary>
+    /// Links two or more quantum references into the same entangled group.
+    /// Returns the new group ID.
+    /// </summary>
+    public Guid Link(params IQuantumReference[] qubits)
+    {
+        var id = Guid.NewGuid();
+        _groups[id] = qubits.ToList();
+        return id;
+    }
+
+    /// <summary>
+    /// Gets all references in the same entangled group, by ID.
+    /// </summary>
+    public IReadOnlyList<IQuantumReference> GetGroup(Guid id)
+        => _groups.TryGetValue(id, out var list) ? list : Array.Empty<IQuantumReference>();
+
+    /// <summary>
+    /// Propagate a collapse event to all references in the same entangled group.
+    /// Each reference should update its internal state accordingly.
+    /// </summary>
+    public void PropagateCollapse(Guid groupId, Guid collapseId)
+    {
+        if (_groups.TryGetValue(groupId, out var group))
+        {
+            foreach (var q in group)
+                q.NotifyWavefunctionCollapsed(collapseId);
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public void PrintEntanglementStats()
+    {
+        Console.WriteLine("Entangled group count: " + _groups.Count);
+        foreach (var (id, list) in _groups)
+        {
+            Console.WriteLine($"Group {id}: {list.Count} qubits");
+        }
+    }
+}
 
 /// <summary>
 /// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
@@ -253,6 +302,9 @@ public class QuantumSystem
 {
     private Dictionary<int[], Complex> _amplitudes = new Dictionary<int[], Complex>();
     private readonly List<IQuantumReference> _registered = new();
+    private EntanglementManager _entanglement = new();
+    public EntanglementManager Entanglement => _entanglement;
+
 
     /// <summary>
     /// Optionally construct the system with explicit amplitudes.
@@ -345,6 +397,20 @@ public class QuantumSystem
         foreach (var refQ in _registered)
         {
             refQ.NotifyWavefunctionCollapsed(collapseId);
+
+            if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
+            {
+                _entanglement.PropagateCollapse(g1, collapseId);
+            }
+            else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
+            {
+                _entanglement.PropagateCollapse(g2, collapseId);
+            }
+            else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
+            {
+                _entanglement.PropagateCollapse(g3, collapseId);
+            }
+
         }
 
         // Return observed values
@@ -723,6 +789,19 @@ public abstract class QuantumSoup<T> : IQuantumObservable<T>
     {
         throw new NotImplementedException();
     }
+
+
+    /// <summary>
+    /// Exposes the interface for Qubit Observables
+    /// </summary>
+    public interface IQuantumObservable<T>
+
+    {
+        T Observe(Random? rng = null);
+        T CollapseWeighted();
+        T SampleWeighted(Random? rng = null);
+        IEnumerable<(T value, Complex weight)> ToWeightedValues();
+    }
 }
 #endregion
 
@@ -735,15 +814,16 @@ public abstract class QuantumSoup<T> : IQuantumObservable<T>
 public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 {
     private readonly Func<T, bool> _valueValidator;
-    public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
-
-    private readonly QuantumSystem? _system;    // if non-null, this qubit is in a shared system
-    private readonly int[] _qubitIndices;       // which qubit(s) in that system we represent
-
-    // For IQuantumReference:
-
-    private bool _isCollapsedFromSystem;        // if the system has collapsed on us
+    private readonly int[] _qubitIndices;
+    private readonly QuantumSystem? _system;
+    private bool _isCollapsedFromSystem;
     private object? _systemObservedValue;
+
+    private Guid? _entanglementGroupId;
+    public Guid? EntanglementGroupId => _entanglementGroupId;
+    public void SetEntanglementGroup(Guid id) => _entanglementGroupId = id;
+
+    public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
 
     #region Constructors
     // Constructors that enable you to manifest chaotic energy into a typed container.
@@ -1549,12 +1629,11 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
     public void NotifyWavefunctionCollapsed(Guid collapseId)
     {
-        // This is called by the QuantumSystem if a global collapse occurs.
-        // We'll set a flag so we know we can't do local modifications now.
         _isCollapsedFromSystem = true;
-        // We could also store the collapseId, in case we want to track it
-        // or do something with it in logs.
         _collapseHistoryId = collapseId;
+        // If this Qubit is not locally collapsed yet, do a local collapse.
+        if (!_isActuallyCollapsed)
+            Observe(); // local collapse (with default RNG)
     }
 
     public object? GetObservedValue()
@@ -1717,6 +1796,23 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
 }
 #endregion
+
+public static class EntanglementExtensions
+{
+    /// <summary>
+    /// Entangle a group of QuBits together within a shared QuantumSystem.
+    /// They will collapse together via shared propagation.
+    /// </summary>
+    public static void Entangle<T>(this QuantumSystem system, params QuBit<T>[] qubits)
+    {
+        // Ask the EntanglementManager to link them:
+        var groupId = system.Entanglement.Link(qubits);
+
+        // Each qubit tracks which group it belongs to:
+        foreach (var q in qubits)
+            q.SetEntanglementGroup(groupId);
+    }
+}
 
 #region Eigenstates<T> Implementation
 
