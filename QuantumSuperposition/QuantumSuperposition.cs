@@ -68,6 +68,17 @@ public static class QuantumMathUtility<T>
         b.Select(x => op(a, x));
 }
 
+
+#endregion
+
+#region QuantumConfig
+
+public static class QuantumConfig
+{
+    // Set to true to disallow collapse if the resulting value equals default(T).
+    public static bool ForbidDefaultOnCollapse { get; set; } = true;
+}
+
 #endregion
 
 #region QuBit<T> Implementation
@@ -78,11 +89,112 @@ public static class QuantumMathUtility<T>
 /// </summary>
 public partial class QuBit<T>
 {
+    private readonly Func<T, bool> _valueValidator;
+    private bool _isFrozen => _isActuallyCollapsed;
+
+    #region Constructors
+    public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
+        : this(Items, ops)
+    {
+        _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+    }
+    public QuBit(IEnumerable<T> Items, Func<T, bool>? valueValidator = null)
+        : this(Items, _defaultOps, valueValidator)
+    { }
+    public QuBit(IEnumerable<(T value, double weight)> weightedItems, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
+        : this(weightedItems, ops)
+    {
+        _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+    }
+    public QuBit(IEnumerable<(T value, double weight)> weightedItems, Func<T, bool>? valueValidator = null)
+        : this(weightedItems, _defaultOps, valueValidator)
+    { }
+    internal QuBit(IEnumerable<T> items, Dictionary<T, double>? weights, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
+        : this(items, weights, ops)
+    {
+        _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+    }
+    #endregion
+
+    #region State Type Helpers
+
+    // Guard to ensure mutable operations are only allowed when not collapsed.
+    private void EnsureMutable()
+    {
+        if (_isFrozen)
+            throw new InvalidOperationException("Cannot modify a collapsed QuBit.");
+    }
+
+    private void SetType(QuantumStateType t)
+    {
+        EnsureMutable();
+        _eType = t;
+    }
+
+    public QuBit<T> Append(T element)
+    {
+        EnsureMutable();
+
+        if (_weights != null)
+        {
+            if (!_weights.ContainsKey(element))
+                _weights[element] = 0.0;
+            _weights[element] += 1.0;
+            _qList = _weights.Keys;
+        }
+        else
+        {
+            _qList = _qList.Concat(new[] { element });
+        }
+
+        if (States.Distinct().Count() > 1)
+            SetType(QuantumStateType.Disjunctive);
+
+        return this;
+    }
+    #endregion
+
+    #region Immutable Clone
+
+    /// <summary>
+    /// Creates a mutable clone of the QuBit – copying current states and weights,
+    /// but resetting the collapsed (immutable) flag so you can start over.
+    /// </summary>
+    public QuBit<T> CloneMutable()
+    {
+        var clonedWeights = _weights != null ? new Dictionary<T, double>(_weights) : null;
+        var clonedList = _qList.ToList();
+        var clone = new QuBit<T>(clonedList, clonedWeights, _ops, _valueValidator)
+        {
+            _eType = this._eType
+            // Note: collapse-related fields are not copied, so the clone is mutable.
+        };
+        return clone;
+    }
+
+    #endregion
+
     private IEnumerable<T> _qList;
     private Dictionary<T, double>? _weights; // optional weighting
     private QuantumStateType _eType = QuantumStateType.Conjunctive;
     private readonly IQuantumOperators<T> _ops;
     private static readonly IQuantumOperators<T> _defaultOps = QuantumOperatorsFactory.GetOperators<T>();
+
+    // Track the last seed (if used) and a unique collapse ID
+    private Guid? _collapseHistoryId;
+    private int? _lastCollapseSeed;
+
+    // For debugging or replay purposes, you can track the last collapse history ID and seed.
+    public Guid? LastCollapseHistoryId => _collapseHistoryId;
+    public int? LastCollapseSeed => _lastCollapseSeed;
+
+    // Fields for supporting mock collapse
+    private bool _mockCollapseEnabled;
+    private T? _mockCollapseValue;
+
+    // Track actual collapse
+    private bool _isActuallyCollapsed;
+    private T? _collapsedValue;
 
     public IReadOnlyCollection<T> States =>
         _weights != null ? (IReadOnlyCollection<T>)_weights.Keys : _qList.ToList();
@@ -147,27 +259,8 @@ public partial class QuBit<T>
     // Also, it helps you avoid existential crises by keeping track of your quantum state.
 
     public QuantumStateType GetCurrentType() => _eType;
-    private void SetType(QuantumStateType t) => _eType = t;
 
-    public QuBit<T> Append(T element)
-    {
-        if (_weights != null)
-        {
-            if (!_weights.ContainsKey(element))
-                _weights[element] = 0.0;
-            _weights[element] += 1.0;
-            _qList = _weights.Keys;
-        }
-        else
-        {
-            _qList = _qList.Concat(new[] { element });
-        }
-
-        if (States.Distinct().Count() > 1)
-            SetType(QuantumStateType.Disjunctive);
-
-        return this;
-    }
+   
 
     public QuBit<T> Any() { SetType(QuantumStateType.Disjunctive); return this; }
     public QuBit<T> All() { SetType(QuantumStateType.Conjunctive); return this; }
@@ -314,16 +407,17 @@ public partial class QuBit<T>
     public bool EvaluateAll()
     {
         SetType(QuantumStateType.Conjunctive);
+
+        // More descriptive exception if empty
+        if (!States.Any())
+        {
+            throw new InvalidOperationException(
+                $"No states to evaluate. IsCollapsed={_isActuallyCollapsed}, StateCount={States.Count}, Type={_eType}."
+            );
+        }
+
         return States.All(state => !EqualityComparer<T>.Default.Equals(state, default(T)));
     }
-
-    // ---------------------------------------------------------------------
-    // Fields for supporting collapse, deterministic replay, and mocking
-    // ---------------------------------------------------------------------
-    private bool _mockCollapseEnabled;
-    private T? _mockCollapseValue;
-    private bool _isActuallyCollapsed;
-    private T? _collapsedValue;
 
     /// <summary>
     /// Observes (collapses) the QuBit with an optional Random instance for deterministic replay.
@@ -338,7 +432,9 @@ public partial class QuBit<T>
         if (_mockCollapseEnabled)
         {
             if (_mockCollapseValue == null)
-                throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
+                throw new InvalidOperationException(
+                    $"Mock collapse enabled but no mock value is set. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
+                );
             return _mockCollapseValue;
         }
 
@@ -350,7 +446,25 @@ public partial class QuBit<T>
 
         // Perform a real probabilistic collapse using weighted sampling
         rng ??= Random.Shared;
+        // We only know the seed if user gave us one in Observe(int seed)
+        // But do assign a new collapseHistoryId for debugging
+        _collapseHistoryId = Guid.NewGuid();
+
         T picked = SampleWeighted(rng);
+
+        // Use the configuration flag and value validator to protect against default(T)
+        if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
+        {
+            throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
+        }
+
+        // log whatever we get default(T)
+        if (EqualityComparer<T>.Default.Equals(picked, default(T)))
+        {
+            throw new InvalidOperationException(
+                $"Collapse resulted in default value. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
+            );
+        }
 
         // Mark as collapsed
         _collapsedValue = picked;
@@ -370,6 +484,10 @@ public partial class QuBit<T>
     /// </summary>
     public T Observe(int seed)
     {
+        // store the last collapse seed for debugging
+        _lastCollapseSeed = seed;
+        _collapseHistoryId = Guid.NewGuid();
+
         var rng = new Random(seed);
         return Observe(rng);
     }
@@ -412,21 +530,22 @@ public partial class QuBit<T>
     /// Returns a string representation of the current superposition states and their weights
     /// without triggering a collapse. Useful for debugging and introspection.
     /// </summary>
-    public string show_states()
-    {
-        return ToDebugString();
-    }
+    public string show_states() => ToDebugString();
+
     #endregion
 
     #region Weighting and Output
 
     // Converts the tangled quantum mess into something printable,
     // so you can lie to yourself and pretend you understand what's going on.
-
-    public IEnumerable<T> ToValues()
+    public IEnumerable<T> ToCollapsedValues()
     {
         if (!States.Any())
-            throw new InvalidOperationException("No values to collapse.");
+        {
+            throw new InvalidOperationException(
+                $"No values to collapse. IsCollapsed={_isActuallyCollapsed}, StateCount={States.Count}, Type={_eType}."
+            );
+        }
 
         if (_eType == QuantumStateType.Disjunctive)
             return States;
@@ -442,6 +561,10 @@ public partial class QuBit<T>
         }
     }
 
+    /// <summary>
+    /// Returns a collection of tuples containing the values and their corresponding weights.
+    /// </summary>
+    /// <returns></returns>
     public IEnumerable<(T value, double weight)> ToWeightedValues()
     {
         if (_weights == null)
@@ -458,6 +581,9 @@ public partial class QuBit<T>
         }
     }
 
+    /// <summary>
+    /// Normalizes the weights of the QuBit to sum to 1.0.
+    /// </summary>
     public void NormalizeWeights()
     {
         if (_weights == null) return;
@@ -469,13 +595,70 @@ public partial class QuBit<T>
             _weights[k] /= sum;
     }
 
-    private bool AllWeightsEqual(Dictionary<T, double> dict)
+    /// <summary>
+    /// An explicit “WithNormalizedWeights()” 
+    /// that returns a new QuBit or modifies in place. Here we clone for safety.
+    /// </summary>
+    public QuBit<T> WithNormalizedWeights()
     {
-        if (dict.Count <= 1) return true;
-        var first = dict.Values.First();
-        return dict.Values.Skip(1).All(w => Math.Abs(w - first) < 1e-14);
+        if (!IsWeighted) return this; // no weights to normalize
+
+
+
+        var clonedWeights = new Dictionary<T, double>(_weights);
+
+        var clonedQList = _qList.ToList();  // or just _weights.Keys
+
+        var newQ = new QuBit<T>(clonedQList, clonedWeights, _ops)
+
+        {
+
+            _eType = this._eType
+
+        };
+
+        newQ.NormalizeWeights();
+
+        return newQ;
+
     }
 
+
+
+    /// <summary>
+    /// Optionally, modify WithWeights(...) to auto-normalize if desired:
+    /// </summary>
+
+    public QuBit<T> WithWeights(Dictionary<T, double> weights, bool autoNormalize = false)
+    {
+
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+
+        // Gather only the weights for keys we already have in States.
+
+        var filtered = new Dictionary<T, double>();
+
+        foreach (var kvp in weights)
+        {
+            if (States.Contains(kvp.Key))
+                filtered[kvp.Key] = kvp.Value;
+        }
+
+        var newQ = new QuBit<T>(_qList, filtered, _ops)
+        {
+            _eType = this._eType
+        };
+
+        if (autoNormalize)
+            newQ.NormalizeWeights();
+
+        return newQ;
+    }
+
+    /// <summary>
+    /// Returns a string representation of the current superposition states.
+    /// </summary>
+    /// <returns></returns>
     public override string ToString()
     {
         // Legacy style if no weights or all weights equal
@@ -500,10 +683,26 @@ public partial class QuBit<T>
         }
     }
 
+    /// <summary>
+    /// Returns a string representation of the current superposition states and their weights
+    /// </summary>
+    /// <returns></returns>
     public string ToDebugString()
     {
         return string.Join(", ", ToWeightedValues()
             .Select(x => $"{x.value} (weight: {x.weight})"));
+    }
+
+    /// <summary>
+    /// Checks if all weights in the dictionary are equal.
+    /// </summary>
+    /// <param name="dict"></param>
+    /// <returns></returns>
+    private bool AllWeightsEqual(Dictionary<T, double> dict)
+    {
+        if (dict.Count <= 1) return true;
+        var first = dict.Values.First();
+        return dict.Values.Skip(1).All(w => Math.Abs(w - first) < 1e-14);
     }
 
     #endregion
@@ -526,7 +725,7 @@ public partial class QuBit<T>
         if (!IsWeighted)
         {
             // fallback
-            return ToValues().First();
+            return ToCollapsedValues().First();
         }
         else
         {
@@ -552,14 +751,14 @@ public partial class QuBit<T>
         if (!IsWeighted)
         {
             // fallback
-            return ToValues().First();
+            return ToCollapsedValues().First();
         }
 
         double total = _weights!.Values.Sum();
         if (total <= 1e-15)
         {
             // If all zero, fallback
-            return ToValues().First();
+            return ToCollapsedValues().First();
         }
 
         double roll = rng.NextDouble() * total;
@@ -649,16 +848,23 @@ public partial class QuBit<T>
     }
 
     /// <summary>
-    /// Implicit operator lets you pretend a QuBit is just a normal value.
-    /// It isn’t. But sure. Keep pretending.
+    /// Implicitly collapses the QuBit and returns a single value.
+    /// <para>
+    /// This is provided strictly for poetic license, lazy prototyping,
+    /// and chaotic neutral debugging.
+    /// </para>
+    /// <para>
+    /// This performs a probabilistic collapse (SampleWeighted) without preserving collapse state.
+    /// </para>
     /// </summary>
     /// <param name="q"></param>
+    [Obsolete("Implicit QuBit collapse is not safe for production. Use Observe() instead.")]
     public static implicit operator T(QuBit<T> q) => q.SampleWeighted();
 
     // A convenient way to slap some probabilities onto your states after the fact.
     // Like putting sprinkles on a Schrödinger cupcake — you won't know how it tastes until you eat it, and then it's too late.
     /// </summary>
-    public QuBit<T> WithWeights(Dictionary<T, double> weights)
+    public QuBit<T> WithWeightsNormalised(Dictionary<T, double> weights)
     {
         if (weights == null) throw new ArgumentNullException(nameof(weights));
 
@@ -689,10 +895,18 @@ public partial class QuBit<T>
 /// </summary>
 public class Eigenstates<T>
 {
+    private readonly Func<T, bool> _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
+
     private Dictionary<T, T> _qDict;
     private Dictionary<T, double>? _weights; // optional weighting
     private QuantumStateType _eType = QuantumStateType.Conjunctive;
     private readonly IQuantumOperators<T> _ops;
+
+    // Track the last seed (if used) and a unique collapse ID
+    private Guid? _collapseHistoryId;
+    private int? _lastCollapseSeed;
+    private bool _isActuallyCollapsed;
+    private T? _collapsedValue;
 
     public IReadOnlyCollection<T> States => _qDict.Keys;
 
@@ -1101,8 +1315,9 @@ public class Eigenstates<T>
 
     private bool _mockCollapseEnabled;
     private T? _mockCollapseValue;
-    private bool _isActuallyCollapsed;
-    private T? _collapsedValue;
+    public Guid? CollapseHistoryId => _collapseHistoryId;
+    public int? LastCollapseSeed => _lastCollapseSeed;
+
 
     /// <summary>
     /// Observes (collapses) the Eigenstates with an optional random instance
@@ -1124,7 +1339,16 @@ public class Eigenstates<T>
         }
 
         rng ??= Random.Shared;
+
+        // If this was not called via Observe(int seed), then we need to generate a new default collapse ID.
+        _collapseHistoryId ??= Guid.NewGuid();
+
         T picked = SampleWeighted(rng);
+
+        if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
+        {
+            throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
+        }
 
         _collapsedValue = picked;
         _isActuallyCollapsed = true;
@@ -1142,7 +1366,13 @@ public class Eigenstates<T>
     /// <summary>
     /// Observes (collapses) using a supplied seed for deterministic behavior.
     /// </summary>
-    public T Observe(int seed) => Observe(new Random(seed));
+    public T Observe(int seed)
+    {
+        _lastCollapseSeed = seed;
+        _collapseHistoryId = Guid.NewGuid();
+        var rng = new Random(seed);
+        return Observe(rng);
+    }
 
     /// <summary>
     /// Enables mock collapse for Eigenstates, forcing Observe() to return forcedValue.
@@ -1403,6 +1633,23 @@ public class Eigenstates<T>
         };
         return newEigen;
     }
+
+    public string ToDebugString(bool includeCollapseMetadata = false)
+    {
+        var baseInfo = _weights == null
+            ? string.Join(", ", _qDict.Select(kvp => $"{kvp.Key} => {kvp.Value}"))
+            : string.Join(", ", _qDict.Select(kvp =>
+            {
+                double w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
+                return $"{kvp.Key} => {kvp.Value} (weight: {w})";
+            }));
+
+        if (!includeCollapseMetadata) return baseInfo;
+
+        return $"{baseInfo}\nCollapsed: {_isActuallyCollapsed}, " +
+               $"Seed: {_lastCollapseSeed}, ID: {_collapseHistoryId}";
+    }
+
 }
 
 #endregion

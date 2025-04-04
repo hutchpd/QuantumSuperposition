@@ -224,7 +224,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     public void UnifyAll()
     {
         var allStates = timeline
-            .SelectMany(qb => qb.ToValues())
+            .SelectMany(qb => qb.ToCollapsedValues())
             .Distinct()
             .ToList();
 
@@ -248,7 +248,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         int start = timeline.Count - count;
         var merged = timeline
             .Skip(start)
-            .SelectMany(qb => qb.ToValues())
+            .SelectMany(qb => qb.ToCollapsedValues())
             .Distinct()
             .ToList();
 
@@ -291,8 +291,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         // If we're already globally converged, unify with current value
         if (PositronicRuntime.Instance.Converged)
         {
-            var current = timeline[^1].ToValues().ToList();
-            var incoming = qb.ToValues().ToList();
+            var current = timeline[^1].ToCollapsedValues().ToList();
+            var incoming = qb.ToCollapsedValues().ToList();
             var merged = current.Union(incoming).Distinct().ToList();
             var newQb = new QuBit<T>(merged);
             newQb.Any();
@@ -336,7 +336,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     public void CollapseToLastSlice()
     {
         var last = timeline.Last();
-        var baseline = last.ToValues().First();
+        var baseline = last.ToCollapsedValues().First();
         var collapsedQB = new QuBit<T>(new[] { baseline });
         collapsedQB.Any();
         timeline.Clear();
@@ -345,8 +345,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 
     private bool SameStates(QuBit<T> a, QuBit<T> b)
     {
-        var av = a.ToValues().OrderBy(x => x).ToList();
-        var bv = b.ToValues().OrderBy(x => x).ToList();
+        var av = a.ToCollapsedValues().OrderBy(x => x).ToList();
+        var bv = b.ToCollapsedValues().OrderBy(x => x).ToList();
         if (av.Count != bv.Count) return false;
         for (int i = 0; i < av.Count; i++)
         {
@@ -366,10 +366,10 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     {
         private readonly QuBit<T> qb;
         public PositronicValueWrapper(QuBit<T> q) => qb = q;
-        public IEnumerable<T> ToValues() => qb.ToValues();
+        public IEnumerable<T> ToValues() => qb.ToCollapsedValues();
     }
 
-    public IEnumerable<T> ToValues() => GetCurrentQBit().ToValues();
+    public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
 
     // --------------------------------------------------------------------------
     //   Operator Overloads (+, %, etc.)
