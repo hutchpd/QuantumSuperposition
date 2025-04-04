@@ -2,15 +2,19 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+#region Interfaces and Runtime
 
 /// <summary>
-/// Interface representing non-generic operations for a Positronic variable.
+/// Direction of time: +1 for forward, -1 for reverse. Like a microwave, but emotionally.
 /// </summary>
 public interface IPositronicVariable
 {
     /// <summary>
-    /// Determines how far back the timeline has converged.
-    /// Returns 0 if there is no convergence.
+    /// Unifies all timeline slices into a single disjunctive state,
+    /// kind of like a group project where everyone finally agrees on something.
     /// </summary>
     int Converged();
 
@@ -50,6 +54,17 @@ public interface IPositronicRuntime
     /// Reset the runtime state to its initial configuration.
     /// </summary>
     void Reset();
+
+    // --- Added Diagnostics ---
+    /// <summary>
+    /// Total iterations spent during convergence.
+    /// </summary>
+    int TotalConvergenceIterations { get; set; }
+
+    /// <summary>
+    /// Global event fired when all variables have converged.
+    /// </summary>
+    event Action OnAllConverged;
 }
 
 /// <summary>
@@ -62,13 +77,21 @@ public class DefaultPositronicRuntime : IPositronicRuntime
     public TextWriter CapturedWriter { get; set; } = null;
     public IList<IPositronicVariable> Variables { get; } = new List<IPositronicVariable>();
 
+    // --- Added Diagnostics ---
+    public int TotalConvergenceIterations { get; set; } = 0;
+    public event Action OnAllConverged;
+
     public void Reset()
     {
         Entropy = -1;
         Converged = false;
         CapturedWriter = null;
         Variables.Clear();
+        TotalConvergenceIterations = 0;
     }
+
+    // Helper to invoke the global convergence event.
+    public void FireAllConverged() => OnAllConverged?.Invoke();
 }
 
 /// <summary>
@@ -81,6 +104,10 @@ public static class PositronicRuntime
     public static IPositronicRuntime Instance { get; set; } = new DefaultPositronicRuntime();
 }
 
+#endregion
+
+#region PositronicVariable<T> (Value-type version)
+
 /// <summary>
 /// A "positronic" variable that stores a timeline of QuBit&lt;T&gt; states.
 /// Supports negative-time convergence, partial unification, etc.
@@ -92,16 +119,21 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     //   Instance: timeline tracking
     // --------------------------------------------------------------------------
     public readonly List<QuBit<T>> timeline = new();
-
-    // Prevent overwriting the single initial slice more than once.
     private bool replacedInitialSlice = false;
+
+    // --- Added: Event System ---
+    public event Action OnConverged;
+    public event Action OnCollapse;
+    public event Action OnTimelineAppended;
+
+    // --- Added: Timeline Length Helper ---
+    public int TimelineLength => timeline.Count;
 
     // --------------------------------------------------------------------------
     //   Constructors
     // --------------------------------------------------------------------------
     public PositronicVariable(T initialValue)
     {
-        // Create a new QuBit with the initial value; set it to "any" mode if multiple states appear.
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
         timeline.Add(qb);
@@ -131,60 +163,50 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     /// </summary>
     public static bool AllConverged()
     {
-        return PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+        bool all = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+        if (all)
+            (PositronicRuntime.Instance as DefaultPositronicRuntime)?.FireAllConverged();
+        return all;
     }
 
     public static IEnumerable<IPositronicVariable> GetAllVariables() => PositronicRuntime.Instance.Variables;
 
-    // --------------------------------------------------------------------------
-    //   RunConvergenceLoop
-    // --------------------------------------------------------------------------
-    //  1) Capture the console writer if not already done
-    //  2) Switch to negative time and discard console output
-    //  3) Repeatedly run user code until all variables converge, or we give up
-    //  4) Switch to forward time, restore console, and run user code once more
+    /// <summary>
+    /// Runs your code in a magical simulation loop until all variables calm down.
+    /// Think of it as a spa treatment for logic, with a mild chance of infinite recursion.
+    /// </summary>
     public static void RunConvergenceLoop(Action code)
     {
-        // 1) Capture the console writer if not already captured
         if (PositronicRuntime.Instance.CapturedWriter == null)
             PositronicRuntime.Instance.CapturedWriter = Console.Out;
 
         PositronicRuntime.Instance.Converged = false;
-
-        // 2) Switch to negative time and discard console output
+        // We silence console output here to avoid panic from observers.
+        // You didn’t *really* want to know what’s happening in negative time, did you?
         Console.SetOut(TextWriter.Null);
         PositronicRuntime.Instance.Entropy = -1;
 
         const int maxIters = 1000;
         int iteration = 0;
 
-        // Negative-time loop
         while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
         {
-            code();  // run the user logic in negative time
+            code();
 
-            // -- Debug prints: show timeline states for each iteration
+            // Debug prints (omitted from console output)
             System.Diagnostics.Debug.WriteLine($"[Debug] Negative-Time Iteration: {iteration}");
-
             foreach (var variable in PositronicRuntime.Instance.Variables)
-            {
-                Console.WriteLine($"   => {variable}");
-            }
-            Console.SetOut(TextWriter.Null);
-            // ---------------------------------
+                System.Diagnostics.Debug.WriteLine($"   => {variable}");
+
+            // Update diagnostics
+            (PositronicRuntime.Instance as DefaultPositronicRuntime).TotalConvergenceIterations = iteration;
 
             bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
             if (allVarsConverged)
             {
                 PositronicRuntime.Instance.Converged = true;
-
-                // Unify all variables now that they converged
                 foreach (var pv in PositronicRuntime.Instance.Variables)
-                {
                     pv.UnifyAll();
-                }
-
-                // Restore console
                 Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
                 break;
             }
@@ -192,20 +214,21 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             iteration++;
         }
 
-        // 4) Forward pass: restore console, set entropy to forward, and run user code once more
+        // Once everyone in the timeline agrees, we return to the real world
+        // and pretend none of this ever happened. Therapy complete.
         Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
         PositronicRuntime.Instance.Entropy = 1;
         code();
     }
 
-    // --------------------------------------------------------------------------
-    //   Convergence and Unification Methods
-    // --------------------------------------------------------------------------
+    /// <summary>
+    /// Checks for repetitive states in the timeline, like déjà vu but for data.
+    /// </summary>
+    /// <returns></returns>
     public int Converged()
     {
         if (PositronicRuntime.Instance.Converged)
             return 1;
-
         if (timeline.Count < 2)
             return 0;
 
@@ -219,11 +242,6 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         return 0;
     }
 
-
-    /// <summary>
-    /// Unifies all timeline slices into a single multi-state slice ("any(...)").
-    /// Also sets the global convergence flag. Everyone agrees now.
-    /// </summary>
     public void UnifyAll()
     {
         var allStates = timeline
@@ -233,11 +251,11 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 
         var unified = new QuBit<T>(allStates);
         unified.Any();
-
         timeline.Clear();
         timeline.Add(unified);
-
         PositronicRuntime.Instance.Converged = true;
+        OnCollapse?.Invoke();
+        OnConverged?.Invoke();
     }
 
     /// <summary>
@@ -245,9 +263,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     /// </summary>
     public void Unify(int count)
     {
-        if (count < 2) return;
-        if (timeline.Count < count) return;
-
+        if (count < 2 || timeline.Count < count) return;
         int start = timeline.Count - count;
         var merged = timeline
             .Skip(start)
@@ -256,17 +272,18 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             .ToList();
 
         timeline.RemoveRange(start, count);
-
         var newQb = new QuBit<T>(merged);
         newQb.Any();
         timeline.Add(newQb);
-
         PositronicRuntime.Instance.Converged = true;
+        OnCollapse?.Invoke();
+        OnConverged?.Invoke();
     }
 
     /// <summary>
-    /// Copies the timeline of another variable and pretends that was your idea all along.
+    /// Assigns the current state of another PositronicVariable to this one.
     /// </summary>
+    /// <param name="other"></param>
     public void Assign(PositronicVariable<T> other)
     {
         var qb = other.GetCurrentQBit();
@@ -275,8 +292,9 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     }
 
     /// <summary>
-    /// Assigns a scalar value to the variable.
+    /// Assigns a scalar value to the current state of this PositronicVariable.
     /// </summary>
+    /// <param name="scalarValue"></param>
     public void Assign(T scalarValue)
     {
         var qb = new QuBit<T>(new[] { scalarValue });
@@ -285,13 +303,11 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     }
 
     /// <summary>
-    /// Quantum journaling: either overwrite your past,
-    /// append a new branch in the multiverse,
-    /// or unify everything if we detect a repetitive cycle.
+    /// Quantum journaling: either overwrite your past, append a new branch,
+    /// or perform a retroactive group hug across all realities.
     /// </summary>
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
-        // If we're already globally converged, unify with current value
         if (PositronicRuntime.Instance.Converged)
         {
             var current = timeline[^1].ToCollapsedValues().ToList();
@@ -303,7 +319,6 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             return;
         }
 
-        // Overwrite the single slice if possible (only once).
         if (!replacedInitialSlice && timeline.Count == 1)
         {
             var existing = timeline[0];
@@ -315,17 +330,13 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             return;
         }
 
-        // Otherwise, append the new slice.
         timeline.Add(qb);
+        OnTimelineAppended?.Invoke();
 
-        // Enhanced cycle detection for 2- to 20-cycles:
         for (int cycle = 2; cycle <= 20; cycle++)
         {
-            // We need at least (cycle + 1) slices to compare the new slice
-            // against the one 'cycle' steps behind.
             if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
             {
-                // We found a repeating cycle of length 'cycle'
                 Unify(cycle);
                 break;
             }
@@ -333,50 +344,6 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     }
 
 
-    /// <summary>
-    /// Collapse the wavefunction into the last slice only.
-    /// </summary>
-    public void CollapseToLastSlice()
-    {
-        var last = timeline.Last();
-        var baseline = last.ToCollapsedValues().First();
-        var collapsedQB = new QuBit<T>(new[] { baseline });
-        collapsedQB.Any();
-        timeline.Clear();
-        timeline.Add(collapsedQB);
-    }
-
-    private bool SameStates(QuBit<T> a, QuBit<T> b)
-    {
-        var av = a.ToCollapsedValues().OrderBy(x => x).ToList();
-        var bv = b.ToCollapsedValues().OrderBy(x => x).ToList();
-        if (av.Count != bv.Count) return false;
-        for (int i = 0; i < av.Count; i++)
-        {
-            if (!av[i].Equals(bv[i])) return false;
-        }
-        return true;
-    }
-
-    public QuBit<T> GetCurrentQBit() => timeline[^1];
-
-    // --------------------------------------------------------------------------
-    //   Value and ToValues (for testing)
-    // --------------------------------------------------------------------------
-    public PositronicValueWrapper Value => new(GetCurrentQBit());
-
-    public class PositronicValueWrapper
-    {
-        private readonly QuBit<T> qb;
-        public PositronicValueWrapper(QuBit<T> q) => qb = q;
-        public IEnumerable<T> ToValues() => qb.ToCollapsedValues();
-    }
-
-    public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
-
-    // --------------------------------------------------------------------------
-    //   Operator Overloads (+, %, etc.)
-    // --------------------------------------------------------------------------
     public static PositronicVariable<T> operator +(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() + right;
@@ -391,14 +358,504 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         return new PositronicVariable<T>(resultQB);
     }
 
-    // --------------------------------------------------------------------------
-    //   ToString()
-    // --------------------------------------------------------------------------
+    public static PositronicVariable<T> operator -(PositronicVariable<T> left, T right)
+    {
+        var resultQB = left.GetCurrentQBit() - right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator *(PositronicVariable<T> left, T right)
+    {
+        var resultQB = left.GetCurrentQBit() * right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator /(PositronicVariable<T> left, T right)
+    {
+        var resultQB = left.GetCurrentQBit() / right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+
+    public static PositronicVariable<T> operator -(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator /(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static bool operator <(PositronicVariable<T> left, T right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(right) < 0;
+    }
+    public static bool operator >(PositronicVariable<T> left, T right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(right) > 0;
+    }
+    public static bool operator <=(PositronicVariable<T> left, T right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(right) <= 0;
+    }
+    public static bool operator >=(PositronicVariable<T> left, T right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(right) >= 0;
+    }
+    public static bool operator <(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(
+            right.GetCurrentQBit().ToCollapsedValues().First()) < 0;
+    }
+    public static bool operator >(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(
+            right.GetCurrentQBit().ToCollapsedValues().First()) > 0;
+    }
+    public static bool operator <=(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(
+            right.GetCurrentQBit().ToCollapsedValues().First()) <= 0;
+    }
+    public static bool operator >=(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(
+            right.GetCurrentQBit().ToCollapsedValues().First()) >= 0;
+    }
+
+    public static bool operator ==(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null) return false;
+        return left.SameStates(left.GetCurrentQBit(), right.GetCurrentQBit());
+    }
+    public static bool operator !=(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        return !(left == right);
+    }
+    public static bool operator ==(PositronicVariable<T> left, T right)
+    {
+        return left.GetCurrentQBit().ToCollapsedValues().First().Equals(right);
+    }
+    public static bool operator !=(PositronicVariable<T> left, T right)
+    {
+        return !(left == right);
+    }
+
+    public override bool Equals(object obj)
+    {
+        if (obj is PositronicVariable<T> other)
+            return this == other;
+        return false;
+    }
+
+    public override int GetHashCode()
+    {
+        return GetCurrentQBit().ToCollapsedValues().Aggregate(0, (acc, x) => acc ^ x.GetHashCode());
+    }
+
+    public static PositronicVariable<T> Apply(Func<T, T, T> op, PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var leftValues = left.ToValues();
+        var rightValues = right.ToValues();
+        var results = leftValues.SelectMany(l => rightValues, (l, r) => op(l, r)).Distinct().ToArray();
+        var newQB = new QuBit<T>(results);
+        newQB.Any();
+        return new PositronicVariable<T>(newQB);
+    }
+
+    public QuBit<T> GetSlice(int stepsBack)
+    {
+        if (stepsBack < 0 || stepsBack >= timeline.Count)
+            throw new ArgumentOutOfRangeException(nameof(stepsBack));
+        return timeline[timeline.Count - 1 - stepsBack];
+    }
+
+    /// <summary>
+    /// Returns all timeline slices in order.
+    /// </summary>
+    public IEnumerable<QuBit<T>> GetTimeline() => timeline;
+
+    public void CollapseToLastSlice()
+    {
+        var last = timeline.Last();
+        var baseline = last.ToCollapsedValues().First();
+        var collapsedQB = new QuBit<T>(new[] { baseline });
+        collapsedQB.Any();
+        timeline.Clear();
+        timeline.Add(collapsedQB);
+        OnCollapse?.Invoke();
+    }
+
+    /// <summary>
+    /// Collapse using a custom strategy delegate.
+    /// </summary>
+    public void CollapseToLastSlice(Func<IEnumerable<T>, T> strategy)
+    {
+        var last = timeline.Last();
+        var chosenValue = strategy(last.ToCollapsedValues());
+        var collapsedQB = new QuBit<T>(new[] { chosenValue });
+        collapsedQB.Any();
+        timeline.Clear();
+        timeline.Add(collapsedQB);
+        OnCollapse?.Invoke();
+    }
+
+    // --- Built-in collapse strategies ---
+    /// <summary>
+    /// Even the smallest person can change the course of the future
+    /// </summary>
+    public static Func<IEnumerable<T>, T> CollapseMin = values => values.Min();
+    /// <summary>
+    /// This is just a tribute. 
+    /// </summary>
+    public static Func<IEnumerable<T>, T> CollapseMax = values => values.Max();
+    /// <summary>
+    /// The average of all values, like a group project where everyone contributes equally.
+    /// </summary>
+    public static Func<IEnumerable<T>, T> CollapseFirst = values => values.First();
+
+    /// <summary>
+    /// Choose your own adventure collapse strategies.
+    /// </summary>
+    public static Func<IEnumerable<T>, T> CollapseRandom = values => {
+        var list = values.ToList();
+        var rnd = new Random();
+        return list[rnd.Next(list.Count)];
+    };
+
+
+    /// <summary>
+    /// Returns a deep copy of this variable (all timeline slices are cloned).
+    /// </summary>
+    public PositronicVariable<T> Fork()
+    {
+        var forkedTimeline = timeline.Select(qb =>
+        {
+            var newQB = new QuBit<T>(qb.ToCollapsedValues().ToArray());
+            newQB.Any();
+            return newQB;
+        }).ToList();
+
+        var forked = new PositronicVariable<T>(forkedTimeline[0]);
+        forked.timeline.Clear();
+        forkedTimeline.ForEach(qb => forked.timeline.Add(qb));
+        return forked;
+    }
+
+    /// <summary>
+    /// Returns a fork in which the current slice’s values are transformed.
+    /// </summary>
+    public PositronicVariable<T> Fork(Func<T, T> transform)
+    {
+        var forked = Fork();
+        var last = forked.timeline.Last();
+        var transformedValues = last.ToCollapsedValues().Select(transform).ToArray();
+        forked.timeline[forked.timeline.Count - 1] = new QuBit<T>(transformedValues);
+        forked.timeline[forked.timeline.Count - 1].Any();
+        return forked;
+    }
+
+
+    /// <summary>
+    /// Returns a pretty-printed string of all slices.
+    /// Great for debugging, storytelling, or just reminiscing about your variable’s midlife crisis.
+    /// </summary>
+    public string ToTimelineString()
+    {
+        return string.Join(Environment.NewLine,
+            timeline.Select((qb, index) => $"Slice {index}: {qb}"));
+    }
+
+    /// <summary>
+    /// Exports the timeline to a JSON string.
+    /// </summary>
+    public string ExportToJson()
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        return JsonSerializer.Serialize(timeline, options);
+    }
+
+
+    public PositronicValueWrapper Value => new(GetCurrentQBit());
+
+    public class PositronicValueWrapper
+    {
+        private readonly QuBit<T> qb;
+        public PositronicValueWrapper(QuBit<T> q) => qb = q;
+        public IEnumerable<T> ToValues() => qb.ToCollapsedValues();
+    }
+
+    public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
+
+    public QuBit<T> GetCurrentQBit() => timeline[^1];
+
+    private bool SameStates(QuBit<T> a, QuBit<T> b)
+    {
+        var av = a.ToCollapsedValues().OrderBy(x => x).ToList();
+        var bv = b.ToCollapsedValues().OrderBy(x => x).ToList();
+        if (av.Count != bv.Count) return false;
+        for (int i = 0; i < av.Count; i++)
+            if (!av[i].Equals(bv[i])) return false;
+        return true;
+    }
+
     public override string ToString()
     {
         return GetCurrentQBit().ToString();
     }
 }
+
+#endregion
+
+#region PositronicVariableRef<T> (Reference-type version)
+
+/// <summary>
+/// An alternative version of PositronicVariable that supports non-struct types (e.g. strings or custom objects).
+/// This version removes the struct constraint and uses object equality where needed.
+/// </summary>
+public class PositronicVariableRef<T> : IPositronicVariable
+{
+    public readonly List<QuBit<T>> timeline = new();
+    private bool replacedInitialSlice = false;
+
+    public event Action OnConverged;
+    public event Action OnCollapse;
+    public event Action OnTimelineAppended;
+
+    public int TimelineLength => timeline.Count;
+
+    public PositronicVariableRef(T initialValue)
+    {
+        var qb = new QuBit<T>(new[] { initialValue });
+        qb.Any();
+        timeline.Add(qb);
+        PositronicRuntime.Instance.Variables.Add(this);
+    }
+
+    public PositronicVariableRef(QuBit<T> qb)
+    {
+        qb.Any();
+        timeline.Add(qb);
+        PositronicRuntime.Instance.Variables.Add(this);
+    }
+
+    public static void ResetStaticVariables()
+    {
+        PositronicRuntime.Instance.Reset();
+    }
+
+    public static void SetEntropy(int e) => PositronicRuntime.Instance.Entropy = e;
+    public static int GetEntropy() => PositronicRuntime.Instance.Entropy;
+
+    public static bool AllConverged()
+    {
+        bool all = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+        if (all)
+            (PositronicRuntime.Instance as DefaultPositronicRuntime)?.FireAllConverged();
+        return all;
+    }
+
+    public static IEnumerable<IPositronicVariable> GetAllVariables() => PositronicRuntime.Instance.Variables;
+
+    public static void RunConvergenceLoop(Action code)
+    {
+        if (PositronicRuntime.Instance.CapturedWriter == null)
+            PositronicRuntime.Instance.CapturedWriter = Console.Out;
+
+        PositronicRuntime.Instance.Converged = false;
+        Console.SetOut(TextWriter.Null);
+        PositronicRuntime.Instance.Entropy = -1;
+
+        const int maxIters = 1000;
+        int iteration = 0;
+
+        while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
+        {
+            code();
+            System.Diagnostics.Debug.WriteLine($"[Debug] Negative-Time Iteration: {iteration}");
+            foreach (var variable in PositronicRuntime.Instance.Variables)
+                System.Diagnostics.Debug.WriteLine($"   => {variable}");
+
+            (PositronicRuntime.Instance as DefaultPositronicRuntime).TotalConvergenceIterations = iteration;
+
+            bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+            if (allVarsConverged)
+            {
+                PositronicRuntime.Instance.Converged = true;
+                foreach (var pv in PositronicRuntime.Instance.Variables)
+                    pv.UnifyAll();
+                Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+                break;
+            }
+
+            iteration++;
+        }
+
+        Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+        PositronicRuntime.Instance.Entropy = 1;
+        code();
+    }
+
+    /// <summary
+    /// Checks for repetitive states in the timeline, like déjà vu but for data.
+    /// If we detect a loop, we call it "convergence" instead of "bug."
+    /// </summary>
+    public int Converged()
+    {
+        if (PositronicRuntime.Instance.Converged)
+            return 1;
+        if (timeline.Count < 2)
+            return 0;
+
+        var current = timeline[^1];
+        for (int i = 2; i <= timeline.Count; i++)
+        {
+            var older = timeline[timeline.Count - i];
+            if (SameStates(older, current))
+                return i - 1;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Merges all chaotic quantum states into a beautiful lie of consistency,
+    /// like cleaning your browser history but for timelines.
+    /// </summary>
+    public void UnifyAll()
+    {
+        var allStates = timeline
+            .SelectMany(qb => qb.ToCollapsedValues())
+            .Distinct()
+            .ToList();
+
+        var unified = new QuBit<T>(allStates);
+        unified.Any();
+        timeline.Clear();
+        timeline.Add(unified);
+        PositronicRuntime.Instance.Converged = true;
+        OnCollapse?.Invoke();
+        OnConverged?.Invoke();
+    }
+
+
+    public void Unify(int count)
+    {
+        if (count < 2 || timeline.Count < count) return;
+        int start = timeline.Count - count;
+        var merged = timeline
+            .Skip(start)
+            .SelectMany(qb => qb.ToCollapsedValues())
+            .Distinct()
+            .ToList();
+
+        timeline.RemoveRange(start, count);
+        var newQb = new QuBit<T>(merged);
+        newQb.Any();
+        timeline.Add(newQb);
+        PositronicRuntime.Instance.Converged = true;
+        OnCollapse?.Invoke();
+        OnConverged?.Invoke();
+    }
+
+    public void Assign(PositronicVariableRef<T> other)
+    {
+        var qb = other.GetCurrentQBit();
+        qb.Any();
+        ReplaceOrAppendOrUnify(qb);
+    }
+
+    public void Assign(T scalarValue)
+    {
+        var qb = new QuBit<T>(new[] { scalarValue });
+        qb.Any();
+        ReplaceOrAppendOrUnify(qb);
+    }
+
+    private void ReplaceOrAppendOrUnify(QuBit<T> qb)
+    {
+        if (PositronicRuntime.Instance.Converged)
+        {
+            var current = timeline[^1].ToCollapsedValues().ToList();
+            var incoming = qb.ToCollapsedValues().ToList();
+            var merged = current.Union(incoming).Distinct().ToList();
+            var newQb = new QuBit<T>(merged);
+            newQb.Any();
+            timeline[^1] = newQb;
+            return;
+        }
+
+        if (!replacedInitialSlice && timeline.Count == 1)
+        {
+            var existing = timeline[0];
+            if (!SameStates(existing, qb))
+                timeline[0] = qb;
+            replacedInitialSlice = true;
+            return;
+        }
+
+        timeline.Add(qb);
+        OnTimelineAppended?.Invoke();
+
+        for (int cycle = 2; cycle <= 20; cycle++)
+        {
+            if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
+            {
+                Unify(cycle);
+                break;
+            }
+        }
+    }
+
+    // For brevity, operator overloads (arithmetic, relational, equality) and multi-variable Apply
+    // could be implemented similarly to PositronicVariable<T> if needed for reference types.
+
+    public QuBit<T> GetCurrentQBit() => timeline[^1];
+
+    public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
+
+    public string ToTimelineString()
+    {
+        return string.Join(Environment.NewLine,
+            timeline.Select((qb, index) => $"Slice {index}: {qb}"));
+    }
+
+    public string ExportToJson()
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        return JsonSerializer.Serialize(timeline, options);
+    }
+
+    private bool SameStates(QuBit<T> a, QuBit<T> b)
+    {
+        var av = a.ToCollapsedValues().OrderBy(x => x).ToList();
+        var bv = b.ToCollapsedValues().OrderBy(x => x).ToList();
+        if (av.Count != bv.Count) return false;
+        for (int i = 0; i < av.Count; i++)
+            if (!av[i]?.Equals(bv[i]) ?? bv[i] != null) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return GetCurrentQBit().ToString();
+    }
+
+    public int ConvergedForRef() => Converged();
+}
+
+#endregion
+
+#region NeuralNodule<T>
 
 /// <summary>
 /// A quantum-aware neuron that collects Positronic inputs,
@@ -406,19 +863,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 /// </summary>
 public class NeuralNodule<T> where T : struct, IComparable
 {
-    /// <summary>
-    /// Input positronic variables that feed this neuron.
-    /// </summary>
     public List<PositronicVariable<T>> Inputs { get; } = new();
-
-    /// <summary>
-    /// The output positronic variable that receives the activation result.
-    /// </summary>
     public PositronicVariable<T> Output { get; }
-
-    /// <summary>
-    /// Activation function that returns a superposed (multi-value) QuBit.
-    /// </summary>
     public Func<IEnumerable<T>, QuBit<T>> ActivationFunction { get; set; }
 
     public NeuralNodule(Func<IEnumerable<T>, QuBit<T>> activation)
@@ -427,9 +873,6 @@ public class NeuralNodule<T> where T : struct, IComparable
         Output = new PositronicVariable<T>(default(T));
     }
 
-    /// <summary>
-    /// Fires the node: collects inputs, applies activation, and assigns result.
-    /// </summary>
     public void Fire()
     {
         var inputValues = Inputs.SelectMany(i => i.ToValues());
@@ -438,10 +881,6 @@ public class NeuralNodule<T> where T : struct, IComparable
         Output.Assign(result);
     }
 
-    /// <summary>
-    /// Converges the network by running the activation function on all nodes,
-    /// repeating until stable or max iterations is reached.
-    /// </summary>
     public static void ConvergeNetwork(params NeuralNodule<T>[] nodes)
     {
         PositronicVariable<T>.RunConvergenceLoop(() =>
@@ -451,3 +890,5 @@ public class NeuralNodule<T> where T : struct, IComparable
         });
     }
 }
+
+#endregion
