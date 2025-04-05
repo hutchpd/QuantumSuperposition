@@ -160,12 +160,14 @@ public class EntanglementManager
     private readonly Dictionary<IQuantumReference, HashSet<Guid>> _referenceToGroups = new();
     private readonly Dictionary<Guid, List<IQuantumReference>> _groups = new();
     private readonly Dictionary<Guid, List<EntanglementGroupVersion>> _groupHistory = new();
+    private readonly Dictionary<Guid, string> _groupLabels = new();
+
 
     /// <summary>
     /// Links two or more quantum references into the same entangled group.
     /// Returns the new group ID.
     /// </summary>
-    public Guid Link(params IQuantumReference[] qubits)
+    public Guid Link(string groupLabel, params IQuantumReference[] qubits)
     {
         QuantumSystem? firstSystem = null;
         foreach (var q in qubits)
@@ -195,6 +197,7 @@ public class EntanglementManager
 
         var id = Guid.NewGuid();
         _groups[id] = qubits.ToList();
+        _groupLabels[id] = groupLabel;
 
         // After creating the group, also update the referenceToGroups dictionary
         foreach (var q in qubits)
@@ -216,6 +219,8 @@ public class EntanglementManager
 
         return id;
     }
+
+    public string GetGroupLabel(Guid groupId) => _groupLabels.TryGetValue(groupId, out var label) ? label : "Unnamed Group";
 
     /// <summary>
     /// Gets all references in the same entangled group, by ID.
@@ -268,15 +273,37 @@ public class EntanglementManager
     }
 
     /// <summary>
-    /// Prints the current entanglement statistics.
+    /// Prints detailed entanglement diagnostics including overall graph size,
+    /// circular reference counts, and a chaos percentage.
     /// </summary>
     public void PrintEntanglementStats()
     {
-        Console.WriteLine("Entangled group count: " + _groups.Count);
+        Console.WriteLine("=== Entanglement Graph Diagnostics ===");
+        Console.WriteLine("Total entangled groups: " + _groups.Count);
+
+        // Total unique qubits participating in at least one group
+        int totalUniqueQubits = _referenceToGroups.Count;
+        Console.WriteLine("Total unique qubits: " + totalUniqueQubits);
+
+        // Print each group's size
         foreach (var (id, list) in _groups)
         {
             Console.WriteLine($"Group {id}: {list.Count} qubits");
         }
+
+        // Circular references: qubits that belong to more than one group
+        int circularCount = _referenceToGroups.Values.Count(g => g.Count > 1);
+        double circularPercent = totalUniqueQubits > 0
+            ? (circularCount / (double)totalUniqueQubits) * 100.0
+            : 0;
+        Console.WriteLine($"Circular references: {circularCount} qubits ({circularPercent:F2}%)");
+
+        // Chaos %: extra entanglement links relative to unique qubits.
+        int totalLinks = _referenceToGroups.Values.Sum(g => g.Count);
+        double chaosPercent = totalUniqueQubits > 0
+            ? ((totalLinks - totalUniqueQubits) / (double)totalUniqueQubits) * 100.0
+            : 0;
+        Console.WriteLine($"Chaos %: {chaosPercent:F2}%");
     }
 
     /// <summary>
@@ -2394,17 +2421,20 @@ public static class EntanglementExtensions
 {
     /// <summary>
     /// Entangle a group of QuBits together within a shared QuantumSystem.
-    /// They will collapse together via shared propagation.
+    /// with a specific label.
     /// </summary>
-    public static void Entangle<T>(this QuantumSystem system, params QuBit<T>[] qubits)
+    /// <typeparam name="T"></typeparam>
+    /// <param name="system"></param>
+    /// <param name="groupLabel"></param>
+    /// <param name="qubits"></param>
+    public static void Entangle<T>(this QuantumSystem system, string groupLabel, params QuBit<T>[] qubits)
     {
-        // Ask the EntanglementManager to link them:
-        var groupId = system.Entanglement.Link(qubits);
-
-        // Each qubit tracks which group it belongs to:
+        // Use the updated Link method with the provided label.
+        var groupId = system.Entanglement.Link(groupLabel, qubits);
         foreach (var q in qubits)
             q.SetEntanglementGroup(groupId);
     }
+
 }
 
 #region Eigenstates<T> Implementation

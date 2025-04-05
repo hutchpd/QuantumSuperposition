@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PositronicVariables", "Posi
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestPV", "TestPV\TestPV.csproj", "{EB38EC29-2B3A-4807-9E71-AB0BACDE3A5E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PositronicVariableTests", "PositronicVariableTests\PositronicVariableTests.csproj", "{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuantumSoupTester", "PositronicVariableTests\QuantumSoupTester.csproj", "{F03B89A2-62FF-4E90-93B1-EBDADCD20B77}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
