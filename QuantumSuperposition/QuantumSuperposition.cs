@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 // Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
@@ -103,7 +104,6 @@ public interface IQuantumReference
 }
 
 
-
 /// <summary>
 /// Like a gym trainer, but for ints. Does the usual heavy lifting.
 /// </summary>
@@ -144,6 +144,14 @@ public class ComplexOperators : IQuantumOperators<Complex>
     public bool NotEqual(Complex a, Complex b) => a != b;
 }
 
+public class EntanglementGroupVersion
+{
+    public Guid GroupId { get; init; }
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+    public List<IQuantumReference> Members { get; init; } = new();
+    public string? ReasonForChange { get; init; }
+}
+
 /// <summary>
 /// 
 /// </summary>
@@ -151,6 +159,7 @@ public class EntanglementManager
 {
     private readonly Dictionary<IQuantumReference, HashSet<Guid>> _referenceToGroups = new();
     private readonly Dictionary<Guid, List<IQuantumReference>> _groups = new();
+    private readonly Dictionary<Guid, List<EntanglementGroupVersion>> _groupHistory = new();
 
     /// <summary>
     /// Links two or more quantum references into the same entangled group.
@@ -197,6 +206,13 @@ public class EntanglementManager
             }
             groupSet.Add(id);
         }
+
+        _groupHistory[id].Add(new EntanglementGroupVersion
+        {
+            GroupId = id,
+            Members = qubits.ToList(),
+            ReasonForChange = "Initial link"
+        });
 
         return id;
     }
