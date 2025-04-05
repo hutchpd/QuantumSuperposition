@@ -303,6 +303,13 @@ public static class QuantumMathUtility<T>
     public static IEnumerable<T> Combine(T a, IEnumerable<T> b, Func<T, T, T> op) =>
         b.Select(x => op(a, x));
 
+    /// <summary>
+    /// Applies a matrix to a vector, returning the resulting vector.
+    /// </summary>
+    /// <param name="vector"></param>
+    /// <param name="matrix"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     public static Complex[] ApplyMatrix(Complex[] vector, Complex[,] matrix)
     {
         int dim = vector.Length;
@@ -322,25 +329,77 @@ public static class QuantumMathUtility<T>
 
         return result;
     }
+
+    /// <summary>
+    /// Applies a quantum gate (unitary matrix) to a state vector.
+    /// </summary>
+    /// <param name="vector"></param>
+    /// <param name="gate"></param>
+    /// <returns></returns>
     public static Complex[] ApplyGate(Complex[] vector, Complex[,] gate)
+    => ApplyMatrix(vector, gate);
+
+    /// <summary>
+    /// Computes the tensor product of multiple QuBits, returning a dictionary of state combinations with combined amplitudes.
+    /// </summary>
+    public static Dictionary<T[], Complex> TensorProduct<T>(params QuBit<T>[] qubits)
     {
-        int dim = vector.Length;
+        if (qubits == null || qubits.Length == 0)
+            throw new ArgumentException("At least one qubit must be provided.");
 
-        if (gate.GetLength(0) != dim || gate.GetLength(1) != dim)
-            throw new ArgumentException($"Gate must be square with dimension {dim}");
-
-        var result = new Complex[dim];
-        for (int i = 0; i < dim; i++)
+        // Start with a single empty state with amplitude 1
+        var result = new List<(List<T> state, Complex amplitude)>
         {
-            result[i] = Complex.Zero;
-            for (int j = 0; j < dim; j++)
+            (new List<T>(), Complex.One)
+        };
+
+        foreach (var qubit in qubits)
+        {
+            var newResult = new List<(List<T>, Complex)>();
+            foreach (var (prefix, amp) in result)
             {
-                result[i] += gate[i, j] * vector[j];
+                foreach (var (value, weight) in qubit.ToWeightedValues())
+                {
+                    var newState = new List<T>(prefix) { value };
+                    newResult.Add((newState, amp * weight));
+                }
             }
+            result = newResult;
         }
 
-        return result;
+        // Convert to final dictionary
+        var dict = new Dictionary<T[], Complex>(new TensorKeyComparer<T>());
+        foreach (var (state, amp) in result)
+        {
+            dict[state.ToArray()] = amp;
+        }
+
+        return dict;
     }
+
+    // A comparer for arrays of T
+    private class TensorKeyComparer<TK> : IEqualityComparer<TK[]>
+    {
+        public bool Equals(TK[]? x, TK[]? y)
+        {
+            if (x == null || y == null) return false;
+            return x.SequenceEqual(y);
+        }
+
+        public int GetHashCode(TK[] obj)
+        {
+            unchecked
+            {
+                int hash = 17;
+                foreach (var item in obj)
+                {
+                    hash = hash * 31 + (item?.GetHashCode() ?? 0);
+                }
+                return hash;
+            }
+        }
+    }
+
 
 }
 
@@ -477,25 +536,82 @@ public class QuantumSystem
         var collapseId = Guid.NewGuid();
         foreach (var refQ in _registered)
         {
-            refQ.NotifyWavefunctionCollapsed(collapseId);
-
-            if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
+            // Check if the reference's qubit indices overlap with the observed indices.
+            if (refQ.GetQubitIndices().Intersect(qubitIndices).Any())
             {
-                _entanglement.PropagateCollapse(g1, collapseId);
+                refQ.NotifyWavefunctionCollapsed(collapseId);
+                if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
+                {
+                    _entanglement.PropagateCollapse(g1, collapseId);
+                }
+                else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
+                {
+                    _entanglement.PropagateCollapse(g2, collapseId);
+                }
+                else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
+                {
+                    _entanglement.PropagateCollapse(g3, collapseId);
+                }
             }
-            else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
-            {
-                _entanglement.PropagateCollapse(g2, collapseId);
-            }
-            else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
-            {
-                _entanglement.PropagateCollapse(g3, collapseId);
-            }
-
         }
 
         // Return observed values
         return chosenProjection;
+    }
+
+    /// <summary>
+    /// SetFromTensorProduct function.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="qubits"></param>
+    /// <exception cref="ArgumentException"></exception>
+    /// <exception cref="InvalidOperationException"></exception>
+    public void SetFromTensorProduct<T>(params QuBit<T>[] qubits)
+    {
+        if (qubits == null || qubits.Length == 0)
+            throw new ArgumentException("At least one qubit must be provided.");
+
+        int totalQubits = qubits.Length;
+
+        // Assign each qubit a unique system index
+        for (int i = 0; i < totalQubits; i++)
+        {
+            // Create a new system-linked qubit with the correct index
+            var systemQubit = new QuBit<T>(this, new[] { i });
+
+            // Copy over the state and weights
+            var original = qubits[i];
+            var weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight);
+            var withWeights = systemQubit.WithWeights(weights, autoNormalize: false);
+
+            // Replace original reference
+            qubits[i] = withWeights;
+        }
+
+        // Compute tensor product using the updated system-linked qubits
+        var product = QuantumMathUtility<T>.TensorProduct(qubits);
+
+        // Convert to system-compatible int[] wavefunction
+        var result = new Dictionary<int[], Complex>(new IntArrayComparer());
+        foreach (var (state, amplitude) in product)
+        {
+            int[] intState = state.Select(s =>
+            {
+                if (s is int i) return i;
+                if (s is bool b) return b ? 1 : 0;
+                throw new InvalidOperationException($"Unsupported type {typeof(T)} in tensor product state.");
+            }).ToArray();
+
+            result[intState] = amplitude;
+        }
+
+        _amplitudes = result;
+        NormaliseAmplitudes();
+
+        // Trigger a collapse to update all references
+        var collapseId = Guid.NewGuid();
+        foreach (var q in _registered)
+            q.NotifyWavefunctionCollapsed(collapseId);
     }
 
     /// <summary>
@@ -864,12 +980,10 @@ public abstract class QuantumSoup<T> : IQuantumObservable<T>
         return $"Weighted: true, Sum(|amp|²): {totalProbability}, Max(|amp|²): {maxP}, Min(|amp|²): {minP}";
     }
 
+    // I promise to pick you up from the airport, but I might never buy the car.
     public abstract QuantumSoup<T> Clone();
 
-    public T Observe(Random? rng = null)
-    {
-        throw new NotImplementedException();
-    }
+    public abstract T Observe(Random? rng = null);
 
 
     /// <summary>
