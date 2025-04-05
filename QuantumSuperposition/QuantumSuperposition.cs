@@ -274,6 +274,386 @@ public class EntanglementManager
 
 }
 
+public class DensityMatrixSystem<T>
+{
+    // Internal density matrix stored as a dictionary with keys (bra, ket)
+    // where each key is an int[] representing a basis state.
+    private Dictionary<(int[] bra, int[] ket), Complex> _matrix;
+
+    /// <summary>
+    /// Constructs a density matrix from a pure quantum system.
+    /// That is, if |ψ⟩ has amplitudes from system.Amplitudes, then
+    /// ρ = |ψ⟩⟨ψ| is built with elements ρ(bra, ket) = ψ(bra) * Conjugate(ψ(ket)).
+    /// </summary>
+    public DensityMatrixSystem(QuantumSystem quantumSystem)
+    {
+        if (quantumSystem == null)
+            throw new ArgumentNullException(nameof(quantumSystem));
+
+        // Initialize the matrix dictionary using an appropriate comparer.
+        _matrix = new Dictionary<(int[] bra, int[] ket), Complex>(new BasisPairComparer());
+
+        // For each pair of basis states in the quantum system, form the outer product.
+        foreach (var bra in quantumSystem.Amplitudes.Keys)
+        {
+            Complex ampBra = quantumSystem.Amplitudes[bra];
+            foreach (var ket in quantumSystem.Amplitudes.Keys)
+            {
+                Complex ampKet = quantumSystem.Amplitudes[ket];
+                // Use clones of the arrays to avoid reference issues.
+                int[] braCopy = (int[])bra.Clone();
+                int[] ketCopy = (int[])ket.Clone();
+                _matrix[(braCopy, ketCopy)] = ampBra * Complex.Conjugate(ampKet);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A second constructor that allows for a custom density matrix.
+    /// </summary>
+    /// <param name="matrix"></param>
+    /// <exception cref="ArgumentNullException"></exception>
+    public DensityMatrixSystem(Dictionary<(int[] bra, int[] ket), Complex> matrix)
+    {
+        _matrix = matrix ?? throw new ArgumentNullException(nameof(matrix));
+    }
+
+    /// <summary>
+    /// Returns the internal density matrix dictionary.
+    /// </summary>
+    public Dictionary<(int[] bra, int[] ket), Complex> GetMatrix() => _matrix;
+
+    /// <summary>
+    /// Updates the density matrix via: ρ → U ρ U†.
+    /// The unitary gate (of size 2^n × 2^n) is applied on the qubits specified in targetQubits.
+    /// </summary>
+    public void ApplyUnitary(Complex[,] gate, int[] targetQubits)
+    {
+        if (gate == null) throw new ArgumentNullException(nameof(gate));
+        if (targetQubits == null) throw new ArgumentNullException(nameof(targetQubits));
+
+        // Number of qubits the gate acts on.
+        int n = targetQubits.Length;
+        int d = gate.GetLength(0);
+        if (gate.GetLength(1) != d)
+            throw new ArgumentException("Gate must be a square matrix.");
+        if (d != (1 << n))
+            throw new ArgumentException("Gate dimension does not match the number of target qubits.");
+
+        var newMatrix = new Dictionary<(int[] bra, int[] ket), Complex>(new BasisPairComparer());
+
+        // For each element of the original density matrix:
+        foreach (var kvp in _matrix)
+        {
+            int[] bra = kvp.Key.bra;
+            int[] ket = kvp.Key.ket;
+            Complex value = kvp.Value;
+
+            // Extract the parts (substates) corresponding to target qubits.
+            int[] braSub = ExtractSubstate(bra, targetQubits);
+            int[] ketSub = ExtractSubstate(ket, targetQubits);
+            int braIndex = BitsToIndex(braSub);
+            int ketIndex = BitsToIndex(ketSub);
+
+            // The unitary acts as: new bra = Σ₍i₌0₎^(d–1) U[i, braIndex] (updated target bits),
+            // and new ket = Σ₍j₌0₎^(d–1) U[j, ketIndex] (with conjugation on the ket side).
+            for (int i = 0; i < d; i++)
+            {
+                int[] newBra = ReplaceSubstate(bra, targetQubits, IndexToBits(i, n));
+                for (int j = 0; j < d; j++)
+                {
+                    int[] newKet = ReplaceSubstate(ket, targetQubits, IndexToBits(j, n));
+                    Complex contribution = gate[i, braIndex] * value * Complex.Conjugate(gate[j, ketIndex]);
+                    var key = (newBra, newKet);
+                    if (newMatrix.ContainsKey(key))
+                        newMatrix[key] += contribution;
+                    else
+                        newMatrix[key] = contribution;
+                }
+            }
+        }
+        _matrix = newMatrix;
+    }
+
+    /// <summary>
+    /// Returns the probability of measuring the system in the given complete basis state.
+    /// This is the diagonal element ρ(outcome, outcome).
+    /// </summary>
+    public double GetProbabilityOf(int[] outcome)
+    {
+        if (outcome == null) throw new ArgumentNullException(nameof(outcome));
+        foreach (var kvp in _matrix)
+        {
+            if (ArraysEqual(kvp.Key.bra, outcome) && ArraysEqual(kvp.Key.ket, outcome))
+                return kvp.Value.Real; // Diagonal elements should be real.
+        }
+        return 0.0;
+    }
+
+    /// <summary>
+    /// Measures the qubits specified by targetQubits and collapses the density matrix.
+    /// It computes the probability for each outcome on those qubits, samples one,
+    /// then projects and normalizes the density matrix accordingly.
+    /// Returns the measured outcome (as an int[] for the target qubits).
+    /// </summary>
+    public int[] MeasureAndCollapse(int[] targetQubits)
+    {
+        if (targetQubits == null) throw new ArgumentNullException(nameof(targetQubits));
+        int n = targetQubits.Length;
+        // We'll accumulate probabilities for each outcome by reading the diagonal elements.
+        var outcomeProbs = new Dictionary<string, double>();
+        var outcomeMapping = new Dictionary<string, int[]>();
+
+        foreach (var kvp in _matrix)
+        {
+            // Only consider diagonal elements.
+            if (ArraysEqual(kvp.Key.bra, kvp.Key.ket))
+            {
+                int[] sub = ExtractSubstate(kvp.Key.bra, targetQubits);
+                string key = string.Join(",", sub);
+                if (outcomeProbs.ContainsKey(key))
+                    outcomeProbs[key] += kvp.Value.Real;
+                else
+                {
+                    outcomeProbs[key] = kvp.Value.Real;
+                    outcomeMapping[key] = sub;
+                }
+            }
+        }
+
+        double totalProb = outcomeProbs.Values.Sum();
+        if (totalProb <= 0)
+            throw new InvalidOperationException("Total probability is zero. Measurement cannot be performed.");
+
+        // Sample an outcome based on the probabilities.
+        double roll = Random.Shared.NextDouble() * totalProb;
+        double cumulative = 0.0;
+        string chosenKey = null;
+        foreach (var kvp in outcomeProbs)
+        {
+            cumulative += kvp.Value;
+            if (roll <= cumulative)
+            {
+                chosenKey = kvp.Key;
+                break;
+            }
+        }
+        if (chosenKey == null)
+            chosenKey = outcomeProbs.Keys.Last();
+        int[] chosenOutcome = outcomeMapping[chosenKey];
+
+        // Project: Only keep matrix elements for which both bra and ket have the chosen outcome on target qubits.
+        var newMatrix = new Dictionary<(int[] bra, int[] ket), Complex>(new BasisPairComparer());
+        double projProb = outcomeProbs[chosenKey];
+        foreach (var kvp in _matrix)
+        {
+            int[] bra = kvp.Key.bra;
+            int[] ket = kvp.Key.ket;
+            int[] braSub = ExtractSubstate(bra, targetQubits);
+            int[] ketSub = ExtractSubstate(ket, targetQubits);
+            if (ArraysEqual(braSub, chosenOutcome) && ArraysEqual(ketSub, chosenOutcome))
+            {
+                // Normalize by dividing by the probability.
+                int[] braCopy = (int[])bra.Clone();
+                int[] ketCopy = (int[])ket.Clone();
+                newMatrix[(braCopy, ketCopy)] = kvp.Value / projProb;
+            }
+        }
+        _matrix = newMatrix;
+        return chosenOutcome;
+    }
+
+    /// <summary>
+    /// Performs a partial trace over the qubits specified in qubitIndices.
+    /// This returns a new DensityMatrixSystem with a reduced state.
+    /// </summary>
+    public DensityMatrixSystem<T> TraceOutQubits(int[] qubitIndices)
+    {
+        if (qubitIndices == null) throw new ArgumentNullException(nameof(qubitIndices));
+        if (_matrix.Count == 0)
+            throw new InvalidOperationException("Density matrix is empty.");
+
+        // Determine which indices remain after tracing out.
+        int totalQubits = _matrix.Keys.First().bra.Length;
+        int[] remainingIndices = Enumerable.Range(0, totalQubits)
+                                           .Where(i => !qubitIndices.Contains(i))
+                                           .ToArray();
+
+        var newMatrix = new Dictionary<(int[] bra, int[] ket), Complex>(new BasisPairComparer());
+        foreach (var kvp in _matrix)
+        {
+            int[] bra = kvp.Key.bra;
+            int[] ket = kvp.Key.ket;
+            // Only contribute if the traced-out parts are identical.
+            bool include = true;
+            foreach (int i in qubitIndices)
+            {
+                if (bra[i] != ket[i])
+                {
+                    include = false;
+                    break;
+                }
+            }
+            if (include)
+            {
+                int[] newBra = ExtractSubstate(bra, remainingIndices);
+                int[] newKet = ExtractSubstate(ket, remainingIndices);
+                var key = (newBra, newKet);
+                if (newMatrix.ContainsKey(key))
+                    newMatrix[key] += kvp.Value;
+                else
+                    newMatrix[key] = kvp.Value;
+            }
+        }
+        return new DensityMatrixSystem<T>(newMatrix);
+    }
+
+    /// <summary>
+    /// Converts this density matrix back to a pure QuantumSystem if the state is rank‑1.
+    /// </summary>
+    public QuantumSystem ToQuantumSystem()
+    {
+        // A pure state density matrix has the form ρ = |ψ⟩⟨ψ|.
+        // One way to recover ψ is to choose a diagonal element (with nonzero value)
+        // and then compute ψ(bra) = ρ(bra, refState) / sqrt(ρ(refState, refState)).
+        var diag = _matrix.Where(kvp => ArraysEqual(kvp.Key.bra, kvp.Key.ket))
+                          .ToDictionary(kvp => kvp.Key.bra, kvp => kvp.Value);
+        int[] referenceState = null;
+        Complex refValue = 0;
+        foreach (var kvp in diag)
+        {
+            if (kvp.Value.Magnitude > 1e-12)
+            {
+                referenceState = kvp.Key;
+                refValue = kvp.Value;
+                break;
+            }
+        }
+        if (referenceState == null)
+            throw new InvalidOperationException("Cannot convert to pure state; density matrix is zero.");
+        double norm = Math.Sqrt(refValue.Real);
+
+        // Recover amplitudes for each basis state.
+        var amplitudes = new Dictionary<int[], Complex>(new IntArrayComparer());
+        foreach (var kvp in _matrix)
+        {
+            // Look for elements of the form ρ(bra, referenceState)
+            if (ArraysEqual(kvp.Key.ket, referenceState))
+            {
+                int[] bra = kvp.Key.bra;
+                amplitudes[bra] = kvp.Value / norm;
+            }
+        }
+        return new QuantumSystem(amplitudes);
+    }
+
+    /// <summary>
+    /// Computes the purity of the density matrix, i.e. Tr(ρ²).
+    /// For a pure state this equals 1.
+    /// </summary>
+    public double Purity()
+    {
+        double purity = 0.0;
+        foreach (var kvp in _matrix)
+        {
+            purity += kvp.Value.Magnitude * kvp.Value.Magnitude;
+        }
+        return purity;
+    }
+
+    #region Helper Functions
+
+    // Extracts the substate (subset of bits) from a full basis state.
+    private static int[] ExtractSubstate(int[] fullState, int[] indices)
+    {
+        int[] sub = new int[indices.Length];
+        for (int i = 0; i < indices.Length; i++)
+            sub[i] = fullState[indices[i]];
+        return sub;
+    }
+
+    // Checks whether two int arrays are element‐wise equal.
+    private static bool ArraysEqual(int[] a, int[] b)
+    {
+        if (a.Length != b.Length)
+            return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i])
+                return false;
+        }
+        return true;
+    }
+
+    // Converts an array of bits (assumed ordered from most significant to least) into an integer index.
+    private static int BitsToIndex(int[] bits)
+    {
+        int index = 0;
+        foreach (int bit in bits)
+            index = (index << 1) | bit;
+        return index;
+    }
+
+    // Converts an integer into an array of bits of the given length.
+    private static int[] IndexToBits(int index, int length)
+    {
+        int[] bits = new int[length];
+        for (int i = length - 1; i >= 0; i--)
+        {
+            bits[i] = index & 1;
+            index >>= 1;
+        }
+        return bits;
+    }
+
+    // Replaces the bits in fullState at positions given by indices with newBits.
+    private static int[] ReplaceSubstate(int[] fullState, int[] indices, int[] newBits)
+    {
+        int[] result = (int[])fullState.Clone();
+        for (int i = 0; i < indices.Length; i++)
+            result[indices[i]] = newBits[i];
+        return result;
+    }
+
+    // Comparer for (int[] bra, int[] ket) keys in the density matrix dictionary.
+    private class BasisPairComparer : IEqualityComparer<(int[] bra, int[] ket)>
+    {
+        public bool Equals((int[] bra, int[] ket) x, (int[] bra, int[] ket) y)
+        {
+            return ArraysEqual(x.bra, y.bra) && ArraysEqual(x.ket, y.ket);
+        }
+        public int GetHashCode((int[] bra, int[] ket) obj)
+        {
+            int hash = 17;
+            foreach (var val in obj.bra)
+                hash = hash * 31 + val;
+            foreach (var val in obj.ket)
+                hash = hash * 31 + val;
+            return hash;
+        }
+    }
+
+    // Simple comparer for int[] keys.
+    private class IntArrayComparer : IEqualityComparer<int[]>
+    {
+        public bool Equals(int[] a, int[] b)
+        {
+            if (a == null || b == null)
+                return a == b;
+            return a.SequenceEqual(b);
+        }
+        public int GetHashCode(int[] obj)
+        {
+            int hash = 17;
+            foreach (var val in obj)
+                hash = hash * 31 + val;
+            return hash;
+        }
+    }
+
+    #endregion
+}
+
 /// <summary>
 /// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
 /// </summary>
@@ -1376,49 +1756,47 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// </summary>
     /// <param name="rng">Optional random instance for deterministic replay.</param>
     /// <returns>The collapsed (observed) value.</returns>
-    public T Observe(Random? rng = null)
+    public override T Observe(Random? rng = null)
     {
-        // If mock collapse is enabled, return the forced mock value
+        return PerformCollapse(rng);
+    }
+
+
+    /// <summary>
+    /// Performs the collapse logic:
+    /// samples a value from the superposition, validates it,
+    /// updates internal state (e.g. _collapsedValue, _qList, _weights),
+    /// and marks the qubit as collapsed.
+    /// </summary>
+    public T PerformCollapse(Random? rng = null)
+    {
+        rng ??= Random.Shared;
+
+        // If mock collapse is enabled, return the forced value.
         if (_mockCollapseEnabled)
         {
             if (_mockCollapseValue == null)
-                throw new InvalidOperationException(
-                    $"Mock collapse enabled but no mock value is set. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
-                );
+                throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
             return _mockCollapseValue;
         }
 
-        // If already collapsed, return the same value
+        // If already collapsed, simply return the collapsed value.
         if (_isActuallyCollapsed && _collapsedValue != null && _eType == QuantumStateType.CollapsedResult)
         {
             return _collapsedValue;
         }
 
-        // Perform a real probabilistic collapse using weighted sampling
-        rng ??= Random.Shared;
-        // We only know the seed if user gave us one in Observe(int seed)
-        // But do assign a new collapseHistoryId for debugging
-        _collapseHistoryId = Guid.NewGuid();
-
+        // Sample a value from the superposition.
         T picked = SampleWeighted(rng);
 
-        // Use the configuration flag and value validator to protect against default(T)
         if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
-        {
             throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
-        }
 
-        // log whatever we get default(T)
         if (EqualityComparer<T>.Default.Equals(picked, default(T)))
-        {
-            throw new InvalidOperationException(
-                $"Collapse resulted in default value. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
-            );
-        }
+            throw new InvalidOperationException("Collapse resulted in default value.");
 
-        // Mark as collapsed
+        // Update internal state to reflect the collapse.
         _collapsedValue = picked;
-        
         _qList = new[] { picked };
         if (_weights != null)
         {
@@ -1429,6 +1807,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
         return picked;
     }
+
 
     /// <summary>
     /// Observes (collapses) the QuBit using a supplied integer seed for deterministic replay.
@@ -1827,9 +2206,11 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     {
         _isCollapsedFromSystem = true;
         _collapseHistoryId = collapseId;
-        // If this Qubit is not locally collapsed yet, do a local collapse.
-        if (!_isActuallyCollapsed)
-            Observe(); // local collapse (with default RNG)
+        // Do not call Observe() here—external system will handle actual collapse.
+        if (_isActuallyCollapsed)
+        {
+            throw new InvalidOperationException("Qubit was already locally collapsed before global notification.");
+        }
     }
 
     public object? GetObservedValue()
@@ -2430,18 +2811,14 @@ public class Eigenstates<T> : QuantumSoup<T>
 
     #region Observation & Collapse, Mocking, Introspection
 
-    private bool _mockCollapseEnabled;
-    private T? _mockCollapseValue;
     public Guid? CollapseHistoryId => _collapseHistoryId;
-    public int? LastCollapseSeed => _lastCollapseSeed;
-
 
     /// <summary>
     /// Observes (collapses) the Eigenstates with an optional random instance
     /// If mock collapse is enabled, it will return the forced value without changing state.
     /// Otherwise, perform a real probabilistic collapse.
     /// </summary>
-    public T Observe(Random? rng = null)
+    public override T Observe(Random? rng = null)
     {
         if (_mockCollapseEnabled)
         {
