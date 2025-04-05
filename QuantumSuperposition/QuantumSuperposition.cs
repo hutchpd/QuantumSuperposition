@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Numerics;
+using System.Text.Json;
 
 // Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
@@ -10,9 +11,9 @@ using System.Numerics;
 /// </summary>
 public enum QuantumStateType
 {
-    Conjunctive,      // All states must be true. Like group projects, but successful.
-    Disjunctive,      // Any state can be true. Like excuses for missing deadlines.
-    CollapsedResult   // Only one state remains after collapse. R.I.P. potential.
+    SuperpositionAll,      // All states must be true. Like group projects, but successful.
+    SuperpositionAny,      // Any state can be true. Like excuses for missing deadlines.
+    CollapsedResult        // Only one state remains after collapse. R.I.P. potential.
 }
 
 // A set of mathematical operations tailored for types that wish they were numbers.
@@ -633,24 +634,6 @@ public class DensityMatrixSystem<T>
         }
     }
 
-    // Simple comparer for int[] keys.
-    private class IntArrayComparer : IEqualityComparer<int[]>
-    {
-        public bool Equals(int[] a, int[] b)
-        {
-            if (a == null || b == null)
-                return a == b;
-            return a.SequenceEqual(b);
-        }
-        public int GetHashCode(int[] obj)
-        {
-            int hash = 17;
-            foreach (var val in obj)
-                hash = hash * 31 + val;
-            return hash;
-        }
-    }
-
     #endregion
 }
 
@@ -1199,7 +1182,7 @@ public abstract class QuantumSoup<T> : IQuantumObservable<T>
     /// <exception cref="InvalidOperationException"></exception>
     public bool EvaluateAll()
     {
-        SetType(QuantumStateType.Conjunctive);
+        SetType(QuantumStateType.SuperpositionAll);
 
         // More descriptive exception if empty
         if (!States.Any())
@@ -1399,7 +1382,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     public Guid? EntanglementGroupId => _entanglementGroupId;
     public void SetEntanglementGroup(Guid id) => _entanglementGroupId = id;
 
-    public bool IsInSuperposition => _eType == QuantumStateType.Disjunctive && !_isActuallyCollapsed;
+    public bool IsInSuperposition => _eType == QuantumStateType.SuperpositionAny && !_isActuallyCollapsed;
 
     #region Constructors
     // Constructors that enable you to manifest chaotic energy into a typed container.
@@ -1423,7 +1406,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         _system.Register(this);
 
         // This qubit is in superposition until a collapse occurs
-        _eType = QuantumStateType.Disjunctive;
+        _eType = QuantumStateType.SuperpositionAny;
 
     }
 
@@ -1461,7 +1444,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         var qubit = new QuBit<T>(states);
         var distinctCount = qubit.States.Distinct().Count();
         if (distinctCount > 1)
-            qubit._eType = QuantumStateType.Disjunctive;
+            qubit._eType = QuantumStateType.SuperpositionAny;
         return qubit;
     }
 
@@ -1473,7 +1456,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         _qList = Items;
 
         if (_qList.Distinct().Count() > 1)
-            _eType = QuantumStateType.Disjunctive;
+            _eType = QuantumStateType.SuperpositionAny;
 
         // no system
         _system = null;
@@ -1506,7 +1489,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         _qList = dict.Keys; // keep a fallback list of keys
 
         if (_weights.Count > 1)
-            SetType(QuantumStateType.Disjunctive);
+            SetType(QuantumStateType.SuperpositionAny);
 
         // no system
         _system = null;
@@ -1521,7 +1504,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         _ops = ops;
 
         if (States.Distinct().Count() > 1)
-            SetType(QuantumStateType.Disjunctive);
+            SetType(QuantumStateType.SuperpositionAny);
 
         // no system
         _system = null;
@@ -1552,7 +1535,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         }
 
         if (States.Distinct().Count() > 1)
-            SetType(QuantumStateType.Disjunctive);
+            SetType(QuantumStateType.SuperpositionAny);
 
         return this;
     }
@@ -1583,7 +1566,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         clone._collapsedValue = default;
         clone._collapseHistoryId = null;
         clone._lastCollapseSeed = null;
-        clone._eType = this._eType == QuantumStateType.CollapsedResult ? QuantumStateType.Disjunctive : this._eType;
+        clone._eType = this._eType == QuantumStateType.CollapsedResult ? QuantumStateType.SuperpositionAny : this._eType;
         return clone;
     }
 
@@ -1608,8 +1591,8 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
    
 
-    public QuBit<T> Any() { SetType(QuantumStateType.Disjunctive); return this; }
-    public QuBit<T> All() { SetType(QuantumStateType.Conjunctive); return this; }
+    public QuBit<T> Any() { SetType(QuantumStateType.SuperpositionAny); return this; }
+    public QuBit<T> All() { SetType(QuantumStateType.SuperpositionAll); return this; }
 
     #endregion
 
@@ -1881,10 +1864,6 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         return this;
     }
 
-    // ---------------------------------------------------------------------
-    // Introspection / Utilities
-    // ---------------------------------------------------------------------
-
     /// <summary>
     /// Returns a string representation of the current superposition states and their weights
     /// without triggering a collapse. Useful for debugging and introspection.
@@ -1906,9 +1885,9 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
             );
         }
 
-        if (_eType == QuantumStateType.Disjunctive)
+        if (_eType == QuantumStateType.SuperpositionAny)
             return States;
-        else if (_eType == QuantumStateType.Conjunctive)
+        else if (_eType == QuantumStateType.SuperpositionAll)
         {
             var distinct = States.Distinct().ToList();
             return distinct.Count == 1 ? distinct : States;
@@ -2011,7 +1990,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         if (_weights == null || AllWeightsEqual(_weights))
         {
             var distinct = States.Distinct();
-            if (_eType == QuantumStateType.Disjunctive)
+            if (_eType == QuantumStateType.SuperpositionAny)
                 return $"any({string.Join(", ", distinct)})";
             else
             {
@@ -2023,7 +2002,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         {
             // Weighted
             var entries = ToWeightedValues().Select(x => $"{x.value}:{x.weight}");
-            return _eType == QuantumStateType.Disjunctive
+            return _eType == QuantumStateType.SuperpositionAny
                 ? $"any({string.Join(", ", entries)})"
                 : $"all({string.Join(", ", entries)})";
         }
@@ -2038,6 +2017,27 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         return string.Join(", ", ToWeightedValues()
             .Select(x => $"{x.value} (weight: {x.weight})"));
     }
+
+    /// <summary>
+    /// Returns a JSON string representation of the current superposition states and their weights.
+    /// </summary>
+    /// <returns></returns>
+    public string ToJsonDebugString()
+    {
+        var obj = new
+        {
+            states = this.ToWeightedValues().Select(v => new {
+                value = v.value,
+                amplitude = new { real = v.weight.Real, imag = v.weight.Imaginary },
+                probability = v.weight.Magnitude * v.weight.Magnitude
+            }),
+            collapsed = this.IsCollapsed,
+            collapseId = this.LastCollapseHistoryId,
+            qubitIndices = this.GetQubitIndices()
+        };
+        return JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
+    }
+
 
     /// <summary>
     /// Checks if all weights in the dictionary are equal.
@@ -2468,8 +2468,8 @@ public class Eigenstates<T> : QuantumSoup<T>
     // Toggle between “any of these are fine” and “they all better agree”.
     // Like relationship statuses but for probability distributions.
 
-    public Eigenstates<T> Any() { _eType = QuantumStateType.Disjunctive; return this; }
-    public Eigenstates<T> All() { _eType = QuantumStateType.Conjunctive; return this; }
+    public Eigenstates<T> Any() { _eType = QuantumStateType.SuperpositionAny; return this; }
+    public Eigenstates<T> All() { _eType = QuantumStateType.SuperpositionAll; return this; }
 
     #endregion
 
@@ -2722,14 +2722,14 @@ public class Eigenstates<T> : QuantumSoup<T>
             if (distinctKeys.Count == 1)
                 return distinctKeys.First().ToString();
 
-            return _eType == QuantumStateType.Disjunctive
+            return _eType == QuantumStateType.SuperpositionAny
                 ? $"any({string.Join(", ", distinctKeys)})"
                 : $"all({string.Join(", ", distinctKeys)})";
         }
         else
         {
             var pairs = ToMappedWeightedValues().Select(x => $"{x.value}:{x.weight}");
-            return _eType == QuantumStateType.Disjunctive
+            return _eType == QuantumStateType.SuperpositionAny
                 ? $"any({string.Join(", ", pairs)})"
                 : $"all({string.Join(", ", pairs)})";
         }
