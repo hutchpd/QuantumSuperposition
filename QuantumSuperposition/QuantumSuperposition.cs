@@ -148,6 +148,7 @@ public class ComplexOperators : IQuantumOperators<Complex>
 /// </summary>
 public class EntanglementManager
 {
+    private readonly Dictionary<IQuantumReference, HashSet<Guid>> _referenceToGroups = new();
     private readonly Dictionary<Guid, List<IQuantumReference>> _groups = new();
 
     /// <summary>
@@ -156,8 +157,46 @@ public class EntanglementManager
     /// </summary>
     public Guid Link(params IQuantumReference[] qubits)
     {
+        QuantumSystem? firstSystem = null;
+        foreach (var q in qubits)
+        {
+            // If the reference is a QuBit<int> or QuBit<bool> or QuBit<Complex>, they have _system
+            if (q is QuBit<int> qi && qi.System is { } sys)
+            {
+                if (firstSystem == null) firstSystem = sys;
+                else if (firstSystem != sys)
+                    throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
+            }
+            else if (q is QuBit<bool> qb && qb.System is { } sysB)
+            {
+                if (firstSystem == null) firstSystem = sysB;
+                else if (firstSystem != sysB)
+                    throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
+            }
+            else if (q is QuBit<Complex> qc && qc.System is { } sysC)
+            {
+                if (firstSystem == null) firstSystem = sysC;
+                else if (firstSystem != sysC)
+                    throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
+            }
+            else
+                throw new InvalidOperationException("Unsupported qubit type for linking.");
+        }
+
         var id = Guid.NewGuid();
         _groups[id] = qubits.ToList();
+
+        // After creating the group, also update the referenceToGroups dictionary
+        foreach (var q in qubits)
+        {
+            if (!_referenceToGroups.TryGetValue(q, out var groupSet))
+            {
+                groupSet = new HashSet<Guid>();
+                _referenceToGroups[q] = groupSet;
+            }
+            groupSet.Add(id);
+        }
+
         return id;
     }
 
@@ -173,15 +212,46 @@ public class EntanglementManager
     /// </summary>
     public void PropagateCollapse(Guid groupId, Guid collapseId)
     {
-        if (_groups.TryGetValue(groupId, out var group))
+        var visitedGroups = new HashSet<Guid>();
+        var visitedReferences = new HashSet<IQuantumReference>();
+
+        PropagateRecursive(groupId, collapseId, visitedGroups, visitedReferences);
+    }
+
+    private void PropagateRecursive(Guid currentGroupId, Guid collapseId,
+                                HashSet<Guid> visitedGroups,
+                                HashSet<IQuantumReference> visitedReferences)
+    {
+        // If we’ve already visited this group, skip to avoid cycles
+        if (!visitedGroups.Add(currentGroupId))
+            return;
+
+        // Retrieve group members
+        if (!_groups.TryGetValue(currentGroupId, out var groupMembers))
+            return;
+
+        // For each qubit in the group:
+        foreach (var q in groupMembers)
         {
-            foreach (var q in group)
-                q.NotifyWavefunctionCollapsed(collapseId);
+            // If we’ve already visited this reference, skip
+            if (!visitedReferences.Add(q))
+                continue;
+
+            // Notify each qubit
+            q.NotifyWavefunctionCollapsed(collapseId);
+
+            // Then see which other groups this qubit belongs to
+            var otherGroups = GetGroupsForReference(q);
+            foreach (var g in otherGroups)
+            {
+                if (g != currentGroupId)
+                    PropagateRecursive(g, collapseId, visitedGroups, visitedReferences);
+            }
         }
     }
 
     /// <summary>
-    /// 
+    /// Prints the current entanglement statistics.
     /// </summary>
     public void PrintEntanglementStats()
     {
@@ -191,6 +261,17 @@ public class EntanglementManager
             Console.WriteLine($"Group {id}: {list.Count} qubits");
         }
     }
+
+    /// <summary>
+    /// Returns all groups that a given reference belongs to.
+    /// </summary>
+    /// <param name="q"></param>
+    /// <returns></returns>
+    public List<Guid> GetGroupsForReference(IQuantumReference q)
+    {
+        return _referenceToGroups.TryGetValue(q, out var s) ? s.ToList() : new List<Guid>();
+    }
+
 }
 
 /// <summary>
@@ -818,6 +899,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     private readonly QuantumSystem? _system;
     private bool _isCollapsedFromSystem;
     private object? _systemObservedValue;
+    public QuantumSystem? System => _system;
 
     private Guid? _entanglementGroupId;
     public Guid? EntanglementGroupId => _entanglementGroupId;
@@ -2523,6 +2605,9 @@ public class Eigenstates<T> : QuantumSoup<T>
         return newEigen;
     }
 
+    /// <summary>
+    /// Returns a string representation of the Eigenstates,
+    /// </summary>
     public string ToDebugString(bool includeCollapseMetadata = false)
     {
         var baseInfo = _weights == null
@@ -2539,6 +2624,10 @@ public class Eigenstates<T> : QuantumSoup<T>
                $"Seed: {_lastCollapseSeed}, ID: {_collapseHistoryId}";
     }
 
+    /// <summary>
+    /// This quantum decision was final… but I copied it into a new universe where it wasn’t
+    /// Cloning a collapsed QuBit resets its collapse status. The new instance retains the amplitudes and quantum state type, but is mutable and behaves as if never observed.
+    /// </summary>
     public override QuantumSoup<T> Clone()
     {
         // Deep clone the key-to-value mapping.
