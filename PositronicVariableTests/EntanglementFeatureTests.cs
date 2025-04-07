@@ -49,10 +49,17 @@ namespace QuantumMathTests
         public void CollapsePropagation_CollapsingOneQubitNotifiesOthersInGroup()
         {
             // Arrange
-            var qubitA = new QuBit<int>(_system, new[] { 0 });
-            var qubitB = new QuBit<int>(_system, new[] { 1 });
+            var qubitA = new QuBit<int>(_system, new[] { 1, 2 });
+            var qubitB = new QuBit<int>(_system, new[] { 1, 2 });
+
+            qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
+            qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
 
             _system.Entangle("MyGroup", qubitA, qubitB);
+            _system.SetFromTensorProduct(qubitA, qubitB);
+
+            // set QuantumConfig.ForbidDefaultOnCollapse = false;
+            QuantumConfig.ForbidDefaultOnCollapse = false; // Allow default collapse behavior
 
             // Act
             var observedA = qubitA.Observe(); // triggers a collapse
@@ -65,7 +72,10 @@ namespace QuantumMathTests
             var bValue = qubitB.GetObservedValue();
             // In a real partial measurement scenario, you’d check consistency,
             // but here we only confirm that B was indeed collapsed from propagation.
+
             Assert.NotNull(bValue, "Qubit B must have a consistent observed value after the collapse ripple.");
+
+            // TODO: assert that bValue matches expected logic based on the entanglement
         }
         #endregion
 

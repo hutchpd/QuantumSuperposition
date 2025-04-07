@@ -122,6 +122,21 @@ public class IntOperators : IQuantumOperators<int>
     public bool NotEqual(int a, int b) => a != b;
 }
 
+public class BooleanOperators : IQuantumOperators<bool>
+{
+    public bool Add(bool a, bool b) => a || b; // logical OR
+    public bool Subtract(bool a, bool b) => a && !b; // arbitrary definition
+    public bool Multiply(bool a, bool b) => a && b; // logical AND
+    public bool Divide(bool a, bool b) => throw new NotSupportedException("Division not supported for booleans.");
+    public bool Mod(bool a, bool b) => throw new NotSupportedException("Modulus not supported for booleans.");
+    public bool GreaterThan(bool a, bool b) => false; // not well-defined
+    public bool GreaterThanOrEqual(bool a, bool b) => a == b; // or false
+    public bool LessThan(bool a, bool b) => false;
+    public bool LessThanOrEqual(bool a, bool b) => a == b;
+    public bool Equal(bool a, bool b) => a == b;
+    public bool NotEqual(bool a, bool b) => a != b;
+}
+
 /// <summary>
 /// Like a quantum therapist, but for complex numbers. Helps them add, subtract, and multiply their feelings.
 /// </summary>
@@ -209,6 +224,8 @@ public class EntanglementManager
             }
             groupSet.Add(id);
         }
+
+        _groupHistory[id] = new List<EntanglementGroupVersion>();
 
         _groupHistory[id].Add(new EntanglementGroupVersion
         {
@@ -693,6 +710,9 @@ public static class QuantumOperatorsFactory
         if (typeof(T) == typeof(Complex))
             return (IQuantumOperators<T>)(object)new ComplexOperators();
 
+        if (typeof(T) == typeof(bool))
+            return (IQuantumOperators<T>)(object)new BooleanOperators();
+
         throw new NotImplementedException("Default operators not implemented for type " + typeof(T));
     }
 }
@@ -982,11 +1002,10 @@ public class QuantumSystem
         // Assign each qubit a unique system index
         for (int i = 0; i < totalQubits; i++)
         {
-            // Create a new system-linked qubit with the correct index
-            var systemQubit = new QuBit<T>(this, new[] { i });
-
             // Copy over the state and weights
             var original = qubits[i];
+            var systemQubit = new QuBit<T>(original.States, original.Operators);
+
             var weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight);
             var withWeights = systemQubit.WithWeights(weights, autoNormalize: false);
 
@@ -1387,6 +1406,10 @@ public abstract class QuantumSoup<T> : IQuantumObservable<T>
     }
 
     // I promise to pick you up from the airport, but I might never buy the car.
+    /// <summary>
+    /// The quantum clononing paradox: perfect cloning is actually forbidden, but we can still make copies.
+    /// </summary>
+    /// <returns></returns>
     public abstract QuantumSoup<T> Clone();
 
     public abstract T Observe(Random? rng = null);
@@ -1447,6 +1470,8 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
         // I exist yelled the qubit, and the system is my parent! Daddy!!!
         _system.Register(this);
+
+        _qList = new List<T> { (T)Convert.ChangeType(0, typeof(T)), (T)Convert.ChangeType(1, typeof(T)) };
 
         // This qubit is in superposition until a collapse occurs
         _eType = QuantumStateType.SuperpositionAny;
@@ -1818,9 +1843,6 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
             throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
 
-        if (EqualityComparer<T>.Default.Equals(picked, default(T)))
-            throw new InvalidOperationException("Collapse resulted in default value.");
-
         // Update internal state to reflect the collapse.
         _collapsedValue = picked;
         _qList = new[] { picked };
@@ -1996,32 +2018,41 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// <summary>
     /// Optionally, modify WithWeights(...) to auto-normalize if desired:
     /// </summary>
-
     public QuBit<T> WithWeights(Dictionary<T, Complex> weights, bool autoNormalize = false)
+{
+    if (weights == null)
+        throw new ArgumentNullException(nameof(weights));
+
+    // Filter weights to only include valid states.
+    var filtered = new Dictionary<T, Complex>();
+    foreach (var kvp in weights)
     {
+        if (States.Contains(kvp.Key))
+            filtered[kvp.Key] = kvp.Value;
+    }
 
-        if (weights == null) throw new ArgumentNullException(nameof(weights));
-
-        // Gather only the weights for keys we already have in States.
-
-        var filtered = new Dictionary<T, Complex>();
-
-        foreach (var kvp in weights)
-        {
-            if (States.Contains(kvp.Key))
-                filtered[kvp.Key] = kvp.Value;
-        }
-
+    if (this.System != null)
+    {
+        // Update this instance’s weights in place.
+        _weights = filtered;
+        if (autoNormalize)
+            NormaliseWeights();
+        return this;
+    }
+    else
+    {
+        // For local qubits (no system), use immutable style.
         var newQ = new QuBit<T>(_qList, filtered, _ops)
         {
             _eType = this._eType
         };
-
+        newQ._weights = filtered;
         if (autoNormalize)
             newQ.NormaliseWeights();
-
         return newQ;
     }
+}
+
 
     /// <summary>
     /// Returns a string representation of the current superposition states.
