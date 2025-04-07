@@ -75,8 +75,8 @@ Console.WriteLine($"Final Output: {node.Output}");
 
 ## Development
 
-- C# 10 / .NET 6+
-- NuGet-ready projects (soon™)
+- C# 10 / .NET 8+
+- NuGet-ready projects
 - Tests included for quantum math and timeline logic
 
 ---
