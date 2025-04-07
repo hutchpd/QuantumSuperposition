@@ -52,14 +52,14 @@ namespace QuantumMathTests
                 var qubitA = new QuBit<int>(_system, new[] { 0 });
                 var qubitB = new QuBit<int>(_system, new[] { 1 });
 
-                qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
-                qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
+                qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
+                qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
 
                 _system.Entangle("MyGroup", qubitA, qubitB);
-                _system.SetFromTensorProduct(qubitA, qubitB);
+            _system.SetFromTensorProduct(true, qubitA, qubitB);
 
-                // set QuantumConfig.ForbidDefaultOnCollapse = false;
-                QuantumConfig.ForbidDefaultOnCollapse = false; // Allow default collapse behavior
+            // set QuantumConfig.ForbidDefaultOnCollapse = false;
+            QuantumConfig.ForbidDefaultOnCollapse = false; // Allow default collapse behavior
 
                 // Act
                 var observedA = qubitA.Observe(); // triggers a collapse
@@ -120,15 +120,15 @@ namespace QuantumMathTests
         {
             // Arrange: 2 qubits entangled
             var qubitA = new QuBit<int>(_system, new[] { 0 })
-                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
 
             var qubitB = new QuBit<int>(_system, new[] { 1 })
-                .WithWeights(new Dictionary<int, Complex> { { 0, 2.0 }, { 1, 3.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<int, Complex> { { 0, 2.0 }, { 1, 3.0 } }, autoNormalise: true);
 
             _system.Entangle("MutationGroup", qubitA, qubitB);
 
             // Act: mutate qubitA’s weighting *before* any collapse
-            qubitA = qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 5.0 }, { 1, 1.0 } }, autoNormalize: true);
+            qubitA = qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 5.0 }, { 1, 1.0 } }, autoNormalise: true);
 
             // Normally, you might do a system-level re-tensor or something, but the example
             // code doesn't strictly do that automatically. In a real system, you'd recalc
@@ -221,13 +221,13 @@ namespace QuantumMathTests
         {
             // Arrange
             var qubitX = new QuBit<int>(_system, new[] { 0 })
-                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalise: true);
             var qubitY = new QuBit<int>(_system, new[] { 1 })
-                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalise: true);
 
             _system.Entangle("MultiPartyGroup", qubitX, qubitY);
 
-            _system.SetFromTensorProduct(qubitX, qubitY);
+            _system.SetFromTensorProduct(true, qubitX, qubitY);
 
             // Act: Observe from qubitX
             var valueX = qubitX.Observe(1234);  // seeded for determinism
@@ -297,29 +297,37 @@ namespace QuantumMathTests
         {
             // Arrange: 2 qubits in a system
             var qubit1 = new QuBit<bool>(_system, new[] { 0 })
-                .WithWeights(new Dictionary<bool, Complex> { { false, 1.0 }, { true, 1.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<bool, Complex>
+                {
+            { false, 1.0 },
+            { true, 1.0 }
+                }, autoNormalise: true);
             var qubit2 = new QuBit<bool>(_system, new[] { 1 })
-                .WithWeights(new Dictionary<bool, Complex> { { false, 2.0 }, { true, 1.0 } }, autoNormalize: true);
+                .WithWeights(new Dictionary<bool, Complex>
+                {
+            { false, 2.0 },
+            { true, 1.0 }
+                }, autoNormalise: true);
 
+            // Entangle and initialize the global state.
             _system.Entangle("PartialCollapse", qubit1, qubit2);
+            _system.SetFromTensorProduct(false, qubit1, qubit2);
 
-            // Act: measure qubit1 only
-            var measureQ1 = qubit1.Observe(42);
+            // Act: perform a partial observation of qubit1 only.
+            var outcomeQ1 = _system.PartialObserve(new[] { 0 }, new Random(42));
+            bool observedQ1 = outcomeQ1[0] != 0; // Convert int (0/1) to bool
 
-            // In a real partial measurement, qubit2 might remain in superposition 
-            // conditioned on qubit1's outcome. For the sample code, once the system does a global measure 
-            // on Q1’s index, it effectively collapses the entire wavefunction. 
-            // But we can still check that Q2 has an observed value or is flagged collapsed.
+            // Assert that qubit1 is collapsed to the measured value.
+            Assert.True(qubit1.IsCollapsed, "Qubit1 should be collapsed after partial measurement.");
+            Assert.AreEqual(observedQ1, (bool)qubit1.GetObservedValue());
 
-            var q2Val = qubit2.GetObservedValue();
+            // For a true partial measurement, qubit2 should remain uncollapsed.
+            Assert.False(qubit2.IsCollapsed, "Qubit2 should still be uncollapsed (in superposition) after partial measurement.");
+            Assert.IsNull(qubit2.GetObservedValue(), "Qubit2 should have no observed value yet.");
 
-            // Assert
-            Assert.True(qubit1.IsCollapsed, "First qubit definitely collapsed after direct observation.");
-            Assert.NotNull(q2Val, "Second qubit is also collapsed by the global wavefunction update in this code base.");
-
-            // This test is conceptual: to do real “partial” staging, we’d need partial measurement logic
-            // that only collapses subspace. The sample system code does a full wavefunction measure on those qubits. 
-            // TODO: ensure add partial measure logic to the system for real partial collapse.
+            // If we now measure qubit2 explicitly, it should then collapse.
+            bool observedQ2 = qubit2.Observe(100);
+            Assert.True(qubit2.IsCollapsed, "Qubit2 should collapse when directly observed.");
         }
         #endregion
 
