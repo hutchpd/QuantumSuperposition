@@ -44,40 +44,40 @@ namespace QuantumMathTests
         }
         #endregion
 
-        #region Collapse Propagation: Ensure collapse ripples through entangled graph
-        [Test]
-        public void CollapsePropagation_CollapsingOneQubitNotifiesOthersInGroup()
-        {
-            // Arrange
-            var qubitA = new QuBit<int>(_system, new[] { 1, 2 });
-            var qubitB = new QuBit<int>(_system, new[] { 1, 2 });
+            #region Collapse Propagation: Ensure collapse ripples through entangled graph
+            [Test]
+            public void CollapsePropagation_CollapsingOneQubitNotifiesOthersInGroup()
+            {
+                // Arrange
+                var qubitA = new QuBit<int>(_system, new[] { 0 });
+                var qubitB = new QuBit<int>(_system, new[] { 1 });
 
-            qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
-            qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
+                qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
+                qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalize: true);
 
-            _system.Entangle("MyGroup", qubitA, qubitB);
-            _system.SetFromTensorProduct(qubitA, qubitB);
+                _system.Entangle("MyGroup", qubitA, qubitB);
+                _system.SetFromTensorProduct(qubitA, qubitB);
 
-            // set QuantumConfig.ForbidDefaultOnCollapse = false;
-            QuantumConfig.ForbidDefaultOnCollapse = false; // Allow default collapse behavior
+                // set QuantumConfig.ForbidDefaultOnCollapse = false;
+                QuantumConfig.ForbidDefaultOnCollapse = false; // Allow default collapse behavior
 
-            // Act
-            var observedA = qubitA.Observe(); // triggers a collapse
+                // Act
+                var observedA = qubitA.Observe(); // triggers a collapse
 
-            // Assert: QubitB should be flagged as collapsed from system
-            Assert.IsTrue(qubitB.IsCollapsed, "Qubit B must be marked as collapsed due to propagation.");
-            Assert.IsTrue(qubitA.IsCollapsed, "Qubit A itself is obviously collapsed.");
+                // Assert: QubitB should be flagged as collapsed from system
+                Assert.IsTrue(qubitB.IsCollapsed, "Qubit B must be marked as collapsed due to propagation.");
+                Assert.IsTrue(qubitA.IsCollapsed, "Qubit A itself is obviously collapsed.");
 
-            // Because qubitB belongs to the same group, system notified it:
-            var bValue = qubitB.GetObservedValue();
-            // In a real partial measurement scenario, you’d check consistency,
-            // but here we only confirm that B was indeed collapsed from propagation.
+                // Because qubitB belongs to the same group, system notified it:
+                var bValue = qubitB.GetObservedValue();
+                // In a real partial measurement scenario, you’d check consistency,
+                // but here we only confirm that B was indeed collapsed from propagation.
 
-            Assert.NotNull(bValue, "Qubit B must have a consistent observed value after the collapse ripple.");
+                Assert.NotNull(bValue, "Qubit B must have a consistent observed value after the collapse ripple.");
 
-            // TODO: assert that bValue matches expected logic based on the entanglement
-        }
-        #endregion
+                // TODO: assert that bValue matches expected logic based on the entanglement
+            }
+            #endregion
 
         #region Tensor Product Expansion: Compute all state combinations across variables
         [Test]
@@ -227,6 +227,8 @@ namespace QuantumMathTests
 
             _system.Entangle("MultiPartyGroup", qubitX, qubitY);
 
+            _system.SetFromTensorProduct(qubitX, qubitY);
+
             // Act: Observe from qubitX
             var valueX = qubitX.Observe(1234);  // seeded for determinism
 
@@ -255,10 +257,10 @@ namespace QuantumMathTests
 
             // Hypothetical scenario: manager sets a “locked” state for the group
             var groupId = _manager.Link("LockTestGroup", qubitA);
-            bool isLocked = true; // imagine you have a manager method that toggles a lock
+            qubitA.Lock();
 
             // Act & Assert
-            if (isLocked)
+            if (qubitA.IsLocked)
             {
                 Assert.Throws<InvalidOperationException>(() =>
                 {
@@ -315,9 +317,9 @@ namespace QuantumMathTests
             Assert.True(qubit1.IsCollapsed, "First qubit definitely collapsed after direct observation.");
             Assert.NotNull(q2Val, "Second qubit is also collapsed by the global wavefunction update in this code base.");
 
-            // This test is conceptual: to do real “partial” staging, you’d need partial measurement logic
+            // This test is conceptual: to do real “partial” staging, we’d need partial measurement logic
             // that only collapses subspace. The sample system code does a full wavefunction measure on those qubits. 
-            // Adjust to your extended code if partial measurement is more nuanced.
+            // TODO: ensure add partial measure logic to the system for real partial collapse.
         }
         #endregion
 
