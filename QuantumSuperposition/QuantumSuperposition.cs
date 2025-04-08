@@ -5,6 +5,52 @@ using System.Text.RegularExpressions;
 
 // Because quantum code should be at least as confusing as quantum physics.
 #region QuantumCore
+namespace QuantumCore
+{
+    /// <summary>
+    /// A centralized repository for common quantum gate matrices.
+    /// This includes built-in gates like Hadamard, Root-NOT, etc.
+    /// </summary>
+    public static class QuantumGates
+    {
+        // Hadamard gate – creates an equal superposition.
+        public static Complex[,] Hadamard => new Complex[,]
+        {
+            { 1/Math.Sqrt(2),  1/Math.Sqrt(2) },
+            { 1/Math.Sqrt(2), -1/Math.Sqrt(2) }
+        };
+
+        // Identity gate – does nothing.
+        public static Complex[,] Identity => new Complex[,]
+        {
+            { 1, 0 },
+            { 0, 1 }
+        };
+
+        // Pauli-X gate (NOT gate) – flips the basis states.
+        public static Complex[,] PauliX => new Complex[,]
+        {
+            { 0, 1 },
+            { 1, 0 }
+        };
+
+        // Root-NOT gate – the square root of the Pauli-X gate.
+        // When applied twice, it produces the Pauli-X gate.
+        public static Complex[,] RootNot => new Complex[,]
+        {
+            { (1 + Complex.ImaginaryOne)/2.0, (1 - Complex.ImaginaryOne)/2.0 },
+            { (1 - Complex.ImaginaryOne)/2.0, (1 + Complex.ImaginaryOne)/2.0 }
+        };
+
+        // Optional: A phase gate that rotates by a given angle theta.
+        public static Complex[,] Phase(double theta) => new Complex[,]
+        {
+            { 1, 0 },
+            { 0, Complex.Exp(Complex.ImaginaryOne * theta) }
+        };
+    }
+}
+
 
 /// <summary>
 /// Represents the current mood of the QuBit. Is it feeling inclusive (All)?
