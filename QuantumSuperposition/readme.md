@@ -40,7 +40,7 @@ Because behaving normally is for classical variables.
 - **Collapse Replay**: Deterministically relive your mistakes using a fixed seed. Because debugging *is* time travel.
 - **Collapse Mocking**: Force a specific outcome, for testing, demonstrations, or satisfying your inner control freak.
 
-## 🕸 Entanglement Mechanics
+## Entanglement Mechanics
 
 The weird just got weirder. QuBits can now share destiny in style:
 

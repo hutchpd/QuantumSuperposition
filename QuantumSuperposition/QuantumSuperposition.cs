@@ -1610,6 +1610,117 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
     }
 
+    /// <summary>
+    /// Applies a quantum conditional — like an if-else, but across all timelines.
+    /// Each branch of the superposition is checked with a predicate.
+    /// If the predicate is true, the <paramref name="ifTrue"/> function is applied to that branch;
+    /// otherwise, <paramref name="ifFalse"/> is applied.
+    /// 
+    /// The resulting states are merged, and their amplitudes are weighted accordingly.
+    /// No collapse occurs. Nobody gets observed. Reality remains deeply confused.
+    /// </summary>
+    /// <param name="predicate">
+    /// A function that decides whether a given branch deserves to go down the happy path.
+    /// </param>
+    /// <param name="ifTrue">
+    /// Transformation applied to branches that satisfy the predicate.
+    /// Think of this as the "yes, and..." timeline.
+    /// </param>
+    /// <param name="ifFalse">
+    /// Transformation for the other branches — the "meh, fine" timeline.
+    /// </param>
+    /// <returns>
+    /// A new QuBit that merges the transformed branches into one beautifully indecisive superposition.
+    /// </returns>
+    public QuBit<T> Conditional(
+        Func<T, bool> predicate,
+        Func<QuBit<T>, QuBit<T>> ifTrue,
+        Func<QuBit<T>, QuBit<T>> ifFalse)
+    {
+        if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+        if (ifTrue == null) throw new ArgumentNullException(nameof(ifTrue));
+        if (ifFalse == null) throw new ArgumentNullException(nameof(ifFalse));
+
+        // Gather the aftermath of this branching multiverse decision.
+        var newWeights = new Dictionary<T, Complex>();
+        var newStates = new List<T>();
+
+        // Walk through each possibility — no judgment, just evaluation.
+        foreach (var (value, weight) in ToWeightedValues())
+        {
+            // Isolate a single universe where this value exists alone.
+            var branchQubit = new QuBit<T>(new[] { value }, this.Operators);
+            // Optionally, assign the branch weight to the temporary instance.
+            // (You might want to use an overload such as WithWeights.)
+            branchQubit = branchQubit.WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
+
+            // Decide its fate: the good timeline or the disappointing one.
+            QuBit<T> mappedBranch = predicate(value)
+                ? ifTrue(branchQubit)
+                : ifFalse(branchQubit);
+
+            // Merge whatever reality that branch has become back into the main timeline.
+            foreach (var (mappedValue, mappedWeight) in mappedBranch.ToWeightedValues())
+            {
+                // Multiply the weight coming from the mapping with the original branch weight.
+                Complex combinedWeight = weight * mappedWeight;
+
+                // Recombine states by accumulating weights.
+                if (newWeights.ContainsKey(mappedValue))
+                {
+                    newWeights[mappedValue] += combinedWeight;
+                }
+                else
+                {
+                    newWeights[mappedValue] = combinedWeight;
+                    newStates.Add(mappedValue);
+                }
+            }
+        }
+
+        // Return a new qubit that carries the recombined branches with their updated weights.
+        return new QuBit<T>(newStates, newWeights, this.Operators);
+    }
+
+    /// <summary>
+    /// Applies a transformation to every possible state in the qubit — like a map,
+    /// but across all realities at once.
+    ///
+    /// Each branch is run through the <paramref name="selector"/> function, producing
+    /// a new set of possibilities in a parallel type universe. The original quantum
+    /// amplitudes (weights) are preserved, because we care about continuity.
+    ///
+    /// No collapse happens. No commitment is made. The universe remains beautifully noncommittal.
+    /// </summary>
+    /// <typeparam name="TResult">
+    /// The type each original state gets transformed into. Like evolving your indecision into a new, equally undecided form.
+    /// </typeparam>
+    /// <param name="selector">
+    /// A function that transforms a state from T to TResult, without actually forcing it to pick one.
+    /// </param>
+    /// <returns>
+    /// A new QuBit&lt;TResult&gt; holding the transformed superposition,
+    /// complete with its inherited existential probabilities.
+    /// </returns>
+    public QuBit<TResult> Select<TResult>(Func<T, TResult> selector)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+
+        // This is the quantum equivalent of "map", but without picking a side.
+        // Each state gets passed through the selector, but their identity crisis (weight) stays intact.
+        var mappedWeightedValues = this.ToWeightedValues()
+            .Select(pair => (value: selector(pair.value), weight: pair.weight));
+
+        // The new qubit lives in a different type universe now, so we find its corresponding math handlers.
+        var newOps = QuantumOperatorsFactory.GetOperators<TResult>();
+
+        // Create a new superposition in the new type space.
+        // Note: nothing actually happens until someone observes this — classic quantum laziness.
+        return new QuBit<TResult>(mappedWeightedValues, newOps);
+    }
+
+
     public static QuBit<T> Superposed(IEnumerable<T> states)
     {
         var qubit = new QuBit<T>(states);
