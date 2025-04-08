@@ -31,6 +31,7 @@ public interface IQuantumOperators<T>
     bool LessThanOrEqual(T a, T b);
     bool Equal(T a, T b);
     bool NotEqual(T a, T b);
+    bool IsAddCommutative { get; }
 }
 
 /// <summary>
@@ -121,6 +122,7 @@ public class IntOperators : IQuantumOperators<int>
     public bool LessThanOrEqual(int a, int b) => a <= b;
     public bool Equal(int a, int b) => a == b;
     public bool NotEqual(int a, int b) => a != b;
+    public bool IsAddCommutative => true;
 }
 
 public class BooleanOperators : IQuantumOperators<bool>
@@ -136,6 +138,8 @@ public class BooleanOperators : IQuantumOperators<bool>
     public bool LessThanOrEqual(bool a, bool b) => a == b;
     public bool Equal(bool a, bool b) => a == b;
     public bool NotEqual(bool a, bool b) => a != b;
+    public bool IsAddCommutative => true;
+
 }
 
 /// <summary>
@@ -158,6 +162,47 @@ public class ComplexOperators : IQuantumOperators<Complex>
     public bool LessThanOrEqual(Complex a, Complex b) => a.Magnitude <= b.Magnitude;
     public bool Equal(Complex a, Complex b) => a == b;
     public bool NotEqual(Complex a, Complex b) => a != b;
+    public bool IsAddCommutative => true;
+}
+
+public struct CommutativeKey<T>
+{
+    public T A { get; }
+    public T B { get; }
+
+    public CommutativeKey(T a, T b)
+    {
+        // If a and b are equal, the order doesn’t matter.
+        // If they differ, we “order” them based on hash code (or you can require IComparable<T> for a more robust solution)
+        if (Comparer<T>.Default.Compare(a, b) <= 0)
+        {
+            A = a;
+            B = b;
+        }
+        else
+        {
+            A = b;
+            B = a;
+        }
+    }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is not CommutativeKey<T> other) return false;
+        return EqualityComparer<T>.Default.Equals(A, other.A) &&
+               EqualityComparer<T>.Default.Equals(B, other.B);
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + (A?.GetHashCode() ?? 0);
+            hash = hash * 31 + (B?.GetHashCode() ?? 0);
+            return hash;
+        }
+    }
 }
 
 public class EntanglementGroupVersion
@@ -1268,8 +1313,20 @@ public class IntArrayComparer : IEqualityComparer<int[]>
 
 public static class QuantumConfig
 {
-    // Set to true to disallow collapse if the resulting value equals default(T).
+    /// <summary>
+    /// Set to true to disallow collapse if the resulting value equals default(T).
+    /// </summary>
     public static bool ForbidDefaultOnCollapse { get; set; } = true;
+
+    /// <summary>
+    /// Set to true to allow non-observational arithmetic.
+    /// </summary>
+    public static bool EnableNonObservationalArithmetic { get; set; } = true;
+
+    /// <summary>
+    /// Set to true to enable commutative cache for faster operations.
+    /// </summary>
+    public static bool EnableCommutativeCache { get; set; } = true;
 }
 
 #endregion
@@ -1620,7 +1677,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// No collapse occurs. Nobody gets observed. Reality remains deeply confused.
     /// </summary>
     /// <param name="predicate">
-    /// A function that decides whether a given branch deserves to go down the happy path.
+    /// A function that decides whether a given branch deserves to go down the happy path. Think Loki season 2 but with weightings.
     /// </param>
     /// <param name="ifTrue">
     /// Transformation applied to branches that satisfy the predicate.
@@ -1633,43 +1690,31 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// A new QuBit that merges the transformed branches into one beautifully indecisive superposition.
     /// </returns>
     public QuBit<T> Conditional(
-        Func<T, bool> predicate,
+        Func<T, Complex, bool> weightedPredicate,
         Func<QuBit<T>, QuBit<T>> ifTrue,
         Func<QuBit<T>, QuBit<T>> ifFalse)
     {
-        if (predicate == null) throw new ArgumentNullException(nameof(predicate));
-        if (ifTrue == null) throw new ArgumentNullException(nameof(ifTrue));
-        if (ifFalse == null) throw new ArgumentNullException(nameof(ifFalse));
-
-        // Gather the aftermath of this branching multiverse decision.
         var newWeights = new Dictionary<T, Complex>();
         var newStates = new List<T>();
 
-        // Walk through each possibility — no judgment, just evaluation.
         foreach (var (value, weight) in ToWeightedValues())
         {
-            // Isolate a single universe where this value exists alone.
-            var branchQubit = new QuBit<T>(new[] { value }, this.Operators);
-            // Optionally, assign the branch weight to the temporary instance.
-            // (You might want to use an overload such as WithWeights.)
-            branchQubit = branchQubit.WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
+            // Create a branch qubit for the current state with its weight
+            var branchQubit = new QuBit<T>(new[] { value }, this.Operators)
+                              .WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
 
-            // Decide its fate: the good timeline or the disappointing one.
-            QuBit<T> mappedBranch = predicate(value)
+            // Use the weight-aware predicate to choose the branch function.
+            // The predicate now receives the current state value and its weight.
+            QuBit<T> mappedBranch = weightedPredicate(value, weight)
                 ? ifTrue(branchQubit)
                 : ifFalse(branchQubit);
 
-            // Merge whatever reality that branch has become back into the main timeline.
+            // When recombining, multiply the original branch weight with the branch’s transformation weight.
             foreach (var (mappedValue, mappedWeight) in mappedBranch.ToWeightedValues())
             {
-                // Multiply the weight coming from the mapping with the original branch weight.
                 Complex combinedWeight = weight * mappedWeight;
-
-                // Recombine states by accumulating weights.
                 if (newWeights.ContainsKey(mappedValue))
-                {
                     newWeights[mappedValue] += combinedWeight;
-                }
                 else
                 {
                     newWeights[mappedValue] = combinedWeight;
@@ -1678,7 +1723,6 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
             }
         }
 
-        // Return a new qubit that carries the recombined branches with their updated weights.
         return new QuBit<T>(newStates, newWeights, this.Operators);
     }
 
@@ -1718,6 +1762,123 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         // Create a new superposition in the new type space.
         // Note: nothing actually happens until someone observes this — classic quantum laziness.
         return new QuBit<TResult>(mappedWeightedValues, newOps);
+    }
+
+    /// <summary>
+    /// Projects each quantum branch into a new qubit and flattens the result,
+    /// producing a tangled multiverse of possibilities with inherited probabilities.
+    ///
+    /// Think of it like quantum fanfiction: every state gets its own spinoff series,
+    /// and we stitch them all together into one tangled narrative.
+    /// </summary>
+    /// <typeparam name="TResult">
+    /// The resulting type of each new quantum reality after transformation.
+    /// </typeparam>
+    /// <param name="selector">
+    /// A function that takes a single state and returns a whole new qubit. That’s right,
+    /// each state gets to live its best alternate life.
+    /// </param>
+    /// <returns>
+    /// A new <see cref="QuBit{TResult}"/> representing all possible child states,
+    /// appropriately weighted by quantum guilt (a.k.a. amplitude multiplication).
+    /// </returns>
+    public QuBit<TResult> SelectMany<TResult>(Func<T, QuBit<TResult>> selector)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+
+        IEnumerable<(TResult value, Complex weight)> Combined()
+        {
+            // For each weighted state in the current qubit...
+            foreach (var (outerValue, outerWeight) in ToWeightedValues())
+            {
+                // ...get the resulting qubit from the selector.
+                var innerQuBit = selector(outerValue);
+                // Multiply the outer weight by each inner weight.
+                foreach (var (innerValue, innerWeight) in innerQuBit.ToWeightedValues())
+                    yield return (innerValue, outerWeight * innerWeight);
+            }
+        }
+
+        return new QuBit<TResult>(Combined(), QuantumOperatorsFactory.GetOperators<TResult>());
+    }
+
+    /// <summary>
+    /// Projects each quantum state into a new qubit, then combines the original and
+    /// resulting states into a final value using a result selector —
+    /// like a cosmic buddy-cop movie across entangled timelines.
+    ///
+    /// This is the monadic version of “yes, and…”
+    /// </summary>
+    /// <typeparam name="TResult">
+    /// The intermediate state produced by the selector.
+    /// </typeparam>
+    /// <typeparam name="TResult2">
+    /// The final projected type, formed by combining the outer and inner results.
+    /// </typeparam>
+    /// <param name="selector">
+    /// A function that transforms each original value into a new qubit.
+    /// </param>
+    /// <param name="resultSelector">
+    /// A function that combines the outer and inner values into something beautiful and final.
+    /// </param>
+    /// <returns>
+    /// A <see cref="QuBit{TResult2}"/> representing the fused aftermath of all superposed transformations.
+    /// </returns>
+    public QuBit<TResult2> SelectMany<TResult, TResult2>(
+        Func<T, QuBit<TResult>> selector,
+        Func<T, TResult, TResult2> resultSelector)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+        if (resultSelector == null)
+            throw new ArgumentNullException(nameof(resultSelector));
+
+        IEnumerable<(TResult2 value, Complex weight)> Combined()
+        {
+            foreach (var (outerValue, outerWeight) in ToWeightedValues())
+            {
+                var innerQuBit = selector(outerValue);
+                foreach (var (innerValue, innerWeight) in innerQuBit.ToWeightedValues())
+                {
+                    // Combine the outer and inner values via the result selector.
+                    yield return (resultSelector(outerValue, innerValue), outerWeight * innerWeight);
+                }
+            }
+        }
+
+        return new QuBit<TResult2>(Combined(), QuantumOperatorsFactory.GetOperators<TResult2>());
+    }
+
+    /// <summary>
+    /// Filters the multiverse down to only those branches that satisfy your criteria —
+    /// a little quantum Marie Kondo moment.
+    ///
+    /// Any state that doesn’t spark joy (or pass the predicate) is quietly discarded into
+    /// the void. Their amplitudes will not be missed.
+    /// </summary>
+    /// <param name="predicate">
+    /// A function used to judge the life choices of each possible state.
+    /// </param>
+    /// <returns>
+    /// A new <see cref="QuBit{T}"/> containing only the morally and mathematically acceptable states.
+    /// </returns>
+    public QuBit<T> Where(Func<T, bool> predicate)
+    {
+        if (predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+
+        // Lazy iterator filtering the weighted states:
+        IEnumerable<(T value, Complex weight)> Filter()
+        {
+            foreach (var (value, weight) in this.ToWeightedValues())
+            {
+                if (predicate(value))
+                    yield return (value, weight);
+            }
+        }
+
+        return new QuBit<T>(Filter(), this.Operators);
     }
 
 
@@ -1902,57 +2063,153 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     // Bonus: Now you can multiply the feeling of indecision by a probability cloud.
     // Also, it avoids full key-pair expansion (M×N growth) by combining outputs.
 
+
+
     /// <summary>
-    /// Performs the specified operation on two QuBit<T> instances or a QuBit<T> and a scalar.
+    /// ObservationalArithmetic implements *observational” behavior.
+    /// It collapses both operands (if needed) and then applies the operator
+    /// on the observed (collapsed) values. The resulting qubit is created
+    /// in a collapsed state.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="op"></param>
-    /// <returns></returns>
+    private QuBit<T> ObservationalArithmetic(QuBit<T> a, QuBit<T> b, Func<T, T, T> op)
+    {
+        // Collapse both qubits.
+        // This will trigger the legacy collapse logic if they are not already collapsed.
+        T observedA = a.Observe();
+        T observedB = b.Observe();
+
+        // Apply the operator to the collapsed (observed) values.
+        T resultValue = op(observedA, observedB);
+
+        // Create a new qubit that contains only the resulting value.
+        // Assign a full weight (e.g. Complex.One) so that the new qubit
+        // reflects a collapsed state.
+        var collapsedStates = new List<T> { resultValue };
+        var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
+        var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, a.Operators);
+
+        // Mark the new qubit as collapsed.
+        resultQubit.SetType(QuantumStateType.CollapsedResult);
+        resultQubit._isActuallyCollapsed = true;
+
+        return resultQubit;
+    }
+    // In the QuBit<T> class, inside the region for arithmetic helpers:
+
+    /// <summary>
+    /// Performs the specified operation on two QuBit<T> instances.
+    /// If non-observational arithmetic is enabled, combine the states
+    /// without collapsing and cache results for pure commutative operations.
+    /// Otherwise, collapse both operands and apply the operator on the observed values.
+    /// </summary>
     private QuBit<T> Do_oper_type(QuBit<T> a, QuBit<T> b, Func<T, T, T> op)
     {
-        var newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
-
-        Dictionary<T, Complex>? newWeights = null;
-        if (a._weights != null || b._weights != null)
+        if (QuantumConfig.EnableNonObservationalArithmetic)
         {
-            newWeights = new Dictionary<T, Complex>();
-            foreach (var (valA, wA) in a.ToWeightedValues())
+            // Combine the underlying state lists, using the provided operator.
+            var newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
+            Dictionary<T, Complex>? newWeights = null;
+
+            // Create a local cache if commutative caching is enabled.
+            Dictionary<CommutativeKey<T>, T>? cache = null;
+            if (QuantumConfig.EnableCommutativeCache)
             {
-                foreach (var (valB, wB) in b.ToWeightedValues())
+                cache = new Dictionary<CommutativeKey<T>, T>();
+            }
+
+            if (a._weights != null || b._weights != null)
+            {
+                newWeights = new Dictionary<T, Complex>();
+                foreach (var (valA, wA) in a.ToWeightedValues())
                 {
-                    var newVal = op(valA, valB);
-                    var combinedWeight = wA * wB;
-                    if (!newWeights.ContainsKey(newVal))
-                        newWeights[newVal] = 0.0;
-                    newWeights[newVal] += combinedWeight;
+                    foreach (var (valB, wB) in b.ToWeightedValues())
+                    {
+                        T newVal;
+                        // Check cache for the unordered pair.
+                        if (cache != null)
+                        {
+                            var key = new CommutativeKey<T>(valA, valB);
+                            if (!cache.TryGetValue(key, out newVal))
+                            {
+                                newVal = op(valA, valB);
+                                cache[key] = newVal;
+                            }
+                        }
+                        else
+                        {
+                            newVal = op(valA, valB);
+                        }
+
+                        Complex combinedWeight = wA * wB;
+                        if (newWeights.ContainsKey(newVal))
+                            newWeights[newVal] += combinedWeight;
+                        else
+                            newWeights[newVal] = combinedWeight;
+                    }
                 }
             }
-        }
 
-        return new QuBit<T>(newList, newWeights, _ops);
+            return new QuBit<T>(newList, newWeights, a._ops);
+        }
+        else
+        {
+            // Legacy (observational) branch: collapse both qubits then perform operator.
+            return ObservationalArithmetic(a, b, op);
+        }
     }
 
     /// <summary>
-    /// Performs the specified operation on a QuBit<T> and a scalar.
+    /// Performs the specified operation on a QuBit<T> and a scalar (QuBit op scalar).
+    /// If non-observational arithmetic is enabled, process each branch
+    /// using caching for commutative operations; otherwise, collapse the qubit.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="op"></param>
-    /// <returns></returns>
     private QuBit<T> Do_oper_type(QuBit<T> a, T b, Func<T, T, T> op)
     {
-        var newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
+        if (!QuantumConfig.EnableNonObservationalArithmetic)
+        {
+            // Legacy: collapse the qubit first.
+            T observedA = a.Observe();
+            T resultValue = op(observedA, b);
+            var collapsedStates = new List<T> { resultValue };
+            var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
+            var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, a.Operators);
+            resultQubit.SetType(QuantumStateType.CollapsedResult);
+            resultQubit._isActuallyCollapsed = true;
+            return resultQubit;
+        }
 
+        var newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
         Dictionary<T, Complex>? newWeights = null;
+
+        // Set up a cache if commutative caching is enabled.
+        Dictionary<CommutativeKey<T>, T>? cache = null;
+        if (QuantumConfig.EnableCommutativeCache)
+        {
+            cache = new Dictionary<CommutativeKey<T>, T>();
+        }
+
         if (a._weights != null)
         {
             newWeights = new Dictionary<T, Complex>();
             foreach (var (valA, wA) in a.ToWeightedValues())
             {
-                var newVal = op(valA, b);
+                T newVal;
+                if (cache != null)
+                {
+                    var key = new CommutativeKey<T>(valA, b);
+                    if (!cache.TryGetValue(key, out newVal))
+                    {
+                        newVal = op(valA, b);
+                        cache[key] = newVal;
+                    }
+                }
+                else
+                {
+                    newVal = op(valA, b);
+                }
+
                 if (!newWeights.ContainsKey(newVal))
-                    newWeights[newVal] = 0.0;
+                    newWeights[newVal] = Complex.Zero;
                 newWeights[newVal] += wA; // multiply by 1.0
             }
         }
@@ -1961,25 +2218,56 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     }
 
     /// <summary>
-    /// Performs the specified operation on a scalar and a QuBit<T>.
+    /// Performs the specified operation on a scalar and a QuBit<T> (scalar op QuBit).
+    /// If non-observational arithmetic is enabled, uses caching for commutative results;
+    /// otherwise, collapses the qubit operand.
     /// </summary>
-    /// <param name="a"></param>
-    /// <param name="b"></param>
-    /// <param name="op"></param>
-    /// <returns></returns>
     private QuBit<T> Do_oper_type(T a, QuBit<T> b, Func<T, T, T> op)
     {
-        var newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
+        if (!QuantumConfig.EnableNonObservationalArithmetic)
+        {
+            // Legacy: collapse the qubit before operating.
+            T observedB = b.Observe();
+            T resultValue = op(a, observedB);
+            var collapsedStates = new List<T> { resultValue };
+            var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
+            var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, b.Operators);
+            resultQubit.SetType(QuantumStateType.CollapsedResult);
+            resultQubit._isActuallyCollapsed = true;
+            return resultQubit;
+        }
 
+        var newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
         Dictionary<T, Complex>? newWeights = null;
+
+        Dictionary<CommutativeKey<T>, T>? cache = null;
+        if (QuantumConfig.EnableCommutativeCache)
+        {
+            cache = new Dictionary<CommutativeKey<T>, T>();
+        }
+
         if (b._weights != null)
         {
             newWeights = new Dictionary<T, Complex>();
             foreach (var (valB, wB) in b.ToWeightedValues())
             {
-                var newVal = op(a, valB);
+                T newVal;
+                if (cache != null)
+                {
+                    var key = new CommutativeKey<T>(a, valB);
+                    if (!cache.TryGetValue(key, out newVal))
+                    {
+                        newVal = op(a, valB);
+                        cache[key] = newVal;
+                    }
+                }
+                else
+                {
+                    newVal = op(a, valB);
+                }
+
                 if (!newWeights.ContainsKey(newVal))
-                    newWeights[newVal] = 0.0;
+                    newWeights[newVal] = Complex.Zero;
                 newWeights[newVal] += wB; // multiply by 1.0
             }
         }
@@ -3533,6 +3821,87 @@ public class Eigenstates<T> : QuantumSoup<T>
 
         return clone;
     }
+
+    public Eigenstates<TResult> Select<TResult>(Func<T, TResult> selector)
+    {
+        if (selector == null)
+            throw new ArgumentNullException(nameof(selector));
+
+        // New dictionary mapping the transformed (projected) values to themselves.
+        var newDict = new Dictionary<TResult, TResult>();
+
+        // If the current eigenstates has weights, prepare a new weight dictionary;
+        // otherwise, we'll remain unweighted.
+        Dictionary<TResult, Complex>? newWeights = null;
+        if (this.IsWeighted) // i.e. _weights != null
+        {
+            newWeights = new Dictionary<TResult, Complex>();
+        }
+
+        // Iterate over each value and its associated weight.
+        foreach (var (value, weight) in this.ToMappedWeightedValues())
+        {
+            TResult result = selector(value);
+
+            if (newDict.ContainsKey(result))
+            {
+                // If the result is already present, add the weight if applicable.
+                if (newWeights != null)
+                {
+                    newWeights[result] += weight;
+                }
+            }
+            else
+            {
+                newDict.Add(result, result);
+                if (newWeights != null)
+                {
+                    newWeights.Add(result, weight);
+                }
+            }
+        }
+
+        // Construct a new Eigenstates<TResult> with the transformed dictionary.
+        // We use QuantumOperatorsFactory to get the appropriate operators for TResult.
+        var eigen = new Eigenstates<TResult>(newDict, QuantumOperatorsFactory.GetOperators<TResult>())
+        {
+            // Copy over the state type so that any "All" or "Any" marker persists.
+            _eType = this._eType
+        };
+
+        // Set the new weights (if any)
+        eigen._weights = newWeights;
+        return eigen;
+    }
+
+    public Eigenstates<T> Where(Func<T, bool> predicate)
+    {
+        if (predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+
+        var newDict = _qDict
+            .Where(kvp => predicate(kvp.Key))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+        Dictionary<T, Complex>? newWeights = null;
+        if (_weights != null)
+        {
+            newWeights = new Dictionary<T, Complex>();
+            foreach (var key in newDict.Keys)
+            {
+                if (_weights.TryGetValue(key, out var w))
+                    newWeights[key] = w;
+            }
+        }
+
+        var eigen = new Eigenstates<T>(newDict, _ops)
+        {
+            _eType = this._eType
+        };
+        eigen._weights = newWeights;
+        return eigen;
+    }
+
 }
 
 #endregion

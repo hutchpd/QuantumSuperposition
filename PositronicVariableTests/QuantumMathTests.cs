@@ -56,6 +56,9 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_AdditionOperator_WithScalar_Complex()
         {
+            // Use EnableNonObservationalArithmetic to allow complex addition.
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
             // Arrange: a qubit with states (1+2i) and (3+4i)
             var qubit = new QuBit<Complex>(
                 new List<Complex> { new Complex(1, 2), new Complex(3, 4) },
@@ -82,6 +85,10 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_MultiplicationOperator_WithQuBit_Complex()
         {
+
+            // Use EnableNonObservationalArithmetic to allow complex multiplication.
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
             // Arrange: create two qubits.
             // qubitA: (2+0i) and (1+1i)
             var qubitA = new QuBit<Complex>(

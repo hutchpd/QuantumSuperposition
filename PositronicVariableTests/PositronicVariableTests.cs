@@ -16,6 +16,7 @@ namespace PositronicVariables.Tests
         public void SetUp()
         {
             PositronicVariable<int>.ResetStaticVariables();
+            QuantumConfig.EnableNonObservationalArithmetic = true;
         }
 
         /// <summary>
