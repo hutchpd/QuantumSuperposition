@@ -56,6 +56,45 @@ The weird just got weirder. QuBits can now share destiny in style:
 - **Partial Collapse Staging**: Observe one qubit now, another later. Suspense!
 - **Entanglement Graph Diagnostics**: Inspect group sizes, circular references, and the chaos % — an actual metric we now regret naming.
 
+
+## QuBit<T> Enhancements
+
+- **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
+- **Sampling Methods**:
+  - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
+  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
+- **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
+- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
+- **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
+
+## Eigenstates<T> Gets Fancy Too
+
+- **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
+- **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
+- **FilterByWeight(...)**: Drop the low-probability riff-raff.
+- **CollapseWeighted() / SampleWeighted()**: Similar to QuBit, these collapse to the most likely or randomly chosen key.
+- **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
+- **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
+
+## Probabilistic & Functional Sorcery
+
+Because collapsing reality should be optional. These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
+
+- **`p_op` – Conditional Without Collapse**: Choose branches based on conditions without collapsing the state. Schrödinger's choice logic.
+- **`p_func` – Functional State Transforms**: Map, filter, flatten — all without collapsing. LINQ for the superposed soul.
+- **Non-Observational Arithmetic**: Enable operations like `+`, `*`, etc., without collapsing your QuBit. You get the math, *and* you keep the quantum soup. Have your waveform and eat it too.
+- **Weighted Function Composition**: Let probabilistic weights affect how branching logic plays out. Now your uncertainty has influence.
+- **Commutative Optimization**: Cache results of pure, commutative operations. Why recompute 2+3 when 3+2 already suffered that fate?
+- **Monad-Compatible Superpositions**: LINQ-style `.Select()`, `.Where()`, `.SelectMany()` with lazy evaluation — the cool kind of lazy that optimizes performance, not just vibes.
+
+    ### Enabling Non-Observational Arithmetic (if you're into that kind of thing)
+
+    ```csharp
+    QuantumConfig.EnableNonObservationalArithmetic = true;
+    ```
+
+    This allows arithmetic to operate without forcing a collapse. We don't judge. It's your multiverse (as a default this is on, but you can turn it off if you want to be a purist).
+
 ## Getting Started
 
 ### Installation  
@@ -108,24 +147,187 @@ static int MinValue(IEnumerable<int> numbers)
 }
 ```
 
-## QuBit<T> Enhancements
+### Complex Number Arithmetic with QuBit and Eigenstates
 
-- **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
-- **Sampling Methods**:
-  - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
-  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
-- **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
-- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
-- **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
+#### Performing Arithmetic Operations on Complex QuBit States
 
-## Eigenstates<T> Gets Fancy Too
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using QuantumSuperposition;
 
-- **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
-- **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
-- **FilterByWeight(...)**: Drop the low-probability riff-raff.
-- **CollapseWeighted() / SampleWeighted()**: Similar to QuBit, these collapse to the most likely or randomly chosen key.
-- **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
-- **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
+public class ComplexArithmeticExample
+{
+    public static void Main()
+    {
+        var qubit = new QuBit<Complex>(
+            new List<Complex> { new Complex(1, 2), new Complex(3, 4) },
+            new ComplexOperators()
+        );
+        var scalar = new Complex(1, 1);
+        var resultQuBit = qubit + scalar;
+
+        Console.WriteLine("After addition:");
+        foreach (var state in resultQuBit.States)
+            Console.WriteLine(state);
+
+        var qubitA = new QuBit<Complex>(
+            new List<Complex> { new Complex(2, 0), new Complex(1, 1) },
+            new ComplexOperators()
+        );
+        var qubitB = new QuBit<Complex>(
+            new List<Complex> { new Complex(3, 0), new Complex(0, 2) },
+            new ComplexOperators()
+        );
+
+        var multiplied = qubitA * qubitB;
+        Console.WriteLine("After multiplication:");
+        foreach (var state in multiplied.States)
+            Console.WriteLine(state);
+    }
+}
+```
+
+#### Weighted Superpositions and Weight Normalization
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using QuantumSuperposition;
+
+public class WeightedQuBitExample
+{
+    public static void Main()
+    {
+        var weightedItems = new[]
+        {
+            (new Complex(1, 0), (Complex)0.5),
+            (new Complex(2, 0), (Complex)1.0)
+        };
+
+        var qubit = new QuBit<Complex>(weightedItems, new ComplexOperators());
+        qubit.Append(new Complex(1, 0));
+        qubit.NormaliseWeights();
+
+        Console.WriteLine("Weighted and normalized values:");
+        foreach (var (value, weight) in qubit.ToWeightedValues())
+            Console.WriteLine($"State: {value}, Weight: {weight}");
+    }
+}
+```
+
+### Functional & LINQ-Style Operations
+
+#### Conditional Transformation without Collapse
+
+```csharp
+using System;
+using QuantumSuperposition;
+
+public class ConditionalTransformationExample
+{
+    public static void Main()
+    {
+        var qubit = new QuBit<int>(new[] { 1, 2, 3 });
+
+        var transformed = qubit.Conditional(
+            (value, weight) => value % 2 == 0,
+            qb => qb.Select(x => x * 10),
+            qb => qb.Select(x => x + 5)
+        );
+
+        Console.WriteLine("Transformed states:");
+        foreach (var state in transformed.States)
+            Console.WriteLine(state);
+    }
+}
+```
+
+#### Chaining LINQ Operations
+
+```csharp
+using System;
+using QuantumSuperposition;
+
+public class LinqChainExample
+{
+    public static void Main()
+    {
+        var qubit = new QuBit<int>(new[] { 1, 2 });
+
+        var result = qubit.Select(x => x + 1)
+                          .Where(x => x > 2)
+                          .SelectMany(x => new QuBit<int>(new[] { x * 3, x * 4 }));
+
+        Console.WriteLine("Final states after chained LINQ operations:");
+        foreach (var state in result.States)
+            Console.WriteLine(state);
+    }
+}
+```
+
+---
+
+### Entanglement and Collapse Propagation
+
+```csharp
+using System;
+using QuantumSuperposition;
+
+public class EntanglementExample
+{
+    public static void Main()
+    {
+        var system = new QuantumSystem();
+        var qubitA = new QuBit<int>(system, new[] { 0, 1 });
+        var qubitB = new QuBit<int>(system, new[] { 2, 3 });
+
+        system.Entangle("BellPair_A", qubitA, qubitB);
+
+        var observedA = qubitA.Observe(42);
+        Console.WriteLine($"Observed value from qubit A: {observedA}");
+
+        var observedB = qubitB.GetObservedValue();
+        Console.WriteLine($"Observed value from qubit B: {observedB}");
+    }
+}
+```
+
+### Tensor Product Expansion
+
+```csharp
+using System;
+using System.Numerics;
+using QuantumSuperposition;
+
+public class TensorProductExample
+{
+    public static void Main()
+    {
+        var qubit1 = new QuBit<int>(new (int, Complex)[]
+        {
+            (0, new Complex(1,0)),
+            (1, new Complex(1,0))
+        });
+
+        var qubit2 = new QuBit<int>(new (int, Complex)[]
+        {
+            (0, new Complex(2,0)),
+            (1, new Complex(0,2))
+        });
+
+        var productDict = QuantumMathUtility<int>.TensorProduct(qubit1, qubit2);
+
+        Console.WriteLine("Tensor product states and their amplitudes:");
+        foreach (var kvp in productDict)
+        {
+            Console.WriteLine($"State: [{string.Join(",", kvp.Key)}], Amplitude: {kvp.Value}");
+        }
+    }
+}
+```
 
 ## Performance Note
 You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
