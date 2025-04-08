@@ -1699,7 +1699,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// A function that transforms a state from T to TResult, without actually forcing it to pick one.
     /// </param>
     /// <returns>
-    /// A new QuBit&lt;TResult&gt; holding the transformed superposition,
+    /// A new QuBit<TResult> holding the transformed superposition,
     /// complete with its inherited existential probabilities.
     /// </returns>
     public QuBit<TResult> Select<TResult>(Func<T, TResult> selector)
