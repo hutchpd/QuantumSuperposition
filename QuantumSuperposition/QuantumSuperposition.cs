@@ -1085,6 +1085,11 @@ public class QuantumSystem
     /// <returns></returns>
     public string VisualizeGateSchedule(int totalQubits)
     {
+        //  return "no operations" if
+
+        if (_gateQueue.Count == 0)
+            return "no operations";
+
         // Note: if _gateQueue is a Queue<GateOperation>, you may need to work on a copy.
         return GateSchedulingVisualizer.Visualize(_gateQueue.ToArray(), totalQubits);
     }

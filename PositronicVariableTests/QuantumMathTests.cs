@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using NUnit.Framework;
+using QuantumCore;
 
 namespace QuantumMathTests
 {
@@ -186,7 +187,7 @@ namespace QuantumMathTests
 
             var qubit = new QuBit<Complex>(weightedStates, complexOps);
 
-            var observed = qubit.ObserveInBasis(QuantumBasis.Hadamard);
+            var observed = qubit.ObserveInBasis(QuantumGates.Hadamard);
             var originalStates = weightedStates.Select(ws => ws.value).ToList();
             CollectionAssert.Contains(originalStates, observed);
         }
