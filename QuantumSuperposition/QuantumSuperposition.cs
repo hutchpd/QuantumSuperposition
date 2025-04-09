@@ -7,6 +7,62 @@ using System.Text.RegularExpressions;
 #region QuantumCore
 namespace QuantumCore
 {
+    public class QuantumGate
+    {
+        public Complex[,] Matrix { get; }
+
+        public QuantumGate(Complex[,] matrix)
+        {
+            // (Optionally) add validation to ensure 'matrix' is square or unitary.
+            Matrix = matrix;
+        }
+
+        /// <summary>
+        /// Returns a new QuantumGate which is the composition of this gate followed by the specified nextGate.
+        /// (i.e. if applied to a state, the transformation is: nextGate.Matrix * this.Matrix * state)
+        /// </summary>
+        /// <param name="nextGate">The gate to apply after this gate.</param>
+        /// <returns>A new QuantumGate representing the composite gate.</returns>
+        public QuantumGate Then(QuantumGate nextGate)
+        {
+            // Ensure the matrices can be composed: the number of columns in this gate must match 
+            // the number of rows in the nextGate.
+            int thisRows = Matrix.GetLength(0);
+            int thisCols = Matrix.GetLength(1);
+            int nextRows = nextGate.Matrix.GetLength(0);
+            int nextCols = nextGate.Matrix.GetLength(1);
+            if (thisCols != nextRows)
+            {
+                throw new InvalidOperationException("Cannot compose gates: dimensions do not match.");
+            }
+
+            var result = new Complex[nextRows, thisRows];
+            // Compose in the proper order: if you have a state vector ψ,
+            // applying this then nextGate gives: nextGate.Matrix * (this.Matrix * ψ) 
+            // so the composite matrix is nextGate.Matrix * this.Matrix.
+            for (int i = 0; i < nextRows; i++)
+            {
+                for (int j = 0; j < thisRows; j++)
+                {
+                    Complex sum = Complex.Zero;
+                    for (int k = 0; k < thisCols; k++)
+                    {
+                        sum += nextGate.Matrix[i, k] * Matrix[k, j];
+                    }
+                    result[i, j] = sum;
+                }
+            }
+
+            return new QuantumGate(result);
+        }
+
+        // Allow implicit conversion from a Complex[,] to a QuantumGate for convenience.
+        public static implicit operator QuantumGate(Complex[,] m) => new QuantumGate(m);
+
+        // And an implicit conversion so QuantumGate can be used when a Complex[,] is expected.
+        public static implicit operator Complex[,](QuantumGate gate) => gate.Matrix;
+    }
+    
     /// <summary>
     /// A centralized repository for common quantum gate matrices.
     /// This includes built-in gates like Hadamard, Root-NOT, etc.
@@ -14,40 +70,112 @@ namespace QuantumCore
     public static class QuantumGates
     {
         // Hadamard gate – creates an equal superposition.
-        public static Complex[,] Hadamard => new Complex[,]
+        public static QuantumGate Hadamard => new QuantumGate(new Complex[,]
         {
-            { 1/Math.Sqrt(2),  1/Math.Sqrt(2) },
+            { 1/Math.Sqrt(2), 1/Math.Sqrt(2) },
             { 1/Math.Sqrt(2), -1/Math.Sqrt(2) }
-        };
+        });
+
+        /// <summary>
+        /// Creates an RX gate with a given rotation angle theta.   
+        /// </summary>
+        /// <param name="theta"></param>
+        /// <returns></returns>
+        public static QuantumGate RX(double theta)
+        {
+            return new QuantumGate(new Complex[,] {
+                { Math.Cos(theta / 2), -Complex.ImaginaryOne * Math.Sin(theta / 2) },
+                { -Complex.ImaginaryOne * Math.Sin(theta / 2), Math.Cos(theta / 2) }
+            });
+        }
+
+        /// <summary>
+        /// Creates an RY gate with a given rotation angle theta.
+        /// </summary>
+        /// <param name="theta"></param>
+        /// <returns></returns>
+        public static QuantumGate CPhase(double theta)
+        {
+            return new QuantumGate(new Complex[,] {
+                { 1, 0, 0, 0 },
+                { 0, 1, 0, 0 },
+                { 0, 0, 1, 0 },
+                { 0, 0, 0, Complex.Exp(Complex.ImaginaryOne * theta) }
+            });
+        }
+
+
 
         // Identity gate – does nothing.
-        public static Complex[,] Identity => new Complex[,]
+        public static Complex[,] Identity => new QuantumGate(new Complex[,]
         {
             { 1, 0 },
             { 0, 1 }
-        };
+        });
 
         // Pauli-X gate (NOT gate) – flips the basis states.
-        public static Complex[,] PauliX => new Complex[,]
+        public static Complex[,] PauliX => new QuantumGate(new Complex[,]
         {
             { 0, 1 },
             { 1, 0 }
-        };
+        });
 
         // Root-NOT gate – the square root of the Pauli-X gate.
         // When applied twice, it produces the Pauli-X gate.
-        public static Complex[,] RootNot => new Complex[,]
+        public static Complex[,] RootNot => new QuantumGate(new Complex[,]
         {
             { (1 + Complex.ImaginaryOne)/2.0, (1 - Complex.ImaginaryOne)/2.0 },
             { (1 - Complex.ImaginaryOne)/2.0, (1 + Complex.ImaginaryOne)/2.0 }
-        };
+        });
 
-        // Optional: A phase gate that rotates by a given angle theta.
-        public static Complex[,] Phase(double theta) => new Complex[,]
+        public static Complex[,] RootNotInverse => QuantumGateTools.InvertGate(RootNot);
+
+        // =A phase gate that rotates by a given angle theta.
+        public static Complex[,] Phase(double theta) => new QuantumGate(new Complex[,]
         {
             { 1, 0 },
             { 0, Complex.Exp(Complex.ImaginaryOne * theta) }
-        };
+        });
+
+        public static Complex[,] T => new QuantumGate(new Complex[,]
+{
+        { 1, 0 },
+        { 0, Complex.Exp(Complex.ImaginaryOne * Math.PI / 4) }
+});
+
+        // CNOT gate (a 4×4 matrix)
+        public static QuantumGate CNOT => new QuantumGate(new Complex[,]
+        {
+            {1, 0, 0, 0},
+            {0, 1, 0, 0},
+            {0, 0, 0, 1},
+            {0, 0, 1, 0}
+        });
+
+        public static Complex[,] T_Dagger => QuantumGateTools.InvertGate(T);
+
+    }
+}
+
+public static class QuantumGateTools
+{
+    public static Complex[,] ConjugateTranspose(Complex[,] matrix)
+    {
+        int rows = matrix.GetLength(0);
+        int cols = matrix.GetLength(1);
+        var result = new Complex[cols, rows]; // transpose shape
+
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                result[j, i] = Complex.Conjugate(matrix[i, j]);
+
+        return result;
+    }
+
+    public static Complex[,] InvertGate(Complex[,] gate)
+    {
+        // Unitary matrix inverse = its conjugate transpose
+        return ConjugateTranspose(gate);
     }
 }
 
@@ -148,9 +276,8 @@ public interface IQuantumReference
     /// Applies a unitary gate matrix (e.g. Hadamard, Pauli-X) to the local qubit state.
     /// Or subspace of the global wavefunction if entangled.
     /// </summary>
-    void ApplyLocalUnitary(Complex[,] gate);
+    void ApplyLocalUnitary(Complex[,] gate, string gateName);
 }
-
 
 /// <summary>
 /// Like a gym trainer, but for ints. Does the usual heavy lifting.
@@ -928,47 +1055,13 @@ public static class QuantumMathUtility<T>
 
 }
 
-/// <summary>
-/// static class to hold basis transforms (e.g. Hadamard):
-/// </summary>
-public static class QuantumBasis
-{
-    public static Complex[,] Hadamard => new Complex[,]
-    {
-        { 1 / Math.Sqrt(2),  1 / Math.Sqrt(2) },
-        { 1 / Math.Sqrt(2), -1 / Math.Sqrt(2) }
-    };
-
-    public static Complex[,] Identity => new Complex[,]
-    {
-        { 1, 0 },
-        { 0, 1 }
-    };
-
-    public static Complex[] ApplyBasis(Complex[] amplitudes, Complex[,] basisMatrix)
-    {
-        int dim = amplitudes.Length;
-        Complex[] result = new Complex[dim];
-
-        for (int i = 0; i < dim; i++)
-        {
-            result[i] = Complex.Zero;
-            for (int j = 0; j < dim; j++)
-            {
-                result[i] += basisMatrix[i, j] * amplitudes[j];
-            }
-        }
-
-        return result;
-    }
-}
-
 public class QuantumSystem
 {
     private Dictionary<int[], Complex> _amplitudes = new Dictionary<int[], Complex>();
     private readonly List<IQuantumReference> _registered = new();
     private EntanglementManager _entanglement = new();
     public EntanglementManager Entanglement => _entanglement;
+    private Queue<GateOperation> _gateQueue = new Queue<GateOperation>();
 
 
     /// <summary>
@@ -985,6 +1078,17 @@ public class QuantumSystem
             NormaliseAmplitudes();
         }
     }
+    /// <summary>
+    /// Will return a multiline string that you can print to the console visualising the gate schedule.
+    /// </summary>
+    /// <param name="totalQubits"></param>
+    /// <returns></returns>
+    public string VisualizeGateSchedule(int totalQubits)
+    {
+        // Note: if _gateQueue is a Queue<GateOperation>, you may need to work on a copy.
+        return GateSchedulingVisualizer.Visualize(_gateQueue.ToArray(), totalQubits);
+    }
+
     /// <summary>
     /// I only want to know a little bit about you.
     /// </summary>
@@ -1050,6 +1154,30 @@ public class QuantumSystem
 
         // Return the measured outcome for the measured qubit(s).
         return chosenOutcome;
+    }
+
+
+    public enum GateType
+    {
+        SingleQubit,
+        TwoQubit
+    }
+
+    public class GateOperation
+    {
+        public GateType OperationType { get; }
+        public int[] TargetQubits { get; }
+        public Complex[,] GateMatrix { get; }
+        public string GateName { get; }
+
+        public GateOperation(GateType type, int[] targets, Complex[,] matrix, string gateName)
+        {
+            OperationType = type;
+            TargetQubits = targets;
+            GateMatrix = matrix;
+            GateName = gateName;
+        }
+
     }
 
 
@@ -1226,66 +1354,59 @@ public class QuantumSystem
     /// Applies a two-qubit gate, because one qubit can't handle this much chaos alone.
     /// Perfect for entangling your problems in pairs.
     /// </summary>
-    public void ApplyTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
+    public void ApplyTwoQubitGate(int qubitA, int qubitB, Complex[,] gate, string gateName)
     {
         if (gate.GetLength(0) != 4 || gate.GetLength(1) != 4)
             throw new ArgumentException("Gate must be a 4x4 matrix.");
 
-        // Group basis states by fixed values of all qubits *except* qubitA and qubitB
-        var grouped = new Dictionary<string, List<int[]>>();
-
-        foreach (var state in _amplitudes.Keys.ToList())
-        {
-            // Build a string key excluding qubitA and qubitB (used to group together the 4 basis states)
-            var key = string.Join(",", state.Select((val, idx) => (idx != qubitA && idx != qubitB) ? val.ToString() : "*"));
-
-            if (!grouped.ContainsKey(key))
-                grouped[key] = new();
-
-            grouped[key].Add(state);
-        }
-
-        var newAmplitudes = new Dictionary<int[], Complex>(new IntArrayComparer());
-
-        // Process each group (should contain exactly 4 states representing the 2 qubits)
-        foreach (var group in grouped.Values)
-        {
-            // Build a 4-vector for current basis states
-            var basisMap = new Dictionary<(int, int), int[]>();
-            var vec = new Complex[4];
-
-            foreach (var basis in group)
-            {
-                int a = basis[qubitA];
-                int b = basis[qubitB];
-                int index = (a << 1) | b; // binary encoding: 00, 01, 10, 11 → 0–3
-
-                vec[index] = _amplitudes.TryGetValue(basis, out var amp) ? amp : Complex.Zero;
-                basisMap[(a, b)] = basis;
-            }
-
-            // Apply the gate: newVec = gate * vec
-            var newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-
-            // Store updated amplitudes back in _amplitudes
-            foreach (var ((a, b), state) in basisMap)
-            {
-                int idx = (a << 1) | b;
-                newAmplitudes[state] = newVec[idx];
-            }
-        }
-
-        _amplitudes = newAmplitudes;
-        NormaliseAmplitudes();
+        // Enqueue a new two-qubit gate operation with the two target indices.
+        _gateQueue.Enqueue(new GateOperation(GateType.TwoQubit, new int[] { qubitA, qubitB }, gate, gateName));
     }
 
-    public void ApplySingleQubitGate(int qubit, Complex[,] gate)
+    /// <summary>
+    /// Applies a single-qubit gate, because sometimes you just need to get your life together.
+    /// </summary>
+    /// <param name="qubit"></param>
+    /// <param name="gate"></param>
+    /// <exception cref="ArgumentException"></exception>
+    public void ApplySingleQubitGate(int qubit, Complex[,] gate, string gateName)
     {
         if (gate.GetLength(0) != 2 || gate.GetLength(1) != 2)
             throw new ArgumentException("Single-qubit gate must be a 2x2 matrix.");
 
-        var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
+        // Enqueue a new single-qubit gate operation.
+        _gateQueue.Enqueue(new GateOperation(GateType.SingleQubit, new int[] { qubit }, gate, gateName));
+    }
 
+    /// <summary>
+    /// Processes and applies all the queued gate operations in FIFO order.
+    /// </summary>
+    public void ProcessGateQueue()
+    {
+        while (_gateQueue.Count > 0)
+        {
+            var op = _gateQueue.Dequeue();
+            switch (op.OperationType)
+            {
+                case GateType.SingleQubit:
+                    // You may call your existing implementation now
+                    ProcessSingleQubitGate(op.TargetQubits[0], op.GateMatrix);
+                    break;
+                case GateType.TwoQubit:
+                    ProcessTwoQubitGate(op.TargetQubits[0], op.TargetQubits[1], op.GateMatrix);
+                    break;
+                default:
+                    throw new InvalidOperationException("Unsupported gate operation.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Internal method that processes a single-qubit gate.
+    /// </summary>
+    private void ProcessSingleQubitGate(int qubit, Complex[,] gate)
+    {
+        var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
         foreach (var state in _amplitudes.Keys.ToList())
         {
             int bit = state[qubit];
@@ -1296,12 +1417,50 @@ public class QuantumSystem
             Complex a0 = _amplitudes.TryGetValue(basis0, out var amp0) ? amp0 : Complex.Zero;
             Complex a1 = _amplitudes.TryGetValue(basis1, out var amp1) ? amp1 : Complex.Zero;
 
+            // Note: if you need to adapt the math to your ordering you may do so here.
             Complex newAmp = gate[bit, 0] * a0 + gate[bit, 1] * a1;
 
             newAmps[state] = newAmp;
         }
-
         _amplitudes = newAmps;
+        NormaliseAmplitudes();
+    }
+
+    /// <summary>
+    /// Internal method that processes a two-qubit gate.
+    /// </summary>
+    private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
+    {
+        var grouped = new Dictionary<string, List<int[]>>();
+        foreach (var state in _amplitudes.Keys.ToList())
+        {
+            var key = string.Join(",", state.Select((val, idx) => (idx != qubitA && idx != qubitB) ? val.ToString() : "*"));
+            if (!grouped.ContainsKey(key))
+                grouped[key] = new List<int[]>();
+            grouped[key].Add(state);
+        }
+
+        var newAmplitudes = new Dictionary<int[], Complex>(new IntArrayComparer());
+        foreach (var group in grouped.Values)
+        {
+            var basisMap = new Dictionary<(int, int), int[]>();
+            var vec = new Complex[4];
+            foreach (var basis in group)
+            {
+                int a = basis[qubitA];
+                int b = basis[qubitB];
+                int index = (a << 1) | b;
+                vec[index] = _amplitudes.TryGetValue(basis, out var amp) ? amp : Complex.Zero;
+                basisMap[(a, b)] = basis;
+            }
+            var newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
+            foreach (var ((a, b), state) in basisMap)
+            {
+                int idx = (a << 1) | b;
+                newAmplitudes[state] = newVec[idx];
+            }
+        }
+        _amplitudes = newAmplitudes;
         NormaliseAmplitudes();
     }
 
@@ -2996,25 +3155,23 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     }
 
 
-    public void ApplyLocalUnitary(Complex[,] gate)
+    public void ApplyLocalUnitary(Complex[,] gate, string gateName)
     {
-        if (_system != null)
+        if (this.System != null)
         {
+            // For example, if this is a single-qubit operation:
             if (_qubitIndices.Length == 1 && gate.GetLength(0) == 2 && gate.GetLength(1) == 2)
             {
-                // Apply single-qubit gate
-                _system.ApplySingleQubitGate(_qubitIndices[0], gate);
+                this.System.ApplySingleQubitGate(_qubitIndices[0], gate, gateName);
             }
             else if (_qubitIndices.Length == 2 && gate.GetLength(0) == 4 && gate.GetLength(1) == 4)
             {
-                // Apply two-qubit gate
-                _system.ApplyTwoQubitGate(_qubitIndices[0], _qubitIndices[1], gate);
+                this.System.ApplyTwoQubitGate(_qubitIndices[0], _qubitIndices[1], gate, gateName);
             }
             else
             {
                 throw new InvalidOperationException("Unsupported gate size or qubit index count.");
             }
-
             return;
         }
 
