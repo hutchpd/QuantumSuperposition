@@ -126,6 +126,7 @@ For most usage, you'll want:
 using QuantumSuperposition.Core;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
+```
 
 ## Documentation
 
