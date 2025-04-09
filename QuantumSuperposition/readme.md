@@ -131,10 +131,10 @@ using QuantumSuperposition.Operators;
 ## Documentation
 
 - [Getting Started](#getting-started)
-- [Usage Examples](docs/UsageExamples.md)
-- [Entanglement & Collapse Propagation](docs/Entanglement.md)
-- [Functional & LINQ Operations](docs/FunctionalOps.md)
-- [Working with Complex Numbers](docs/ComplexSupport.md)
+- [Usage Examples](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/UsageExamples.md)
+- [Entanglement & Collapse Propagation](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Entanglement.md)
+- [Functional & LINQ Operations](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/FunctionalOps.md)
+- [Working with Complex Numbers](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/ComplexSupport.md)
 
 ## Performance Note
 You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.

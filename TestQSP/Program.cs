@@ -1,6 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Operators;
+using QuantumSuperposition.QuantumSoup;
 
 internal static class Program
 {

@@ -10,6 +10,7 @@ namespace QuantumSuperposition.QuantumSoup
     public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     {
         private readonly Func<T, bool> _valueValidator;
+
         private readonly int[] _qubitIndices;
         private readonly QuantumSystem? _system;
         private bool _isCollapsedFromSystem;
@@ -50,7 +51,12 @@ namespace QuantumSuperposition.QuantumSoup
 
         }
 
-        // If we have no quantum system, we fallback to local states:
+        /// <summary>
+        /// If we have no quantum system, we fallback to local states:
+        /// </summary>
+        /// <param name="Items"></param>
+        /// <param name="ops"></param>
+        /// <param name="valueValidator"></param>
         public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
             : this(Items, ops)
         {

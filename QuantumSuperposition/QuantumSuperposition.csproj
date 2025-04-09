@@ -15,13 +15,14 @@
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageTags>Quantum;Superposition;Quantum Computing;Parallel Processing;Concurrency;Mathematics;Logic;Quantum Mechanics;C#;DotNet;Library;Algorithms;Prime Numbers;Factors;Mathematical Operations;Logical Operations;Eigenstates;Generics;Quantum Programming</PackageTags>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
-    <FileVersion>1.5.0</FileVersion>
-    <Version>1.5.0</Version>
+    <FileVersion>1.6.0</FileVersion>
+    <Version>1.6.0</Version>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="_QuantumSuperposition.txt" />
+	<None Include="docs\**\*.md" Pack="true" PackagePath="docs\" />
   </ItemGroup>
 
   <ItemGroup>
