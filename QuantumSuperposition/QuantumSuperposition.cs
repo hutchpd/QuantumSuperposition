@@ -1067,7 +1067,6 @@ public class QuantumSystem
     /// <summary>
     /// Optionally construct the system with explicit amplitudes.
     /// </summary>
-
     public QuantumSystem(Dictionary<int[], Complex>? initialAmps = null)
 
     {
