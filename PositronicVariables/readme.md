@@ -1,4 +1,4 @@
-﻿# PositronicVariable (.NET Library)
+# PositronicVariable (.NET Library)
 A time-looping variable container for quantum misfits and deterministic dreamers.
 [![NuGet](https://img.shields.io/nuget/v/PositronicVariables.svg)](https://www.nuget.org/packages/PositronicVariables)
 
@@ -21,6 +21,15 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ---
 
+## Documentation
+
+- [Getting Started](#getting-started)
+- [Usage Examples](docs/UsageExamples.md)
+- [Entanglement & Collapse Propagation](docs/Entanglement.md)
+- [Functional & LINQ Operations](docs/FunctionalOps.md)
+- [Working with Complex Numbers](docs/ComplexSupport.md)
+
+
 ## Getting Started
 
 ### Installation
@@ -32,38 +41,6 @@ dotnet add package PositronicVariables
 ```
 
 ---
-
-## Example: Time-Looping Variable
-
-```csharp
-private static PositronicVariable<int> antival;
-
-private static void Main()
-{
-    // Clean slate
-    PositronicRuntime.Instance.Reset();
-
-    // Initial state
-    antival = new PositronicVariable<int>(-1);
-
-    // Loop until convergence
-    PositronicVariable<int>.RunConvergenceLoop(MainLogic);
-}
-
-private static void MainLogic()
-{
-    Console.WriteLine($"The antival is {antival}");
-    var val = (antival + 1) % 4;
-    Console.WriteLine($"The value is {val}");
-    antival.Assign(val);
-}
-```
-
-### Output (after convergence)
-```
-The antival is any(0, 1, 2, 3)
-The value is any(1, 2, 3, 0)
-```
 
 ---
 
