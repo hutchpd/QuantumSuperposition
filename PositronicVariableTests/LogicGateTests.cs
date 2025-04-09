@@ -1,8 +1,5 @@
-﻿using System;
-using System.Numerics;
-using NUnit.Framework;
-using System.Linq;
-using QuantumCore; // Ensure this namespace includes your QuantumGates class
+﻿using System.Numerics;
+using QuantumSuperposition.Core;
 
 namespace QuantumMathTests
 {

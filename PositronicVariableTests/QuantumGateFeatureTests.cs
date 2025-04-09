@@ -1,8 +1,7 @@
-﻿using System;
-using System.Linq;
-using NUnit.Framework;
-using System.Numerics;
-using QuantumCore;
+﻿using System.Numerics;
+using QuantumSuperposition.Utilities;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Systems;
 
 namespace QuantumMathTests
 {

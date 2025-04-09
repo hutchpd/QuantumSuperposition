@@ -1,11 +1,9 @@
 ﻿// QuantumMathComplexTests — Because reality isn't weird enough until it's imaginary.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using NUnit.Framework;
-using QuantumCore;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Operators;
 
 namespace QuantumMathTests
 {

@@ -1,4 +1,10 @@
 ﻿using System.Numerics;
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;
+using QuantumSuperposition.Entanglement;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Core;
 
 namespace QuantumMathTests
 {
