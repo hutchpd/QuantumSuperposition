@@ -1,5 +1,14 @@
 ## Functional & LINQ Operations
 
+## Required Namespaces
+
+ Make sure to import the correct namespaces, for these examples we use.
+
+```csharp
+using System.Numerics;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Core;
+
 Because collapsing reality should be optional. These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
 
 - **`p_op` – Conditional Without Collapse**: Choose branches based on conditions without collapsing the state. Schrödinger's choice logic.

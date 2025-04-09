@@ -1,5 +1,15 @@
 ## Working with Complex Numbers
 
+## Required Namespaces
+
+ Make sure to import the correct namespaces, for these examples we use.
+
+```csharp
+using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Operators;
+
 QuantumSuperposition supports complex numbers for advanced quantum operations. This section will guide you through the usage of complex numbers in the library.
 
 ### Basic Complex Number Operations

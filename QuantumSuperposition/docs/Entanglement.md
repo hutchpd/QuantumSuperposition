@@ -1,5 +1,17 @@
 ## Entanglement & Collapse Propagation
 
+## Required Namespaces
+
+ Make sure to import the correct namespaces, for these examples we use.
+
+```csharp
+using System.Numerics;
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;
+using QuantumSuperposition.Entanglement;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+
 ### Entangled Variable Linking
 Entanglement in quantum systems allows variables to be linked such that the state of one variable directly affects the state of another. This is akin to having two variables that are "quantum married" — their states are intertwined.
 

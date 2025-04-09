@@ -1,5 +1,15 @@
 ## Usage Examples
 
+## Required Namespaces
+
+These examples demonstrate basic and advanced usage of the `QuBit<T>` class and related quantum simulation features. Make sure to import the correct namespaces, for these examples we use.
+
+```csharp
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Operators;
+
+
 ### Basic Usage
 
 ```csharp

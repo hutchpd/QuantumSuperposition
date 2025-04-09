@@ -87,13 +87,24 @@ Because collapsing reality should be optional. These features let you get freaky
 - **Commutative Optimization**: Cache results of pure, commutative operations. Why recompute 2+3 when 3+2 already suffered that fate?
 - **Monad-Compatible Superpositions**: LINQ-style `.Select()`, `.Where()`, `.SelectMany()` with lazy evaluation — the cool kind of lazy that optimizes performance, not just vibes.
 
-    ### Enabling Non-Observational Arithmetic (if you're into that kind of thing)
+## Quantum Logic Gates
 
-    ```csharp
-    QuantumConfig.EnableNonObservationalArithmetic = true;
-    ```
+- **`q_logic` - State Transforms** lets you apply gate-like transformations to states, like a quantum wizard casting spells on your variables.
+- **Built-in Gate Examples: Root-NOT, Hadamard, etc.** - Because who doesn't want to play with quantum gates?
+- **Gate Set Registration: Plug in custom gates easily** - Like adding a new spell to your grimoire.
+- **Gate Inversion: Auto-generate or define inverse gates** - Because sometimes you need to undo your quantum shenanigans.
+- **Gate Timing/Ordering Strategy: Queue or sequence logic gate application** - Like a quantum conductor orchestrating your variables.
+- **Quantum Gate Composition API: Allow X.Then(H).Then(CNOT) patterns** - Because chaining is the new black.
+- **Parametric Gates: Define gates like RX(angle: π/4) for QAOA, QFT, etc.** - Because who doesn't love a good parameterized gate?
+- **Gate Scheduling Visualizer: Generate ASCII/graph diagrams from gate sequences** - Because sometimes you need to see your quantum chaos in a pretty format.
 
-    This allows arithmetic to operate without forcing a collapse. We don't judge. It's your multiverse (as a default this is on, but you can turn it off if you want to be a purist).
+### Enabling Non-Observational Arithmetic (if you're into that kind of thing)
+
+```csharp
+QuantumConfig.EnableNonObservationalArithmetic = true;
+```
+
+This allows arithmetic to operate without forcing a collapse. We don't judge. It's your multiverse (as a default this is on, but you can turn it off if you want to be a purist).
 
 ## Getting Started
 
@@ -106,6 +117,15 @@ Or with NuGet Package Manager Console:
 ```
 Install-Package QuantumSuperposition
 ```
+
+### Required Namespaces
+
+For most usage, you'll want:
+
+```csharp
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Operators;
 
 ## Documentation
 
