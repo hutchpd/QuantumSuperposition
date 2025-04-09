@@ -3,7 +3,7 @@ using QuantumSuperposition.Systems;
 
 namespace QuantumSuperposition.Utilities
 {
-    public static class GateSchedulingVisualizer
+    public static class GateSchedulingVisualiser
     {
         /// <summary>
         /// Generates an ASCII diagram of the gate operations.
@@ -11,7 +11,7 @@ namespace QuantumSuperposition.Utilities
         /// <param name="gateOperations">A collection of gate operations (in order).</param>
         /// <param name="totalQubits">Total number of qubits available.</param>
         /// <returns>A multiline string with the diagram.</returns>
-        public static string Visualize(IEnumerable<QuantumSystem.GateOperation> gateOperations, int totalQubits)
+        public static string Visualise(IEnumerable<QuantumSystem.GateOperation> gateOperations, int totalQubits)
         {
             // Determine how many time steps there are.
             var opsList = gateOperations.ToList();

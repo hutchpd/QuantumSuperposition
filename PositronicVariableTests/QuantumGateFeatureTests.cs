@@ -103,7 +103,7 @@ namespace QuantumMathTests
         }
 
         [Test]
-        public void Gate_TimingOrderingStrategy_QueueProcessingAndVisualization()
+        public void Gate_TimingOrderingStrategy_QueueProcessingAndVisualisation()
         {
             // Simulating the grand parade of quantum gates—before and after the music stops.
             QuantumSystem system = new QuantumSystem();
@@ -111,17 +111,17 @@ namespace QuantumMathTests
             system.ApplyTwoQubitGate(0, 1, QuantumGates.CNOT.Matrix, "CNOT");
 
             // Gaze upon the majestic diagram of scheduled gate chaos.
-            string visualization = system.VisualizeGateSchedule(totalQubits: 2);
-            Assert.IsNotNull(visualization, "Visualization should not be null.");
-            Assert.IsNotEmpty(visualization, "Visualization should contain a diagram representation.");
+            string Visualisation = system.VisualiseGateSchedule(totalQubits: 2);
+            Assert.IsNotNull(Visualisation, "Visualisation should not be null.");
+            Assert.IsNotEmpty(Visualisation, "Visualisation should contain a diagram representation.");
 
             // Obliterate the queue like a quantum Marie Kondo.
             system.ProcessGateQueue();
 
             // Make sure the queue has spiritually and computationally moved on.
-            string postVisualization = system.VisualizeGateSchedule(totalQubits: 2);
+            string postVisualisation = system.VisualiseGateSchedule(totalQubits: 2);
             Assert.IsTrue(
-                postVisualization.Contains("no operations") || string.IsNullOrWhiteSpace(postVisualization),
+                postVisualisation.Contains("no operations") || string.IsNullOrWhiteSpace(postVisualisation),
                 "Gate queue should be empty after processing.");
         }
 

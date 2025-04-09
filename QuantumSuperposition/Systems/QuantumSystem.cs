@@ -18,6 +18,84 @@ namespace QuantumSuperposition.Systems
         public EntanglementManager Entanglement => _entanglement;
         private Queue<GateOperation> _gateQueue = new Queue<GateOperation>();
 
+        /// <summary>
+        /// Applies a unitary gate to a set of target qubits.
+        /// This implementation groups amplitudes that differ only on the target indices,
+        /// multiplies each group’s subvector with the provided gate,
+        /// and then updates the full state.
+        /// </summary>
+        public void ApplyMultiQubitGate(int[] targetQubits, Complex[,] gate, string gateName)
+        {
+            // Get the current amplitudes (assumed accessible via a property or internal field).
+            var currentAmps = new Dictionary<int[], Complex>(this.Amplitudes, new IntArrayComparer());
+            int numTargets = targetQubits.Length;
+            int d = 1 << numTargets;
+            var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
+
+            // Group the basis states by the bits in positions not among the target qubits.
+            var groups = currentAmps.Keys.GroupBy(state =>
+            {
+                // Create a key from the bits of the state at indices not in targetQubits.
+                var keyBits = new List<int>();
+                for (int i = 0; i < state.Length; i++)
+                {
+                    if (!targetQubits.Contains(i))
+                        keyBits.Add(state[i]);
+                }
+                return string.Join(",", keyBits);
+            });
+
+            foreach (var group in groups)
+            {
+                // Order the states in the group by the integer value of the substate on the target qubits.
+                var stateList = group.ToList();
+                stateList.Sort((a, b) =>
+                {
+                    int idxA = BitsToIndex(ExtractSubstate(a, targetQubits));
+                    int idxB = BitsToIndex(ExtractSubstate(b, targetQubits));
+                    return idxA.CompareTo(idxB);
+                });
+
+                // Build the vector of amplitudes for the target subspace.
+                Complex[] vec = new Complex[d];
+                for (int i = 0; i < d; i++)
+                {
+                    currentAmps.TryGetValue(stateList[i], out Complex amp);
+                    vec[i] = amp;
+                }
+
+                // Apply the gate to the vector.
+                Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
+
+                // Update the corresponding entries in newAmps.
+                for (int i = 0; i < d; i++)
+                {
+                    newAmps[stateList[i]] = newVec[i];
+                }
+            }
+
+            // Replace the system's amplitudes (assume you add a setter method).
+            this.SetAmplitudes(newAmps);
+            this.NormaliseAmplitudes();
+        }
+
+        // Helper: Converts the bits from a full basis state based on target indices.
+        private static int[] ExtractSubstate(int[] fullState, int[] indices)
+        {
+            int[] sub = new int[indices.Length];
+            for (int i = 0; i < indices.Length; i++)
+                sub[i] = fullState[indices[i]];
+            return sub;
+        }
+
+        // Helper: Converts an array of bits to its integer representation.
+        private static int BitsToIndex(int[] bits)
+        {
+            int index = 0;
+            foreach (var bit in bits)
+                index = (index << 1) | bit;
+            return index;
+        }
 
         /// <summary>
         /// Optionally construct the system with explicit amplitudes.
@@ -37,7 +115,7 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         /// <param name="totalQubits"></param>
         /// <returns></returns>
-        public string VisualizeGateSchedule(int totalQubits)
+        public string VisualiseGateSchedule(int totalQubits)
         {
             //  return "no operations" if
 
@@ -45,7 +123,7 @@ namespace QuantumSuperposition.Systems
                 return "no operations";
 
             // Note: if _gateQueue is a Queue<GateOperation>, you may need to work on a copy.
-            return GateSchedulingVisualizer.Visualize(_gateQueue.ToArray(), totalQubits);
+            return GateSchedulingVisualiser.Visualise(_gateQueue.ToArray(), totalQubits);
         }
 
         /// <summary>
@@ -421,6 +499,43 @@ namespace QuantumSuperposition.Systems
             }
             _amplitudes = newAmplitudes;
             NormaliseAmplitudes();
+        }
+
+        /// <summary>
+        /// Sets the amplitudes of the quantum system.
+        /// A bit like changing the playlist of your favourite quantum music.
+        /// This can break the universe if you’re not careful - as can break normalisation.
+        /// </summary>
+        /// <param name="newAmps"></param>
+        /// <exception cref="ArgumentNullException"></exception>
+        public void SetAmplitudes(Dictionary<int[], Complex> newAmps)
+        {
+            if (newAmps == null)
+                throw new ArgumentNullException(nameof(newAmps));
+
+            // Replace the internal amplitude dictionary.
+            // We create a new dictionary using our custom IntArrayComparer to ensure that
+            // two arrays representing the same basis state are treated as equal.
+            _amplitudes = new Dictionary<int[], Complex>(newAmps, new IntArrayComparer());
+
+            // Notify all registered qubits of the new state.
+            var collapseId = Guid.NewGuid();
+            foreach (var refQ in _registered)
+            {
+                refQ.NotifyWavefunctionCollapsed(collapseId);
+                if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
+                {
+                    _entanglement.PropagateCollapse(g1, collapseId);
+                }
+                else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
+                {
+                    _entanglement.PropagateCollapse(g2, collapseId);
+                }
+                else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
+                {
+                    _entanglement.PropagateCollapse(g3, collapseId);
+                }
+            }
         }
 
         /// <summary>

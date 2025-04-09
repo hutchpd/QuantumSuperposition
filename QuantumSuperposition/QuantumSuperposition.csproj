@@ -21,7 +21,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="_QuantumSuperposition.txt" />
 	<None Include="docs\**\*.md" Pack="true" PackagePath="docs\" />
   </ItemGroup>
 
