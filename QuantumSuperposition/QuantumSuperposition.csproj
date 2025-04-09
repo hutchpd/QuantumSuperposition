@@ -21,6 +21,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="_QuantumSuperposition.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="" />
     <None Include="LICENSE" Pack="true" PackagePath="" />
     <None Include="icon.png" Pack="true" PackagePath="" />
