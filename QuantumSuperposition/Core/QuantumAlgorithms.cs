@@ -9,6 +9,8 @@ namespace QuantumSuperposition.Core
     {
         /// <summary>
         /// Applies the Quantum Fourier Transform (QFT) to the specified qubits.
+        /// This algorithm rotates the state space to reveal periodicity —
+        /// basically, it's a fancy way to turn time into frequency like a quantum DJ.
         /// </summary>
         public static void QuantumFourierTransform(QuantumSystem system, int[] qubits)
         {
@@ -31,9 +33,9 @@ namespace QuantumSuperposition.Core
         }
 
         /// <summary>
-        /// Implements Grover’s search. The oracle is provided as a predicate over basis states.
-        /// It builds the oracle (phase flip) unitary and the diffusion operator unitary,
-        /// then applies them for an appropriate number of iterations.
+        /// Runs Grover’s search algorithm to find "the one" in an unsorted quantum haystack.
+        /// The oracle defines which states are considered solutions,
+        /// and the algorithm amplifies their probability like a quantum hype man.
         /// </summary>
         public static void GroverSearch(QuantumSystem system, int[] qubits, Func<int[], bool> oracle)
         {
@@ -55,9 +57,9 @@ namespace QuantumSuperposition.Core
         }
 
         /// <summary>
-        /// Builds and applies the oracle unitary.  
-        /// For each basis state in the subspace of the target qubits, if oracle(state)==true,
-        /// that state is phased by –1; otherwise, it remains unchanged.
+        /// Constructs and applies the oracle gate —
+        /// it flips the sign (adds a -1 phase) of any state deemed "special" by the oracle function.
+        /// This is like tagging certain quantum states as cursed, so Grover can sniff them out.
         /// </summary>
         private static void ApplyOracle(QuantumSystem system, int[] qubits, Func<int[], bool> oracle)
         {
@@ -79,7 +81,9 @@ namespace QuantumSuperposition.Core
         }
 
         /// <summary>
-        /// Builds and applies the Grover diffusion operator.
+        /// Applies the Grover diffusion operator — a reflection over the mean amplitude.
+        /// Think of it as quantum gaslighting: it makes the marked states stand out
+        /// by subtly making everything else doubt its own existence.
         /// </summary>
         private static void ApplyDiffusionOperator(QuantumSystem system, int[] qubits)
         {
@@ -121,7 +125,8 @@ namespace QuantumSuperposition.Core
         #region Helper Methods
 
         /// <summary>
-        /// Converts an integer index to a binary array (most-significant bit first) of given length.
+        /// Converts an integer into its binary representation as an array,
+        /// with the most significant bit first. Useful for peeking behind the matrix.
         /// </summary>
         private static int[] IndexToBits(int index, int length)
         {
@@ -134,7 +139,46 @@ namespace QuantumSuperposition.Core
             return bits;
         }
 
-        // TODO: add other helpers such as ExtractSubstate and BitsToIndex
+        /// <summary>
+        /// Reverses what IndexToBits did. Translates a binary array back into
+        /// a good old-fashioned base-10 integer, just like grandma used to use.
+        /// </summary>
+        /// <param name="bits">An array of bits where the first element is the MSB.</param>
+        /// <returns>The integer value represented by the bits.</returns>
+        private static int BitsToIndex(int[] bits)
+        {
+            int index = 0;
+            for (int i = 0; i < bits.Length; i++)
+            {
+                index = (index << 1) | bits[i];
+            }
+            return index;
+        }
+
+        /// <summary>
+        /// Given a full system index, extracts the value of a subset of qubits as an integer.
+        /// Handy when you want to zoom in on just a few bits of drama in a massive entangled soap opera.
+        /// </summary>
+        /// <param name="fullIndex">The integer representing the full quantum state.</param>
+        /// <param name="targetQubits">
+        /// An array of qubit positions to extract. These should correspond to the positions in the full state 
+        /// (with 0 representing the most significant qubit).
+        /// </param>
+        /// <param name="totalQubits">The total number of qubits in the full state representation.</param>
+        /// <returns>The integer value of the extracted substate.</returns>
+        private static int ExtractSubstate(int fullIndex, int[] targetQubits, int totalQubits)
+        {
+            int subIndex = 0;
+            foreach (int qubit in targetQubits)
+            {
+                // Extract the bit at the given qubit position.
+                // Assumes that qubit 0 corresponds to the MSB in the full state.
+                int bit = (fullIndex >> (totalQubits - 1 - qubit)) & 1;
+                subIndex = (subIndex << 1) | bit;
+            }
+            return subIndex;
+        }
+
         #endregion
     }
 

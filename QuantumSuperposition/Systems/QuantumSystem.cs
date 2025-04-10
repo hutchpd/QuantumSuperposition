@@ -32,6 +32,8 @@ namespace QuantumSuperposition.Systems
             int d = 1 << numTargets;
             var newAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
 
+            _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, targetQubits, gate, gateName));
+
             // Group the basis states by the bits in positions not among the target qubits.
             var groups = currentAmps.Keys.GroupBy(state =>
             {
@@ -197,7 +199,8 @@ namespace QuantumSuperposition.Systems
         public enum GateType
         {
             SingleQubit,
-            TwoQubit
+            TwoQubit,
+            MultiQubit
         }
 
         public class GateOperation
