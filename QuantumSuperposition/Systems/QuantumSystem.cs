@@ -419,7 +419,7 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
-        /// Processes and applies all the queued gate operations in FIFO order.
+        /// This is like a quantum assembly line, but with more uncertainty and fewer safety regulations.
         /// </summary>
         public void ProcessGateQueue()
         {
@@ -452,8 +452,7 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
-        /// Optimizes the given sequence of gate operations by removing pairs that cancel out.
-        /// In this simple example, consecutive "H" or "X" gates on the same qubit are removed.
+        /// A bit like cleaning up your closet, but with more qubits and fewer sweaters.
         /// </summary>
         private GateOperation[] OptimizeGateQueue(GateOperation[] operations)
         {
@@ -475,28 +474,104 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
-        /// Determines whether two gate operations cancel each other.
-        /// For simplicity, this example checks for two identical single-qubit operations (like H or X)
-        /// on the same qubit. In your real implementation, you might want to multiply matrices
-        /// or consider a tolerance.
+        /// With a bit of time travel you were trying to cancel out your bad decisions in life.
         /// </summary>
         private bool CanCancel(GateOperation op1, GateOperation op2)
         {
-            // Only optimize if both operations are on the same qubits and are of the same type.
             if (op1.OperationType == op2.OperationType && op1.TargetQubits.SequenceEqual(op2.TargetQubits))
             {
-                // As an example, assume two Hadamard ("H") gates cancel since H × H = I.
-                if (op1.GateName == "H" && op2.GateName == "H")
-                    return true;
-                // Similarly for Pauli-X (X) if X × X = I.
-                if (op1.GateName == "X" && op2.GateName == "X")
-                    return true;
+                int n = op1.GateMatrix.GetLength(0);
+                // Ensure both matrices are square and of the same dimension.
+                if (op2.GateMatrix.GetLength(0) != n ||
+                    op1.GateMatrix.GetLength(1) != n ||
+                    op2.GateMatrix.GetLength(1) != n)
+                {
+                    return false;
+                }
+
+                // Compute the net effect: op2 * op1.
+                Complex[,] product = MultiplyMatrices(op2.GateMatrix, op1.GateMatrix);
+                Complex[,] identity = CreateIdentityMatrix(n);
+                // Check if product and identity are equal within a tolerance.
+                return AreMatricesEqual(product, identity, 1e-9);
             }
             return false;
         }
 
         /// <summary>
-        /// Internal method that processes a single-qubit gate.
+        /// Come on everybody, listen to me, rapping is as easy as 1, 2, 3.
+        /// Don't be shy, it's easy if you try.
+        /// I'm gonna show you how to mmm mmm do matrix manipulation.
+        /// </summary>
+        private Complex[,] MultiplyMatrices(Complex[,] A, Complex[,] B)
+        {
+            int n = A.GetLength(0);
+            int m = A.GetLength(1);
+            int p = B.GetLength(1);
+            if (B.GetLength(0) != m)
+            {
+                throw new ArgumentException("Matrix dimensions do not match for multiplication.");
+            }
+            var result = new Complex[n, p];
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    Complex sum = Complex.Zero;
+                    for (int k = 0; k < m; k++)
+                    {
+                        sum += A[i, k] * B[k, j];
+                    }
+                    result[i, j] = sum;
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// This is like a quantum mirror, reflecting your true self.
+        /// Stargate SG-1 would be proud.
+        /// </summary>
+        private Complex[,] CreateIdentityMatrix(int n)
+        {
+            var identity = new Complex[n, n];
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    identity[i, j] = (i == j) ? Complex.One : Complex.Zero;
+                }
+            }
+            return identity;
+        }
+
+        /// <summary>
+        /// Checking if your quantum state is the same as your neighbour's.
+        /// </summary>
+        private bool AreMatricesEqual(Complex[,] A, Complex[,] B, double tolerance)
+        {
+            int rows = A.GetLength(0);
+            int cols = A.GetLength(1);
+            if (B.GetLength(0) != rows || B.GetLength(1) != cols)
+            {
+                return false;
+            }
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    if (Complex.Abs(A[i, j] - B[i, j]) > tolerance)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+
+        /// <summary>
+        /// A quantum spa day for your qubit.
         /// </summary>
         private void ProcessSingleQubitGate(int qubit, Complex[,] gate)
         {
@@ -521,7 +596,7 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
-        /// Internal method that processes a two-qubit gate.
+        /// A quantum dance party, but with more entanglement and fewer disco balls.
         /// </summary>
         private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
         {
