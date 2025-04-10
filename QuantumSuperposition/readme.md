@@ -1,5 +1,6 @@
 ## QuantumSuperposition (.NET Library)
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
+![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
 
 .NET’s most confident way to say “maybe”
 
@@ -98,6 +99,14 @@ Because collapsing reality should be optional. These features let you get freaky
 - **Parametric Gates: Define gates like RX(angle: π/4) for QAOA, QFT, etc.** - Because who doesn't love a good parameterized gate?
 - **Gate Scheduling Visualizer: Generate ASCII/graph diagrams from gate sequences** - Because sometimes you need to see your quantum chaos in a pretty format.
 
+## Quantum Algorithms
+
+- **Built-in Quantum Algorithms**: Run real QFT and Grover’s Search logic on `QuantumSystem` like a true quantum dev — no PhD required.
+- **Quantum Fourier Transform (QFT)**: A core building block in many quantum algorithms. It reveals periodicity in a quantum state, turning time-based signals into frequency — like a quantum DJ mixing up the basis.
+- **Grover’s Search Algorithm**: A quantum algorithm for searching unsorted databases with quadratic speedup. It’s like having a quantum search engine that actually works.
+
+Each algorithm internally schedules gate operations, which you can inspect, visualize, or export using the gate queue.
+
 ### Enabling Non-Observational Arithmetic (if you're into that kind of thing)
 
 ```csharp
@@ -135,6 +144,7 @@ using QuantumSuperposition.Operators;
 - [Entanglement & Collapse Propagation](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Entanglement.md)
 - [Functional & LINQ Operations](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/FunctionalOps.md)
 - [Working with Complex Numbers](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/ComplexSupport.md)
+- [Quantum Algorithms](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/QuantumAlgorithms.md)
 
 ## Performance Note
 You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
