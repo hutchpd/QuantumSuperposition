@@ -423,22 +423,76 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         public void ProcessGateQueue()
         {
+            // First, optimize the current queue.
+            var optimizedOps = OptimizeGateQueue(_gateQueue.ToArray());
+
+            // Replace the internal queue with the optimized one.
+            _gateQueue = new Queue<GateOperation>(optimizedOps);
+
             while (_gateQueue.Count > 0)
             {
                 var op = _gateQueue.Dequeue();
                 switch (op.OperationType)
                 {
                     case GateType.SingleQubit:
-                        // You may call your existing implementation now
                         ProcessSingleQubitGate(op.TargetQubits[0], op.GateMatrix);
                         break;
                     case GateType.TwoQubit:
                         ProcessTwoQubitGate(op.TargetQubits[0], op.TargetQubits[1], op.GateMatrix);
                         break;
+                    case GateType.MultiQubit:
+                        // You may have already applied these immediately,
+                        // but if not, you could add a corresponding ProcessMultiQubitGate op.
+                        // For now, simply throw or ignore if they were already applied.
+                        throw new InvalidOperationException("MultiQubit operations should be processed immediately.");
                     default:
                         throw new InvalidOperationException("Unsupported gate operation.");
                 }
             }
+        }
+
+        /// <summary>
+        /// Optimizes the given sequence of gate operations by removing pairs that cancel out.
+        /// In this simple example, consecutive "H" or "X" gates on the same qubit are removed.
+        /// </summary>
+        private GateOperation[] OptimizeGateQueue(GateOperation[] operations)
+        {
+            var stack = new Stack<GateOperation>();
+            foreach (var op in operations)
+            {
+                // If the stack is not empty, check if the current operation cancels with the previous one.
+                if (stack.Count > 0 && CanCancel(stack.Peek(), op))
+                {
+                    stack.Pop();
+                }
+                else
+                {
+                    stack.Push(op);
+                }
+            }
+            // Return the stack in FIFO order.
+            return stack.Reverse().ToArray();
+        }
+
+        /// <summary>
+        /// Determines whether two gate operations cancel each other.
+        /// For simplicity, this example checks for two identical single-qubit operations (like H or X)
+        /// on the same qubit. In your real implementation, you might want to multiply matrices
+        /// or consider a tolerance.
+        /// </summary>
+        private bool CanCancel(GateOperation op1, GateOperation op2)
+        {
+            // Only optimize if both operations are on the same qubits and are of the same type.
+            if (op1.OperationType == op2.OperationType && op1.TargetQubits.SequenceEqual(op2.TargetQubits))
+            {
+                // As an example, assume two Hadamard ("H") gates cancel since H × H = I.
+                if (op1.GateName == "H" && op2.GateName == "H")
+                    return true;
+                // Similarly for Pauli-X (X) if X × X = I.
+                if (op1.GateName == "X" && op2.GateName == "X")
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
