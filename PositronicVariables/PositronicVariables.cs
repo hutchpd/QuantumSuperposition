@@ -119,6 +119,7 @@ public static class PositronicRuntime
 /// <typeparam name="T">A value type that implements IComparable.</typeparam>
 public class PositronicVariable<T> : IPositronicVariable where T : struct, IComparable
 {
+    private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
 
     public readonly List<QuBit<T>> timeline = new();
     private bool replacedInitialSlice = false;
@@ -133,7 +134,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     /// </summary>
     public int TimelineLength => timeline.Count;
 
-    public PositronicVariable(T initialValue)
+    internal PositronicVariable(T initialValue)
     {
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
@@ -141,7 +142,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         PositronicRuntime.Instance.Variables.Add(this);
     }
 
-    public PositronicVariable(QuBit<T> qb)
+    internal PositronicVariable(QuBit<T> qb)
     {
         qb.Any();
         timeline.Add(qb);
@@ -155,6 +156,24 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 
     public static void SetEntropy(int e) => PositronicRuntime.Instance.Entropy = e;
     public static int GetEntropy() => PositronicRuntime.Instance.Entropy;
+
+    /// <summary>
+    /// Let's start madness with a bang!
+    /// </summary>
+    public static PositronicVariable<T> GetOrCreate(string id, T initialValue)
+    {
+        if (registry.TryGetValue(id, out var instance))
+        {
+            return instance;
+        }
+        else
+        {
+            instance = new PositronicVariable<T>(initialValue);
+            registry[id] = instance;
+            return instance;
+        }
+    }
+
 
     /// <summary>
     /// Returns true if all registered PositronicVariables have converged.
@@ -355,6 +374,18 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
+    public static PositronicVariable<T> operator +(T left, PositronicVariable<T> right)
+    {
+        var resultQB = right.GetCurrentQBit() + left;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator +(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
 
     public static PositronicVariable<T> operator %(PositronicVariable<T> left, T right)
     {
@@ -362,6 +393,19 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
+    public static PositronicVariable<T> operator %(T left, PositronicVariable<T> right)
+    {
+        var resultQB = right.GetCurrentQBit() % left;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator %(PositronicVariable<T> left, PositronicVariable<T> right)
+    {
+        var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+
 
     public static PositronicVariable<T> operator -(PositronicVariable<T> left, T right)
     {
@@ -369,15 +413,9 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
-    public static PositronicVariable<T> operator *(PositronicVariable<T> left, T right)
+    public static PositronicVariable<T> operator -(T left, PositronicVariable<T> right)
     {
-        var resultQB = left.GetCurrentQBit() * right;
-        resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
-    }
-    public static PositronicVariable<T> operator /(PositronicVariable<T> left, T right)
-    {
-        var resultQB = left.GetCurrentQBit() / right;
+        var resultQB = right.GetCurrentQBit() - left;
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
@@ -388,18 +426,58 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
+
+    public static PositronicVariable<T> operator -(PositronicVariable<T> value)
+    {
+        // We assume the type T supports negation via dynamic
+        var qb = value.GetCurrentQBit();
+        var negatedValues = qb.ToCollapsedValues()
+            .Select(v => (T)(-(dynamic)v))
+            .ToArray();
+        var negatedQb = new QuBit<T>(negatedValues);
+        negatedQb.Any();
+        return new PositronicVariable<T>(negatedQb);
+    }
+    public static PositronicVariable<T> operator *(PositronicVariable<T> left, T right)
+    {
+        var resultQB = left.GetCurrentQBit() * right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+
     public static PositronicVariable<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
+    public static PositronicVariable<T> operator *(T left, PositronicVariable<T> right)
+    {
+        var resultQB = right.GetCurrentQBit() * left;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+
     public static PositronicVariable<T> operator /(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
         resultQB.Any();
         return new PositronicVariable<T>(resultQB);
     }
+    public static PositronicVariable<T> operator /(T left, PositronicVariable<T> right)
+    {
+        var resultQB = right.GetCurrentQBit() / left;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+    public static PositronicVariable<T> operator /(PositronicVariable<T> left, T right)
+    {
+        var resultQB = left.GetCurrentQBit() / right;
+        resultQB.Any();
+        return new PositronicVariable<T>(resultQB);
+    }
+
+
     public static bool operator <(PositronicVariable<T> left, T right)
     {
         return left.GetCurrentQBit().ToCollapsedValues().First().CompareTo(right) < 0;
@@ -668,6 +746,9 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 /// </summary>
 public class PositronicVariableRef<T> : IPositronicVariable
 {
+    private static Dictionary<string, PositronicVariableRef<T>> registry
+    = new Dictionary<string, PositronicVariableRef<T>>();
+
     public readonly List<QuBit<T>> timeline = new();
     private bool replacedInitialSlice = false;
 
@@ -681,7 +762,7 @@ public class PositronicVariableRef<T> : IPositronicVariable
     /// </summary>
     public int TimelineLength => timeline.Count;
 
-    public PositronicVariableRef(T initialValue)
+    internal PositronicVariableRef(T initialValue)
     {
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
@@ -689,7 +770,7 @@ public class PositronicVariableRef<T> : IPositronicVariable
         PositronicRuntime.Instance.Variables.Add(this);
     }
 
-    public PositronicVariableRef(QuBit<T> qb)
+    internal PositronicVariableRef(QuBit<T> qb)
     {
         qb.Any();
         timeline.Add(qb);
@@ -698,6 +779,7 @@ public class PositronicVariableRef<T> : IPositronicVariable
 
     public static void ResetStaticVariables()
     {
+        registry.Clear();
         PositronicRuntime.Instance.Reset();
     }
 
@@ -989,7 +1071,7 @@ public class NeuralNodule<T> where T : struct, IComparable
     /// <param name="nodes"></param>
     public static void ConvergeNetwork(params NeuralNodule<T>[] nodes)
     {
-        PositronicVariable<T>.RunConvergenceLoop(() =>
+        PositronicVariable<T>.RunConvergenceLoop(() =>  
         {
             foreach (var node in nodes)
                 node.Fire();
