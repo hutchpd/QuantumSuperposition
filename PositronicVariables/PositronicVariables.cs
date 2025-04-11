@@ -2,42 +2,69 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Reflection;
+
+internal static class HiddenPositronicEnvironment
+{
+    // Dummy property to force static initialization.
+    public static bool Initialized { get; } = true;
+
+    // Store the actual StringWriter we create.
+    private static readonly StringWriter _outputBuffer;
+
+    public static StringWriter OutputBuffer => _outputBuffer;
+
+    static HiddenPositronicEnvironment()
+    {
+        // Capture the original console output.
+        var originalOut = Console.Out;
+        _outputBuffer = new StringWriter();
+
+        // Redirect console output to our buffer.
+        Console.SetOut(_outputBuffer);
+        PositronicRuntime.Instance.CapturedWriter = _outputBuffer;
+        PositronicRuntime.Instance.Reset();
+
+        // When the process exits, run the convergence loop.
+        AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
+        {
+            // Locate the user's Main method.
+            var mainMethod = AppDomain.CurrentDomain
+                .GetAssemblies()
+                .SelectMany(a => a.GetTypes())
+                .Where(t => t.GetMethod("Main", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) != null)
+                .Select(t => t.GetMethod("Main", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+                .FirstOrDefault();
+
+            if (mainMethod == null)
+                throw new InvalidOperationException("Could not locate a Program.Main method.");
+
+            // Run the convergence loop; each iteration re-invokes Main.
+            PositronicVariable<int>.RunConvergenceLoop(() =>
+            {
+                mainMethod.Invoke(null, null);
+            });
+
+            // Restore the original output and print only the final output.
+            Console.SetOut(originalOut);
+            originalOut.Write(_outputBuffer.ToString());
+        };
+    }
+}
 
 #region Initiate the matrix
 /// <summary>
 /// The Matrix is everywhere. It is all around us. Even now, in this very room.
 /// </summary>
-public class PositronicSimulation : IDisposable
+public static class PositronicSimulation
 {
-    private readonly TextWriter originalOut;
-    private readonly StringWriter outputBuffer;
-    private readonly Action simulationCode;
-
-    public PositronicSimulation(Action simulationCode)
+    public static void AutoEnable()
     {
-        this.simulationCode = simulationCode;
-        originalOut = Console.Out;
-        outputBuffer = new StringWriter();
-
-        // Redirect output to a buffer.
-        Console.SetOut(outputBuffer);
-        PositronicRuntime.Instance.CapturedWriter = outputBuffer;
-        PositronicRuntime.Instance.Reset();
-    }
-
-    public void Dispose()
-    {
-        // Run convergence loop repeatedly using the simulation code.
-        PositronicVariable<int>.RunConvergenceLoop(simulationCode);
-
-        // Restore the console output.
-        Console.SetOut(originalOut);
-        originalOut.Write(outputBuffer.ToString());
-
-        // Final cleanup.
-        PositronicRuntime.Instance.Entropy = 1;
+        // Simply referencing HiddenPositronicEnvironment.Initialized forces the static
+        // constructor above to run.
+        var dummy = HiddenPositronicEnvironment.Initialized;
     }
 }
 
@@ -158,6 +185,20 @@ public static class PositronicRuntime
 /// <typeparam name="T">A value type that implements IComparable.</typeparam>
 public class PositronicVariable<T> : IPositronicVariable where T : struct, IComparable
 {
+    private static readonly bool _ = EnableSimulation();
+    private static bool EnableSimulation()
+    {
+        // This call triggers the static constructor of HiddenPositronicEnvironment.
+        PositronicSimulation.AutoEnable();
+        return true;
+    }
+
+    static PositronicVariable()
+    {
+        // Access a member on HiddenPositronicEnvironment to trigger its static constructor.
+        var trigger = HiddenPositronicEnvironment.Initialized;
+    }
+
     private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
 
     public readonly List<QuBit<T>> timeline = new();
@@ -237,8 +278,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             PositronicRuntime.Instance.CapturedWriter = Console.Out;
 
         PositronicRuntime.Instance.Converged = false;
-        // We silence console output here to avoid panic from observers.
-        // You didn’t *really* want to know what’s happening in negative time, did you?
+        // Redirect console output to TextWriter.Null during convergence
         Console.SetOut(TextWriter.Null);
         PositronicRuntime.Instance.Entropy = -1;
 
@@ -249,12 +289,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
         {
             code();
 
-            // Debug prints (omitted from console output)
-            System.Diagnostics.Debug.WriteLine($"[Debug] Negative-Time Iteration: {iteration}");
-            foreach (var variable in PositronicRuntime.Instance.Variables)
-                System.Diagnostics.Debug.WriteLine($"   => {variable}");
-
-            // Update diagnostics
+            // Debug prints omitted for real console.
             (PositronicRuntime.Instance as DefaultPositronicRuntime).TotalConvergenceIterations = iteration;
 
             bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
@@ -263,6 +298,9 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
                 PositronicRuntime.Instance.Converged = true;
                 foreach (var pv in PositronicRuntime.Instance.Variables)
                     pv.UnifyAll();
+
+                // Clear prior output so that only final output appears.
+                HiddenPositronicEnvironment.OutputBuffer.GetStringBuilder().Clear();
                 Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
                 break;
             }
@@ -270,10 +308,9 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
             iteration++;
         }
 
-        // Once the variables stop arguing and everyone reaches emotional closure,
-        // we return to forward time like nothing happened.
         Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
         PositronicRuntime.Instance.Entropy = 1;
+        // Final run produces only converged output.
         code();
     }
 

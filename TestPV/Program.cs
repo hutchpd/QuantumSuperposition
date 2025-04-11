@@ -1,14 +1,11 @@
-﻿internal static class Program
-{
-    private static void Main()
+﻿    internal static class Program
     {
-        using (new PositronicSimulation(() =>
+        private static void Main()
         {
             var antival = PositronicVariable<int>.GetOrCreate("antival", -1);
             Console.WriteLine($"The antival is {antival}");
             var val = -1 * antival;
             Console.WriteLine($"The value is {val}");
             antival.Assign(val);
-        })){}
+        }
     }
-}
