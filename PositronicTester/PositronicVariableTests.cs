@@ -7,6 +7,7 @@ using System.Text;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Core;
 using NUnit.Framework;
+using System.Collections;
 
 namespace PositronicVariables.Tests
 {
@@ -1006,5 +1007,83 @@ namespace PositronicVariables.Tests
             Assert.That(antival.timeline.Count, Is.GreaterThan(1),
                 $"Expected negative timeline to have more than one slice in union mode, but got {antival.timeline.Count}");
         }
+
+        /// <summary>
+        /// Uses the Babylonian method to approximate √2.
+        /// The iterative update is applied until convergence is detected,
+        /// then the timeline is unified and checked for a single value.
+        /// </summary>
+        /// <summary>
+        /// Uses the Babylonian method to approximate √2.
+        /// We explicitly call Converged() after each iteration (and again before unification)
+        /// since our test is not marked with [PositronicEntry] and the library will not auto-run convergence.
+        /// </summary>
+        [Test]
+        public void BabylonianSqrt_ConvergesToSquareRoot2()
+        {
+            double a = 2.0;
+            // We expect the approximation to round to 1.4142 after convergence.
+            double expectedSqrt = 1.4142;
+
+            // Define an initial guess (rounded to 9 decimal places).
+            double initialGuess = Math.Round(1.5, 9);
+            var sqrtApprox = PositronicVariable<double>.GetOrCreate("sqrt", initialGuess);
+
+            // Set negative-time mode to let the simulation iterate backward.
+            PositronicVariable<double>.SetEntropy(-1);
+
+            int maxIterations = 50;
+            int convergenceStep = 0;
+            for (int i = 0; i < maxIterations; i++)
+            {
+                // Retrieve the current approximation.
+                double currentApprox = sqrtApprox.ToValues().First();
+                // Compute next approximation using the Babylonian update rule and round to 4 decimals.
+                double nextApprox = Math.Round((currentApprox + a / currentApprox) / 2.0, 4);
+                // Update the positronic variable.
+                sqrtApprox.Assign(nextApprox);
+
+                // Call Converged explicitly and check if a repeated state has been detected.
+                convergenceStep = sqrtApprox.Converged();
+                if (convergenceStep > 0)
+                {
+                    TestContext.WriteLine($"Convergence detected on iteration {i + 1} (step: {convergenceStep}).");
+                    break;
+                }
+            }
+
+            Assert.That(sqrtApprox.Converged(), Is.GreaterThan(0),
+                "Convergence was not detected within the maximum number of iterations.");
+
+            // Collapse the timeline into the converged state.
+            sqrtApprox.UnifyAll();
+
+            // Verify via reflection that only one timeline slice remains.
+            FieldInfo timelineField = typeof(PositronicVariable<double>)
+                .GetField("timeline", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(timelineField, Is.Not.Null, "Reflection failed: 'timeline' field not found.");
+            var rawTimeline = timelineField.GetValue(sqrtApprox) as IList;
+            Assert.That(rawTimeline, Is.Not.Null, "Failed to extract timeline via reflection.");
+            Assert.That(rawTimeline.Count, Is.EqualTo(1), "Expected timeline to collapse to a single slice after convergence.");
+
+            // Inspect internal qubit state
+            var qubit = rawTimeline[0];
+            var statesProp = qubit.GetType().GetProperty("States", BindingFlags.Instance | BindingFlags.Public);
+            var states = (IEnumerable<double>)statesProp.GetValue(qubit);
+            var allValues = states.ToList(); // Preserve the ordering (do not sort)
+            TestContext.WriteLine("Final internal qubit states: " + string.Join(", ", allValues));
+            Assert.That(allValues.Count, Is.GreaterThanOrEqualTo(1),
+                "Expected at least one value in the final slice.");
+
+            // Get the last entry from the list and verify it equals the expected value.
+            double finalResult = allValues.Last();
+            TestContext.WriteLine("Final result in the internal qubit (last entry): " + finalResult);
+            Assert.That(finalResult, Is.EqualTo(expectedSqrt).Within(0.0001),
+                $"Expected the last result to be approximately {expectedSqrt}, but got {finalResult}.");
+
+            // Switch to forward time.
+            PositronicVariable<double>.SetEntropy(1);
+        }
+
     }
 }

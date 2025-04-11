@@ -34,7 +34,8 @@ dotnet add package PositronicVariables
 
 ## Quick Example
 
-Here's a quick example of a Positronic integer variable that converges to a stable cycle:
+What happens if you create a logical loop with no stable resolution?
+
 
 ```csharp
 internal static class Program
@@ -55,6 +56,116 @@ internal static class Program
 ```
 The antival is any(-1, 1)
 The value is any(1, -1)
+```
+
+You're trapped in a two-state paradox. Like a light switch held halfway by Schrödinger’s indecision. This is why convergence matters — without it, you're just running in timeline circles until the compiler cries.
+
+---
+
+## Feynman Diagrams for Programmers
+Let’s visualize what just happened:
+
+```
+Time →
+[initial guess] — val = -1 * antival —→ antival = val —→ [back in time]
+       ↑_______________________________________________________|
+```
+
+We created a **cycle**. PositronicVariables evaluate by iterating this loop until the values settle. If they never settle? You get superpositions. Like emotional baggage, but for integers.
+
+```csharp
+[PositronicEntry]
+static void Main()
+{
+    double a = 2.0;
+    var guess = PositronicVariable<double>.GetOrCreate("guess", 1.5);
+
+    // Watch the convergence happen before your eyes
+    Console.WriteLine($"sqrt({a}) ≈ {guess.ToValues().Last()}");
+
+    double v = guess.ToValues().Last();
+    guess.Assign((v + a / v) / 2.0);
+}
+```
+
+#### Output:
+```
+sqrt(2) ≈ 1.414213562
+```
+
+Yes, this is real. No, we didn’t skip a step. The past just updated itself when we committed to the present.
+
+#### Why `.ToValues().Last()`?
+
+You're not just creating a variable.
+
+You’re summoning a cloud of possibilities — all the potential values that guess could take as the program recursively rewinds and replays itself.
+Like a looping dream sequence where it tries different outcomes until it finds one that satisfies the logic across all iterations.
+The final value is the one that successfully stabilized the timeline.
+
+---
+
+###  **Too Far? Let’s Fold the Universe for Primes**
+
+##  Prime Discovery via Causal Iteration
+
+This example discovers prime numbers not by checking every number, but by defining a single `candidate` variable that evolves forward through convergent timeline rewriting:
+
+```csharp
+[PositronicEntry]
+internal static class Program
+{
+    private static void Main()
+    {
+        var candidate = PositronicVariable<int>.GetOrCreate("candidate", 2);
+        var primes = new List<int>();
+
+        for (int i = 2; i < 100; i++)
+        {
+            int number = candidate.ToValues().Last();
+
+            if (IsPrime(number, primes))
+            {
+                primes.Add(number);
+                Console.WriteLine(number);
+            }
+
+            candidate.Assign(number + 1);
+        }
+    }
+
+    private static bool IsPrime(int n, List<int> primes)
+    {
+        if (n < 2) return false;
+
+        foreach (var p in primes)
+            if (n % p == 0) return false;
+
+        return true;
+    }
+}
+```
+
+### What’s Happening?
+
+- `candidate.ToValues().Last()` gives you the current *most accurate* prediction of the prime.
+- `candidate.Assign(number + 1)` defines how that candidate moves forward through time.
+- Each iteration *rewrites the past*, stabilizing around valid primes.
+- No manual filtering or brute-force search. Just **temporal state progression**.
+
+This is a state machine **without explicit states** — just a variable inching forward through causally consistent branches until the timeline locks in the truth.
+
+#### Output:
+
+```
+2
+3
+5
+7
+11
+13
+...
+97
 ```
 
 ---
@@ -91,6 +202,17 @@ Current greeting: any("Hello", "Hi", "Hey")
 ```
 
 ---
+
+## 🧠 In Summary
+
+- You can **print values before they're calculated.**
+- You can create **logical time paradoxes.**
+- You can use **Feynman logic graphs** to debug your feedback loops.
+- You can solve classical problems like sqrt, primes, or Pascal’s triangle via **backward causality**.
+- This is no longer programming. This is wizardry in C# form.
+
+And yes, it’s probably too much power for your coworkers. You're welcome.
+
 
 ## How It Works (The Short Version)
 
