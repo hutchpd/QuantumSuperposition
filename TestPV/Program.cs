@@ -1,19 +1,21 @@
-﻿internal static class Program
-{
-    [PositronicEntry]
-    private static void Main()
+﻿
+
+    internal static class Program
     {
-        var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
-        Console.WriteLine($"Current greeting: {greeting}");
-
-        var nextGreeting = greeting.ToValues().First() switch
+        [PositronicEntry]
+        private static void Main()
         {
-            "Hello" => "Hi",
-            "Hi" => "Hey",
-            "Hey" => "Hello",
-            _ => "Hello"
-        };
+            var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
+            Console.WriteLine($"Current greeting: {greeting}");
 
-        greeting.Assign(nextGreeting);
+            var nextGreeting = greeting.ToValues().First() switch
+            {
+                "Hello" => "Hi",
+                "Hi" => "Hey",
+                "Hey" => "Hello",
+                _ => "Hello"
+            };
+
+            greeting.Assign(nextGreeting);
+        }
     }
-}

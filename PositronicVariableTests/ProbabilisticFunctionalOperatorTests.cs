@@ -29,8 +29,9 @@ namespace QuantumMathTests
             var expectedStates = new[] { 6, 20, 8 };
 
             // We expect the new reality to include these upgraded states
-            CollectionAssert.AreEquivalent(expectedStates, transformed.States);
-            Assert.IsFalse(transformed.IsCollapsed, "Nobody looked. Collapse would be rude.");
+            Assert.That(transformed.States, Is.EquivalentTo(expectedStates));
+            Assert.That(transformed.IsCollapsed, Is.False, "Nobody looked. Collapse would be rude.");
+
         }
 
         [Test]
@@ -40,8 +41,8 @@ namespace QuantumMathTests
             var qubit = new QuBit<int>(new[] { 1, 2, 3 });
             var selected = qubit.Select(x => x * 2);
 
-            CollectionAssert.AreEquivalent(new[] { 2, 4, 6 }, selected.States);
-            Assert.IsFalse(selected.IsCollapsed, "Mapping ≠ spying. Superposition intact.");
+            Assert.That(selected.States, Is.EquivalentTo(new[] { 2, 4, 6 }));
+            Assert.That(selected.IsCollapsed, Is.False, "Mapping ≠ spying. Superposition intact.");
         }
 
         [Test]
@@ -60,8 +61,8 @@ namespace QuantumMathTests
 
             var result = qubit.SelectMany(InnerSelector);
 
-            CollectionAssert.AreEquivalent(new[] { 10, 11, 20 }, result.States);
-            Assert.IsFalse(result.IsCollapsed, "Just branching, not spying. We’re good.");
+            Assert.That(result.States, Is.EquivalentTo(new[] { 10, 11, 20 }));
+            Assert.That(result.IsCollapsed, Is.False, "Just branching, not spying. We’re good.");
         }
 
         [Test]
@@ -71,8 +72,8 @@ namespace QuantumMathTests
             var qubit = new QuBit<int>(new[] { 1, 2, 3, 4 });
             var filtered = qubit.Where(x => x % 2 == 0);
 
-            CollectionAssert.AreEquivalent(new[] { 2, 4 }, filtered.States);
-            Assert.IsFalse(filtered.IsCollapsed, "Filtering ≠ observing. The waveform lives.");
+            Assert.That(filtered.States, Is.EquivalentTo(new[] { 2, 4 }));
+            Assert.That(filtered.IsCollapsed, Is.False, "Filtering ≠ observing. The waveform lives.");
         }
 
         [Test]
@@ -86,8 +87,9 @@ namespace QuantumMathTests
 
             var result = q1 * q2; // Quantum Tinder: every value matches with every other
 
-            CollectionAssert.AreEquivalent(new[] { 3, 4, 6, 8 }, result.States);
-            Assert.IsFalse(result.IsCollapsed, "Arithmetic didn’t break the quantum vibe.");
+            // use nuget 4 syntax
+            Assert.That(result.States, Is.EquivalentTo(new[] { 3, 4, 6, 8 }),
+                "Multiplying qubits should be like a quantum orgy — all combinations.");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -100,8 +102,8 @@ namespace QuantumMathTests
             var qubit = new QuBit<int>(new[] { 1, 2, 3 });
             var result = qubit + 5; // Just casually throwing +5 at quantum uncertainty
 
-            CollectionAssert.AreEquivalent(new[] { 6, 7, 8 }, result.States);
-            Assert.IsFalse(result.IsCollapsed, "Let the waveform vibe. No peeking.");
+            Assert.That(result.States, Is.EquivalentTo(new[] { 6, 7, 8 }),
+                "Adding a scalar should be like adding sprinkles to a cupcake — no collapse.");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -117,8 +119,8 @@ namespace QuantumMathTests
             var result1 = a + b;
             var result2 = b + a;
 
-            CollectionAssert.AreEquivalent(result1.States, result2.States,
-                "Commutativity isn’t just polite — it’s optimized.");
+            Assert.That(result1.States, Is.EquivalentTo(result2.States),
+                "Commutativity isn’t just polite — it’s optimized");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -134,8 +136,8 @@ namespace QuantumMathTests
                 .Where(x => x > 2)                     // Keep only those brave enough to be > 2
                 .SelectMany(x => new QuBit<int>(new[] { x * 3, x * 4 })); // Multiply their efforts
 
-            CollectionAssert.AreEquivalent(new[] { 9, 12 }, result.States);
-            Assert.IsFalse(result.IsCollapsed, "The pipeline remains unsnooped.");
+            Assert.That(result.States, Is.EquivalentTo(new[] { 9,12 }));
+            Assert.That(result.IsCollapsed, Is.False, "The pipeline remains unsnooped.");
         }
 
         [Test]
@@ -147,7 +149,7 @@ namespace QuantumMathTests
             var selected = eigen.Select(x => x / 10); // They shrink — spiritually
             var filtered = selected.Where(x => x < 3); // Only the small survive
 
-            CollectionAssert.AreEquivalent(new[] { 1, 2 }, filtered.States);
+            Assert.That(filtered.States, Is.EquivalentTo(new[] { 1, 2 }));
         }
     }
 }

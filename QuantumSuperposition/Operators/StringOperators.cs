@@ -1,4 +1,5 @@
 ﻿using QuantumSuperposition.Core;
+using System.Text;
 
 namespace QuantumSuperposition.Operators
 {
@@ -18,13 +19,25 @@ namespace QuantumSuperposition.Operators
             return a.Remove(index, b.Length);
         }
 
-        // Multiplication isn't well-defined for strings.
         public string Multiply(string a, string b)
-            => throw new NotSupportedException("Multiplication is not supported for strings.");
-
-        // Division is not applicable.
+        {
+            // Cartesian product of strings
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+                return string.Empty;
+            var result = new StringBuilder();
+            foreach (char c1 in a)
+            {
+                foreach (char c2 in b)
+                {
+                    result.Append(c1);
+                    result.Append(c2);
+                }
+            }
+            return result.ToString();
+        }
+        // Opposite of multiplication
         public string Divide(string a, string b)
-            => throw new NotSupportedException("Division is not supported for strings.");
+                    => throw new NotSupportedException("Divide is not supported for strings.");
 
         // Modulo is not applicable.
         public string Mod(string a, string b)

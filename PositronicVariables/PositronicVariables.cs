@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using QuantumSuperposition.QuantumSoup;
 
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class PositronicEntryAttribute : Attribute
@@ -850,6 +851,14 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 /// </summary>
 public class PositronicVariableRef<T> : IPositronicVariable
 {
+    private static readonly bool _ = EnableSimulation();
+    private static bool EnableSimulation()
+    {
+        // This call triggers the static constructor of HiddenPositronicEnvironment.
+        NeuroCascadeInitializer.AutoEnable();
+        return true;
+    }
+
     private static Dictionary<string, PositronicVariableRef<T>> registry
     = new Dictionary<string, PositronicVariableRef<T>>();
 
@@ -865,6 +874,37 @@ public class PositronicVariableRef<T> : IPositronicVariable
     /// The more you have, the less likely you are to sleep peacefully.
     /// </summary>
     public int TimelineLength => timeline.Count;
+
+    /// <summary>
+    /// Stargate SG-1 when Daniel kept touching things she shouldn't.
+    /// </summary>
+    public PositronicVariableRef<T> Fork()
+    {
+        var forkedTimeline = timeline.Select(qb =>
+        {
+            var newQB = new QuBit<T>(qb.ToCollapsedValues().ToArray());
+            newQB.Any(); 
+            return newQB;
+        }).ToList();
+
+        var forked = new PositronicVariableRef<T>(forkedTimeline[0]);
+        forked.timeline.Clear();
+        forkedTimeline.ForEach(qb => forked.timeline.Add(qb));
+        return forked;
+    }
+    /// <summary>
+    /// Think of it like Ryker's beardy twin: he looks the same when he shaves, but it's not Ryker really.
+    /// </summary>
+    public PositronicVariableRef<T> Fork(Func<T, T> transform)
+    {
+        var forked = Fork();
+        var last = forked.timeline.Last();
+        var transformedValues = last.ToCollapsedValues().Select(transform).ToArray();
+        forked.timeline[forked.timeline.Count - 1] = new QuBit<T>(transformedValues);
+        forked.timeline[forked.timeline.Count - 1].Any();
+        return forked;
+    }
+
 
     public static PositronicVariableRef<T> GetOrCreate(string id, T initialValue)
     {
@@ -1067,10 +1107,16 @@ public class PositronicVariableRef<T> : IPositronicVariable
         {
             var existing = timeline[0];
             if (!SameStates(existing, qb))
-                timeline[0] = qb;
+            {
+                // Instead of replacing, merge the states:
+                var merged = existing.ToCollapsedValues().Union(qb.ToCollapsedValues()).Distinct().ToList();
+                timeline[0] = new QuBit<T>(merged);
+                timeline[0].Any();
+            }
             replacedInitialSlice = true;
             return;
         }
+
 
         timeline.Add(qb);
         OnTimelineAppended?.Invoke();

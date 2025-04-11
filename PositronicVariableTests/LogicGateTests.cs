@@ -53,8 +53,8 @@ namespace QuantumMathTests
         // Helper: Compare two matrices elementwise with a given tolerance.
         private void AssertMatricesEqual(Complex[,] expected, Complex[,] actual, double tolerance = 1e-12)
         {
-            Assert.AreEqual(expected.GetLength(0), actual.GetLength(0), "Row counts differ");
-            Assert.AreEqual(expected.GetLength(1), actual.GetLength(1), "Column counts differ");
+            Assert.That(actual.GetLength(0), Is.EqualTo(expected.GetLength(0)), "Row counts differ");
+            Assert.That(actual.GetLength(1), Is.EqualTo(expected.GetLength(1)), "Column counts differ");
 
             for (int i = 0; i < expected.GetLength(0); i++)
             {

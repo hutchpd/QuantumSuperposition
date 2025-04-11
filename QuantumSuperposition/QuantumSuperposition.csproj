@@ -15,8 +15,8 @@
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageTags>Quantum;Superposition;Quantum Computing;Parallel Processing;Concurrency;Mathematics;Logic;Quantum Mechanics;C#;DotNet;Library;Algorithms;Prime Numbers;Factors;Mathematical Operations;Logical Operations;Eigenstates;Generics;Quantum Programming</PackageTags>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
-    <FileVersion>1.7.0</FileVersion>
-    <Version>1.7.0</Version>
+    <FileVersion>1.7.1</FileVersion>
+    <Version>1.7.1</Version>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 

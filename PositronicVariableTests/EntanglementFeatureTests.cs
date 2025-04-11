@@ -32,13 +32,10 @@ namespace QuantumMathTests
             _system.Entangle("BellPair_A", qubitA, qubitB);
 
             // Confirm they’re now officially "quantum married"
-            Assert.NotNull(qubitA.EntanglementGroupId);
-            Assert.NotNull(qubitB.EntanglementGroupId);
-            Assert.AreEqual(qubitA.EntanglementGroupId.Value, qubitB.EntanglementGroupId.Value);
-
-            // Check the group registry hasn't filed for divorce
-            var allGroups = _manager.GetGroupsForReference(qubitA);
-            Assert.AreEqual(1, allGroups.Count);
+            Assert.That(qubitA.EntanglementGroupId, Is.Not.Null);
+            Assert.That(qubitB.EntanglementGroupId, Is.Not.Null);
+            Assert.That(qubitB.EntanglementGroupId.Value, Is.EqualTo(qubitA.EntanglementGroupId.Value));
+            Assert.That(_manager.GetGroupsForReference(qubitA).Count, Is.EqualTo(1));
         }
         #endregion
 
@@ -59,9 +56,10 @@ namespace QuantumMathTests
             var observedA = qubitA.Observe();
 
             // If A collapses in the forest, B hears it scream.
-            Assert.IsTrue(qubitB.IsCollapsed);
-            Assert.IsTrue(qubitA.IsCollapsed);
-            Assert.NotNull(qubitB.GetObservedValue());
+            Assert.That(qubitA.IsCollapsed, Is.True);
+            Assert.That(qubitB.IsCollapsed, Is.True);
+            Assert.That(qubitB.GetObservedValue(), Is.Not.Null);
+
         }
         #endregion
 
@@ -75,12 +73,12 @@ namespace QuantumMathTests
 
             var productDict = QuantumMathUtility<int>.TensorProduct(qubit1, qubit2);
 
-            Assert.AreEqual(4, productDict.Count);
+            Assert.That(productDict.Count, Is.EqualTo(4));
             var zeroZero = productDict.Keys.FirstOrDefault(arr => arr[0] == 0 && arr[1] == 0);
             var amplitude00 = productDict[zeroZero];
 
             // Confirm the amplitudes are mathematically sound and spiritually fulfilling.
-            Assert.AreEqual(new Complex(2, 0), amplitude00);
+            Assert.That(amplitude00, Is.EqualTo(new Complex(2, 0)));
         }
         #endregion
 
@@ -98,9 +96,10 @@ namespace QuantumMathTests
 
             qubitA = qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 5.0 }, { 1, 1.0 } }, autoNormalise: true);
 
-            Assert.IsFalse(qubitA.IsActuallyCollapsed);
-            Assert.IsFalse(qubitB.IsActuallyCollapsed);
-            Assert.AreEqual(qubitA.EntanglementGroupId, qubitB.EntanglementGroupId);
+            Assert.That(qubitA.IsActuallyCollapsed, Is.False);
+            Assert.That(qubitB.IsActuallyCollapsed, Is.False);
+            Assert.That(qubitA.EntanglementGroupId, Is.EqualTo(qubitB.EntanglementGroupId));
+
         }
         #endregion
 
@@ -116,9 +115,8 @@ namespace QuantumMathTests
             var groupId = _manager.Link("FirstPair", qubitA, qubitB);
 
             // We expect the group label to reflect their original love story.
-            Assert.AreEqual("FirstPair", _manager.GetGroupLabel(groupId));
-            var groupMembers = _manager.GetGroup(groupId);
-            Assert.AreEqual(2, groupMembers.Count);
+            Assert.That(_manager.GetGroupLabel(groupId), Is.EqualTo("FirstPair"));
+            Assert.That(_manager.GetGroup(groupId).Count, Is.EqualTo(2));
         }
         #endregion
 
@@ -165,8 +163,9 @@ namespace QuantumMathTests
             var valueX = qubitX.Observe(1234);
             var valueY = qubitY.GetObservedValue();
 
-            Assert.NotNull(valueY, "Everyone saw the same thing. For once.");
-            Assert.IsTrue(qubitY.IsCollapsed);
+            Assert.That(valueY, Is.Not.Null);
+            Assert.That(qubitY.IsCollapsed, Is.True);
+
         }
         #endregion
 
@@ -203,7 +202,7 @@ namespace QuantumMathTests
             var groupId = _manager.Link("BellPair_A", qubitA, qubitB);
 
             var label = _manager.GetGroupLabel(groupId);
-            Assert.AreEqual("BellPair_A", label, "The naming ceremony was successful.");
+            Assert.That(label, Is.EqualTo("BellPair_A"), "The naming ceremony was successful.");
         }
         #endregion
 
@@ -222,15 +221,20 @@ namespace QuantumMathTests
             var outcomeQ1 = _system.PartialObserve(new[] { 0 }, new Random(42));
             bool observedQ1 = outcomeQ1[0] != 0;
 
-            Assert.True(qubit1.IsCollapsed);
-            Assert.AreEqual(observedQ1, (bool)qubit1.GetObservedValue());
+            // Qubit1 should have collapsed.
+            Assert.That(qubit1.IsCollapsed, Is.True);
+            Assert.That(qubit1.GetObservedValue(), Is.EqualTo(observedQ1));
 
-            Assert.False(qubit2.IsCollapsed, "Qubit2 is still playing it cool.");
-            Assert.IsNull(qubit2.GetObservedValue());
+            // Immediately after partial observation,
+            // qubit2 remains uncollapsed.
+            Assert.That(qubit2.IsCollapsed, Is.False, "Qubit2 is still playing it cool.");
+            Assert.That(qubit2.GetObservedValue(), Is.Null);
 
-            var observedQ2 = qubit2.Observe(100);
-            Assert.True(qubit2.IsCollapsed, "Qubit2 finally made up its mind.");
+            // Now trigger an explicit collapse on qubit2.
+            qubit2.Observe(100);
+            Assert.That(qubit2.IsCollapsed, Is.True, "Qubit2 finally made up its mind.");
         }
+
         #endregion
 
         #region Entanglement Graph Diagnostics
