@@ -4,11 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
-using System.Reflection;
 
-internal static class HiddenPositronicEnvironment
+/// <summary>
+/// Initializes the metaphysical I/O trap, redirecting stdout into a memory buffer
+/// so we can toy with reality without the console knowing.
+/// </summary>
+internal static class AethericRedirectionGrid
 {
-    // Dummy property to force static initialization.
     public static bool Initialized { get; } = true;
 
     // Store the actual StringWriter we create.
@@ -16,21 +18,17 @@ internal static class HiddenPositronicEnvironment
 
     public static StringWriter OutputBuffer => _outputBuffer;
 
-    static HiddenPositronicEnvironment()
+    static AethericRedirectionGrid()
     {
-        // Capture the original console output.
         var originalOut = Console.Out;
         _outputBuffer = new StringWriter();
 
-        // Redirect console output to our buffer.
         Console.SetOut(_outputBuffer);
         PositronicRuntime.Instance.CapturedWriter = _outputBuffer;
         PositronicRuntime.Instance.Reset();
 
-        // When the process exits, run the convergence loop.
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-            // Locate the user's Main method.
             var mainMethod = AppDomain.CurrentDomain
                 .GetAssemblies()
                 .SelectMany(a => a.GetTypes())
@@ -41,13 +39,13 @@ internal static class HiddenPositronicEnvironment
             if (mainMethod == null)
                 throw new InvalidOperationException("Could not locate a Program.Main method.");
 
-            // Run the convergence loop; each iteration re-invokes Main.
+            // Begin the existential convergence loop, where Main is invoked so many times it starts to question itself.
             PositronicVariable<int>.RunConvergenceLoop(() =>
             {
                 mainMethod.Invoke(null, null);
             });
 
-            // Restore the original output and print only the final output.
+            // Restore sanity: put stdout back where it belongs and dump the final hallucination to the console.
             Console.SetOut(originalOut);
             originalOut.Write(_outputBuffer.ToString());
         };
@@ -58,13 +56,15 @@ internal static class HiddenPositronicEnvironment
 /// <summary>
 /// The Matrix is everywhere. It is all around us. Even now, in this very room.
 /// </summary>
-public static class PositronicSimulation
+public static class NeuroCascadeInitializer
 {
+    /// <summary>
+    /// Activates the latent matrix initializer. It doesn’t *do* anything,
+    /// but the side effects are, frankly, terrifying.
+    /// </summary>
     public static void AutoEnable()
     {
-        // Simply referencing HiddenPositronicEnvironment.Initialized forces the static
-        // constructor above to run.
-        var dummy = HiddenPositronicEnvironment.Initialized;
+        var dummy = AethericRedirectionGrid.Initialized;
     }
 }
 
@@ -97,7 +97,8 @@ public interface IPositronicVariable
 public interface IPositronicRuntime
 {
     /// <summary>
-    /// Direction of time: +1 for forward, -1 for reverse.
+    /// Controls the emotional direction of time: +1 means “we’re moving on,”
+    /// -1 means “let’s try that whole simulation again but sadder.”
     /// </summary>
     int Entropy { get; set; }
 
@@ -107,7 +108,8 @@ public interface IPositronicRuntime
     bool Converged { get; set; }
 
     /// <summary>
-    /// Captured console writer for restoring output.
+    /// Where all your ill-fated `Console.WriteLine` dreams are stored during convergence.
+    /// It’s like a black box for your simulation.
     /// </summary>
     TextWriter CapturedWriter { get; set; }
 
@@ -117,7 +119,8 @@ public interface IPositronicRuntime
     IList<IPositronicVariable> Variables { get; }
 
     /// <summary>
-    /// Reset the runtime state to its initial configuration.
+    /// Performs a ceremonial memory wipe on the runtime state.
+    /// Ideal for fresh starts, debugging, or pretending the last run didn’t happen.
     /// </summary>
     void Reset();
 
@@ -128,7 +131,8 @@ public interface IPositronicRuntime
     int TotalConvergenceIterations { get; set; }
 
     /// <summary>
-    /// Global event fired when all variables have converged.
+    /// Triggered when all positronic variables achieve harmony
+    /// and agree on something for once in their chaotic lives.
     /// </summary>
     event Action OnAllConverged;
 }
@@ -189,14 +193,14 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     private static bool EnableSimulation()
     {
         // This call triggers the static constructor of HiddenPositronicEnvironment.
-        PositronicSimulation.AutoEnable();
+        NeuroCascadeInitializer.AutoEnable();
         return true;
     }
 
     static PositronicVariable()
     {
         // Access a member on HiddenPositronicEnvironment to trigger its static constructor.
-        var trigger = HiddenPositronicEnvironment.Initialized;
+        var trigger = AethericRedirectionGrid.Initialized;
     }
 
     private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
@@ -300,7 +304,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
                     pv.UnifyAll();
 
                 // Clear prior output so that only final output appears.
-                HiddenPositronicEnvironment.OutputBuffer.GetStringBuilder().Clear();
+                AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
                 Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
                 break;
             }
@@ -696,7 +700,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     /// </summary>
     public static Func<IEnumerable<T>, T> CollapseMin = values => values.Min();
     /// <summary>
-    /// This is just a tribute. 
+    /// Selects the max value from the quantum soup. This is just a tribute.
+    /// (To the greatest value in the world, apparently.)
     /// </summary>
     public static Func<IEnumerable<T>, T> CollapseMax = values => values.Max();
     /// <summary>
@@ -837,6 +842,21 @@ public class PositronicVariableRef<T> : IPositronicVariable
     /// The more you have, the less likely you are to sleep peacefully.
     /// </summary>
     public int TimelineLength => timeline.Count;
+
+    public static PositronicVariableRef<T> GetOrCreate(string id, T initialValue)
+    {
+        if (registry.TryGetValue(id, out var instance))
+        {
+            return instance;
+        }
+        else
+        {
+            instance = new PositronicVariableRef<T>(initialValue);
+            registry[id] = instance;
+            return instance;
+        }
+    }
+
 
     internal PositronicVariableRef(T initialValue)
     {
