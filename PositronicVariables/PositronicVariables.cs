@@ -5,6 +5,45 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+#region Initiate the matrix
+/// <summary>
+/// The Matrix is everywhere. It is all around us. Even now, in this very room.
+/// </summary>
+public class PositronicSimulation : IDisposable
+{
+    private readonly TextWriter originalOut;
+    private readonly StringWriter outputBuffer;
+    private readonly Action simulationCode;
+
+    public PositronicSimulation(Action simulationCode)
+    {
+        this.simulationCode = simulationCode;
+        originalOut = Console.Out;
+        outputBuffer = new StringWriter();
+
+        // Redirect output to a buffer.
+        Console.SetOut(outputBuffer);
+        PositronicRuntime.Instance.CapturedWriter = outputBuffer;
+        PositronicRuntime.Instance.Reset();
+    }
+
+    public void Dispose()
+    {
+        // Run convergence loop repeatedly using the simulation code.
+        PositronicVariable<int>.RunConvergenceLoop(simulationCode);
+
+        // Restore the console output.
+        Console.SetOut(originalOut);
+        originalOut.Write(outputBuffer.ToString());
+
+        // Final cleanup.
+        PositronicRuntime.Instance.Entropy = 1;
+    }
+}
+
+#endregion
+
+
 #region Interfaces and Runtime
 
 /// <summary>
