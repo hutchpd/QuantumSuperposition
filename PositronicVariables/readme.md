@@ -4,20 +4,19 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ---
 
-`PositronicVariable<T>` lets your code simulate values that evolve over iterative timelines. It's like if Schrödinger had a daily planner. This system plays nice with `QuBit<T>` superpositions from [QuantumSuperposition](https://www.nuget.org/packages/QuantumSuperposition), and introduces runtime convergence via timeline journaling, looped simulations, and multiverse debugging.
+`PositronicVariable<T>` lets your code simulate values that evolve over iterative timelines. Think of it as Schrödinger’s variable: simultaneously filled with regret and potential. Now enhanced with automatic convergence, timeline journaling, and existential debugging capabilities.
 
-> This isn’t time travel.  
-> This is **time therapy** for your variables.
+> Not exactly time travel, but close enough to confuse your boss.
 
 ---
 
 ## Features
 
-- Temporal Journaling: Variables store their history like over-sharers in a group chat.
-- Automatic Convergence: Run code until state stabilization without writing a while loop.
-- NeuralNodule: Build quantum-flavored logic gates using positronic variables.
-- Time Reversal: Temporarily run logic in negative entropy mode to simulate parallel timelines.
-- Seamless with QuBit<T>: Because pretending a variable can hold many states is *your thing now*.
+- **Temporal Journaling**: Variables remember past states better than you remember birthdays.
+- **Automatic Convergence**: Simulates logic until variables settle down (therapy not included).
+- **NeuralNodule**: Quantum-flavored neurons for when your code needs group therapy.
+- **Time Reversal**: Runs logic backward, forward, and sideways (flux capacitor optional).
+- **Seamless Integration**: Plays nicely with `QuBit<T>` from [QuantumSuperposition](https://www.nuget.org/packages/QuantumSuperposition).
 
 ---
 
@@ -25,77 +24,102 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ### Installation
 
-Grab it from NuGet (coming soon, or possibly already available in a future you haven't met yet).
+Available from NuGet (already available in futures you've yet to experience).
 
-```
+```shell
 dotnet add package PositronicVariables
 ```
 
 ---
 
-## Example: Time-Looping Variable
+## Quick Example
+
+Here's a quick example of a Positronic integer variable that converges to a stable cycle:
 
 ```csharp
-private static PositronicVariable<int> antival;
-
-private static void Main()
+internal static class Program
 {
-    // Clean slate
-    PositronicRuntime.Instance.Reset();
-
-    // Initial state
-    antival = new PositronicVariable<int>(-1);
-
-    // Loop until convergence
-    PositronicVariable<int>.RunConvergenceLoop(MainLogic);
-}
-
-private static void MainLogic()
-{
-    Console.WriteLine($"The antival is {antival}");
-    var val = (antival + 1) % 4;
-    Console.WriteLine($"The value is {val}");
-    antival.Assign(val);
+    [PositronicEntry]
+    private static void Main()
+    {
+        var antival = PositronicVariable<int>.GetOrCreate("antival", -1);
+        Console.WriteLine($"The antival is {antival}");
+        var val = -1 * antival;
+        Console.WriteLine($"The value is {val}");
+        antival.Assign(val);
+    }
 }
 ```
 
 ### Output (after convergence)
 ```
-The antival is any(0, 1, 2, 3)
-The value is any(1, 2, 3, 0)
+The antival is any(-1, 1)
+The value is any(1, -1)
 ```
 
 ---
 
-## How It Works
+## String Example (for the literate variables)
 
-When you call `RunConvergenceLoop`, the library:
+Now you can quantum-entangle your strings too:
 
-1. Silently runs your code in **negative time** (don’t worry, you don’t need a flux capacitor).
-2. Builds a **timeline** for each variable using `QuBit<T>` snapshots.
-3. Detects convergence by matching recent state cycles.
-4. Unifies results and runs your code one last time in **forward time** — now stable.
+```csharp
+internal static class Program
+{
+    [PositronicEntry]
+    private static void Main()
+    {
+        var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
+        Console.WriteLine($"Current greeting: {greeting}");
+        
+        var nextGreeting = greeting.ToValues().First() switch
+        {
+            "Hello" => "Hi",
+            "Hi" => "Hey",
+            "Hey" => "Hello",
+            _ => "Hello"
+        };
+
+        greeting.Assign(nextGreeting);
+    }
+}
+```
+
+### Output (after convergence)
+```
+Current greeting: any("Hello", "Hi", "Hey")
+```
+
+---
+
+## How It Works (The Short Version)
+
+When you mark your entry method with `[PositronicEntry]`, the library automatically:
+
+1. **Runs** your logic silently through negative-time (reverse entropy mode).
+2. **Detects** repeating patterns and decides when your variables have "converged."
+3. **Settles** into a stable timeline, executing your logic once more with variables at peace.
 
 ---
 
 ## Operators
 
-Yes, your variables can pretend to be integers:
+Variables pretending to be regular numbers:
 ```csharp
-var v = new PositronicVariable<int>(1);
+var v = PositronicVariable<int>.GetOrCreate("v", 1);
 var x = v + 5;
 var y = x % 3;
 ```
 
-It’s all syntactic sugar for probabilistic anxiety
+It’s all syntactic sugar over quantum indecision.
 
 ---
 
-## Neural Nodule: DIY Brainstorming
+## Neural Nodule: DIY Quantum Brainstorming
 
 ```csharp
-var x = new PositronicVariable<int>(0);
-var y = new PositronicVariable<int>(1);
+var x = PositronicVariable<int>.GetOrCreate("x", 0);
+var y = PositronicVariable<int>.GetOrCreate("y", 1);
 
 var node = new NeuralNodule<int>(inputs =>
 {
@@ -105,53 +129,34 @@ var node = new NeuralNodule<int>(inputs =>
 
 node.Inputs.Add(x);
 node.Inputs.Add(y);
-
-// Fires the activation function and pushes result to Output
 node.Fire();
 
 Console.WriteLine($"Result: {node.Output}");
 ```
 
-You can also run a full convergence loop on a network of nodes:
+Run an entire network until consensus:
+
 ```csharp
 NeuralNodule<int>.ConvergeNetwork(nodeA, nodeB, nodeC);
 ```
 
 ---
 
-## API Highlights
-
-```csharp
-public class PositronicVariable<T>
-{
-    public void Assign(T value);
-    public void Assign(PositronicVariable<T> other);
-    public void CollapseToLastSlice();
-    public static void RunConvergenceLoop(Action logic);
-    public int Converged();
-    public void UnifyAll();
-    public QuBit<T> GetCurrentQBit();
-    public IEnumerable<T> ToValues();
-}
-```
-
----
-
 ## What Is This Useful For?
 
-- Simulating feedback loops in logic
-- Declarative-style state propagation
-- Neural graphs and causal networks
-- Philosophical debugging
-- Impressing very specific kinds of nerds
+- Creating chaotic yet stable feedback loops
+- Building declarative state systems
+- Simulating neural networks with quantum uncertainty
+- Philosophical debugging sessions
+- Impressing precisely 2.5 people at parties
 
 ---
 
 ## Limitations
 
-- Not thread-safe. These variables are *emotionally* unstable.
-- Requires your types to be `struct, IComparable`.
-- Can accidentally create infinite universes if you're not careful (just like real life).
+- Not thread-safe. These variables can't handle that kind of pressure.
+- Types must implement `IComparable` (sorry, incomparables).
+- Can accidentally summon infinite universes (so use responsibly).
 
 ---
 
@@ -163,4 +168,4 @@ Unlicensed. Use it, break it, ship it, regret it.
 
 ## Questions or Paradoxes?
 
-You can file an issue, or collapse your current state and try again.
+File an issue or collapse reality and start again.

@@ -19,7 +19,12 @@ namespace QuantumSuperposition.Operators
             if (typeof(T) == typeof(bool))
                 return (IQuantumOperators<T>)(object)new BooleanOperators();
 
-            throw new NotImplementedException("Default operators not implemented for type " + typeof(T));
+            if (typeof(T) == typeof(string))
+                return (IQuantumOperators<T>)(object)new StringOperators();
+
+            // idk, maybe a quantum therapist for irrational numbers?
+            return new ExpressionOperators<T>();
         }
+
     }
 }

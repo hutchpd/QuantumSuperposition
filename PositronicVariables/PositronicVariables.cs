@@ -5,6 +5,11 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 
+[AttributeUsage(AttributeTargets.Method, Inherited = false)]
+public sealed class PositronicEntryAttribute : Attribute
+{
+}
+
 /// <summary>
 /// Initializes the metaphysical I/O trap, redirecting stdout into a memory buffer
 /// so we can toy with reality without the console knowing.
@@ -23,34 +28,51 @@ internal static class AethericRedirectionGrid
         var originalOut = Console.Out;
         _outputBuffer = new StringWriter();
 
+        // Redirect Console output into our buffer.
         Console.SetOut(_outputBuffer);
-        PositronicRuntime.Instance.CapturedWriter = _outputBuffer;
+        PositronicRuntime.Instance.OracularStream = _outputBuffer;
         PositronicRuntime.Instance.Reset();
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-            var mainMethod = AppDomain.CurrentDomain
+            // Locate the simulation method by searching for our custom attribute.
+            var entryPoints = AppDomain.CurrentDomain
                 .GetAssemblies()
-                .SelectMany(a => a.GetTypes())
-                .Where(t => t.GetMethod("Main", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) != null)
-                .Select(t => t.GetMethod("Main", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
-                .FirstOrDefault();
+                .SelectMany(asm =>
+                {
+                    try { return asm.GetTypes(); }
+                    catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null); }
+                })
+                .SelectMany(t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+                .Where(m => m.GetCustomAttribute<PositronicEntryAttribute>() != null)
+                .ToList();
 
-            if (mainMethod == null)
-                throw new InvalidOperationException("Could not locate a Program.Main method.");
+            if (entryPoints.Count == 0)
+            {
+                throw new InvalidOperationException("No method marked with [PositronicEntry] was found. Please annotate a static method to use as the convergence entry point.");
+            }
 
-            // Begin the existential convergence loop, where Main is invoked so many times it starts to question itself.
+            if (entryPoints.Count > 1)
+            {
+                var methodNames = string.Join(Environment.NewLine, entryPoints.Select(m => $" - {m.DeclaringType.FullName}.{m.Name}"));
+                throw new InvalidOperationException($"Multiple methods marked with [PositronicEntry] were found:{Environment.NewLine}{methodNames}{Environment.NewLine}Please mark only one method with [PositronicEntry].");
+            }
+
+            var entryPoint = entryPoints[0];
+
+
             PositronicVariable<int>.RunConvergenceLoop(() =>
             {
-                mainMethod.Invoke(null, null);
+                entryPoint.Invoke(null, null);
             });
 
-            // Restore sanity: put stdout back where it belongs and dump the final hallucination to the console.
+            // Restore the original output and write only the converged output.
             Console.SetOut(originalOut);
             originalOut.Write(_outputBuffer.ToString());
         };
     }
 }
+
 
 #region Initiate the matrix
 /// <summary>
@@ -111,7 +133,7 @@ public interface IPositronicRuntime
     /// Where all your ill-fated `Console.WriteLine` dreams are stored during convergence.
     /// It’s like a black box for your simulation.
     /// </summary>
-    TextWriter CapturedWriter { get; set; }
+    TextWriter OracularStream { get; set; }
 
     /// <summary>
     /// The collection of all Positronic variables registered.
@@ -144,7 +166,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 {
     public int Entropy { get; set; } = -1;
     public bool Converged { get; set; } = false;
-    public TextWriter CapturedWriter { get; set; } = null;
+    public TextWriter OracularStream { get; set; } = null;
     public IList<IPositronicVariable> Variables { get; } = new List<IPositronicVariable>();
 
     // --- Added Diagnostics ---
@@ -155,7 +177,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
     {
         Entropy = -1;
         Converged = false;
-        CapturedWriter = null;
+        OracularStream = null;
         Variables.Clear();
         TotalConvergenceIterations = 0;
     }
@@ -235,6 +257,7 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 
     public static void ResetStaticVariables()
     {
+        registry.Clear(); 
         PositronicRuntime.Instance.Reset();
     }
 
@@ -278,8 +301,8 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
     /// </summary>
     public static void RunConvergenceLoop(Action code)
     {
-        if (PositronicRuntime.Instance.CapturedWriter == null)
-            PositronicRuntime.Instance.CapturedWriter = Console.Out;
+        if (PositronicRuntime.Instance.OracularStream == null)
+            PositronicRuntime.Instance.OracularStream = Console.Out;
 
         PositronicRuntime.Instance.Converged = false;
         // Redirect console output to TextWriter.Null during convergence
@@ -305,14 +328,14 @@ public class PositronicVariable<T> : IPositronicVariable where T : struct, IComp
 
                 // Clear prior output so that only final output appears.
                 AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
-                Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+                Console.SetOut(PositronicRuntime.Instance.OracularStream);
                 break;
             }
 
             iteration++;
         }
 
-        Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+        Console.SetOut(PositronicRuntime.Instance.OracularStream);
         PositronicRuntime.Instance.Entropy = 1;
         // Final run produces only converged output.
         code();
@@ -899,8 +922,8 @@ public class PositronicVariableRef<T> : IPositronicVariable
     /// <param name="code"></param>
     public static void RunConvergenceLoop(Action code)
     {
-        if (PositronicRuntime.Instance.CapturedWriter == null)
-            PositronicRuntime.Instance.CapturedWriter = Console.Out;
+        if (PositronicRuntime.Instance.OracularStream == null)
+            PositronicRuntime.Instance.OracularStream = Console.Out;
 
         PositronicRuntime.Instance.Converged = false;
         Console.SetOut(TextWriter.Null);
@@ -924,14 +947,14 @@ public class PositronicVariableRef<T> : IPositronicVariable
                 PositronicRuntime.Instance.Converged = true;
                 foreach (var pv in PositronicRuntime.Instance.Variables)
                     pv.UnifyAll();
-                Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+                Console.SetOut(PositronicRuntime.Instance.OracularStream);
                 break;
             }
 
             iteration++;
         }
 
-        Console.SetOut(PositronicRuntime.Instance.CapturedWriter);
+        Console.SetOut(PositronicRuntime.Instance.OracularStream);
         PositronicRuntime.Instance.Entropy = 1;
         code();
     }
