@@ -101,7 +101,7 @@ You're not just creating a variable.
 
 You’re summoning a cloud of possibilities — all the potential values that guess could take as the program recursively rewinds and replays itself.
 Like a looping dream sequence where it tries different outcomes until it finds one that satisfies the logic across all iterations.
-The final value is the one that successfully stabilized the timeline.
+The final value (of the not empty list) is the one that successfully stabilized the timeline after it loops through all the possibilities.
 
 ---
 
