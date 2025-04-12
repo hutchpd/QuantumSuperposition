@@ -14,15 +14,15 @@ namespace PositronicVariables.Tests
         public void SetUp()
         {
             // Reset all static variables and set the quantum 'entropy'
-            PositronicVariableRef<string>.ResetStaticVariables();
-            PositronicVariableRef<string>.SetEntropy(-1);
+            PositronicVariable<string>.ResetStaticVariables();
+            PositronicVariable<string>.SetEntropy(-1);
         }
 
         [Test]
         public void StringCycleAndUnifyTest()
         {
             // Create a PositronicVariableRef with an initial greeting.
-            var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
+            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
 
             // Cycle through greetings.
             greeting.Assign("Hi");
@@ -41,7 +41,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void StringMultipleAssignmentsTimelineTest()
         {
-            var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
+            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
 
             // Make several assignments. Depending on the ReplaceOrAppendOrUnify logic,
             // the first assignment might replace the initial slice, and later ones append.
@@ -56,7 +56,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void StringForkIndependenceTest()
         {
-            var greeting = PositronicVariableRef<string>.GetOrCreate("greeting", "Hello");
+            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
             greeting.Assign("Hi");
 
             // Create a fork of the variable.

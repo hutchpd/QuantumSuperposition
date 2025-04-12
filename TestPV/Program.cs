@@ -8,7 +8,7 @@
 
         // Our positronic variable representing the current row in Pascal's Triangle,
         // starting with the first row [1].
-        var row = PositronicVariableRef<List<int>>.GetOrCreate("row", new List<int> { 1 });
+        var row = PositronicVariable<List<int>>.GetOrCreate("row", new List<int> { 1 });
 
         for (int i = 0; i < rowsToPrint; i++)
         {

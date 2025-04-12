@@ -1085,5 +1085,26 @@ namespace PositronicVariables.Tests
             PositronicVariable<double>.SetEntropy(1);
         }
 
+        [Test]
+        public void PositronicVariable_DateTimeOffset_HandlesConvergenceCorrectly()
+        {
+            PositronicVariable<DateTimeOffset>.ResetStaticVariables();
+            PositronicVariable<DateTimeOffset>.SetEntropy(-1);
+            var baseTime = DateTimeOffset.UtcNow;
+            var pv = PositronicVariable<DateTimeOffset>.GetOrCreate("dtoTest", baseTime);
+
+            for (int i = 0; i < 3; i++)
+                pv.Assign(baseTime.AddHours(i));
+
+            Assert.That(pv.Converged(), Is.EqualTo(0));
+            pv.Assign(baseTime);
+            Assert.That(pv.Converged(), Is.GreaterThan(0));
+            pv.UnifyAll();
+
+            var values = pv.ToValues().ToList();
+            // Updated expectation: 3 distinct states, not 4
+            Assert.That(values.Count, Is.EqualTo(3));
+        }
+
     }
 }
