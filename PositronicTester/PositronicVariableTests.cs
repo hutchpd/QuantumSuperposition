@@ -1084,7 +1084,6 @@ namespace PositronicVariables.Tests
             // Switch to forward time.
             PositronicVariable<double>.SetEntropy(1);
         }
-
         [Test]
         public void PositronicVariable_DateTimeOffset_HandlesConvergenceCorrectly()
         {
@@ -1105,6 +1104,145 @@ namespace PositronicVariables.Tests
             // Updated expectation: 3 distinct states, not 4
             Assert.That(values.Count, Is.EqualTo(3));
         }
+        [Test]
+        public void PositronicVariable_ListInt_ShouldThrowIfTypeIsNotComparable()
+        {
+            // Try-catch block because the type initialization is lazy and will throw on first usage.
+            var ex = Assert.Throws<TypeInitializationException>(() =>
+            {
+                PositronicVariable<List<int>>.ResetStaticVariables();
+                PositronicVariable<List<int>>.SetEntropy(-1);
 
+                // First access to the generic type will trigger the static initializer
+                var baseList = new List<int> { 1, 2, 3 };
+                var pv = PositronicVariable<List<int>>.GetOrCreate("listTest", baseList);
+
+                // Assignments will never be reached if constructor throws properly
+                pv.Assign(new List<int> { 3, 2, 1 });
+            });
+
+            Assert.That(ex.InnerException, Is.TypeOf<InvalidOperationException>());
+            Assert.That(ex.InnerException.Message, Does.Contain("Type parameter")
+                .And.Contain("must implement IComparable"),
+                "Expected exception about type parameter lacking IComparable");
+        }
+
+        [Test]
+        public void PascalTriangle_WithComparableList_PrintsCorrectTriangle()
+        {
+            // Define the expected first 5 rows of Pascal's Triangle.
+            var expectedRows = new List<string>
+    {
+        "1",
+        "1 1",
+        "1 2 1",
+        "1 3 3 1",
+        "1 4 6 4 1"
+    };
+
+            int rowsToPrint = expectedRows.Count;
+
+            // Create the positronic variable with an initial ComparableList wrapping [1].
+            var row = PositronicVariable<ComparableList>.GetOrCreate("pascalRow", new ComparableList(1));
+
+            // Redirect console output to capture the printed rows.
+            var output = new StringBuilder();
+            var writer = new StringWriter(output);
+            var originalOut = Console.Out;
+            Console.SetOut(writer);
+
+            // Iterate through the desired number of rows.
+            for (int i = 0; i < rowsToPrint; i++)
+            {
+                // Retrieve the current row (unwrap the ComparableList).
+                ComparableList currentRowWrapper = row.ToValues().Last();
+                List<int> currentRow = currentRowWrapper.Items;
+
+                // Print the current row.
+                Console.WriteLine(string.Join(" ", currentRow));
+
+                // Compute the next row of Pascal's Triangle.
+                List<int> nextRow = ComputeNextRow(currentRow);
+
+                // Wrap the next row in a ComparableList and assign it.
+                row.Assign(new ComparableList(nextRow.ToArray()));
+            }
+
+            // Restore the original console output.
+            Console.SetOut(originalOut);
+
+            // Split the captured output into individual rows.
+            var printedRows = output.ToString()
+                                      .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                                      .ToList();
+
+            // Write the captured rows to the test context output for debugging.
+            TestContext.WriteLine("Printed Pascal's Triangle:");
+            foreach (var r in printedRows)
+            {
+                TestContext.WriteLine(r);
+            }
+
+            // Verify that the printed rows match the expected output.
+            Assert.That(printedRows.Count, Is.EqualTo(rowsToPrint));
+            for (int i = 0; i < rowsToPrint; i++)
+            {
+                Assert.That(printedRows[i], Is.EqualTo(expectedRows[i]),
+                    $"Row {i + 1} is incorrect. Expected: '{expectedRows[i]}', Actual: '{printedRows[i]}'");
+            }
+        }
+
+        /// <summary>
+        /// Computes the next row of Pascal's Triangle given the current row.
+        /// </summary>
+        /// <param name="current">The current row as a List of int.</param>
+        /// <returns>A new List of int representing the next row.</returns>
+        private List<int> ComputeNextRow(List<int> current)
+        {
+            var next = new List<int> { 1 };
+            // Each interior number is the sum of two adjacent numbers in the current row.
+            for (int i = 0; i < current.Count - 1; i++)
+            {
+                next.Add(current[i] + current[i + 1]);
+            }
+            next.Add(1);
+            return next;
+        }
+
+    }
+}
+
+// Custom wrapper class that implements IComparable for a List<int>
+public class ComparableList : IComparable<ComparableList>
+{
+    public List<int> Items { get; }
+
+    public ComparableList(params int[] values)
+    {
+        Items = new List<int>(values);
+    }
+
+    public int CompareTo(ComparableList other)
+    {
+        if (other == null) return 1;
+        int countCompare = Items.Count.CompareTo(other.Items.Count);
+        if (countCompare != 0) return countCompare;
+
+        for (int i = 0; i < Items.Count; i++)
+        {
+            int cmp = Items[i].CompareTo(other.Items[i]);
+            if (cmp != 0) return cmp;
+        }
+        return 0;
+    }
+
+    public override bool Equals(object obj)
+    {
+        return obj is ComparableList cl && CompareTo(cl) == 0;
+    }
+
+    public override int GetHashCode()
+    {
+        return Items.Aggregate(17, (acc, val) => acc * 31 + val);
     }
 }

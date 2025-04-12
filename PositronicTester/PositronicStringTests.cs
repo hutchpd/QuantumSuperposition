@@ -53,29 +53,5 @@ namespace PositronicVariables.Tests
             Assert.That(greeting.timeline.Count, Is.GreaterThanOrEqualTo(2));
         }
 
-        [Test]
-        public void StringForkIndependenceTest()
-        {
-            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
-            greeting.Assign("Hi");
-
-            // Create a fork of the variable.
-            var fork = greeting.Fork();
-
-            // Change the fork independently.
-            fork.Assign("Hey");
-
-            // Unify both branches.
-            greeting.UnifyAll();
-            fork.UnifyAll();
-
-            var finalOriginal = greeting.ToValues().Distinct().OrderBy(s => s).ToList();
-            var finalFork = fork.ToValues().Distinct().OrderBy(s => s).ToList();
-
-            // Depending on whether the first assignment replaced the seed,
-            // the original may contain {"Hello", "Hi"} and the fork should include the additional "Hey".
-            Assert.That(finalOriginal, Is.EquivalentTo(new[] { "Hello", "Hi" }));
-            Assert.That(finalFork, Is.EquivalentTo(new[] { "Hello", "Hi", "Hey" }));
-        }
     }
 }

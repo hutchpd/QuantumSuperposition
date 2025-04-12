@@ -225,9 +225,19 @@ public class PositronicVariable<T> : IPositronicVariable
 
     static PositronicVariable()
     {
+        // Ensure T implements IComparable or IComparable<T>
+        if (!(typeof(IComparable).IsAssignableFrom(typeof(T)) ||
+              typeof(IComparable<T>).IsAssignableFrom(typeof(T))))
+        {
+            throw new InvalidOperationException(
+                $"Type parameter '{typeof(T).Name}' for PositronicVariable " +
+                "must implement IComparable or IComparable<T> to enable proper convergence checking.");
+        }
+
         // Trigger initialization of the environment.
         var trigger = AethericRedirectionGrid.Initialized;
     }
+
 
     // Unified registry for all PositronicVariable<T> instances.
     private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
