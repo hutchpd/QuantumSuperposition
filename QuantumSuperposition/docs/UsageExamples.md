@@ -111,3 +111,25 @@ public static Eigenstates<int> Factors(int v)
     return candidates == 0;
 }
 ```
+
+### Min Value
+
+```csharp
+// Using quantum comparison operators to find the minimum of multiple values
+// without sorting or iteration. It’s a logic circuit built from reality checks.
+Console.WriteLine("min value of 3, 5, 8 is " + MinValue(new[] { 3, 5, 8 }));
+
+/// <summary>
+/// Finds the minimum value in a set using quantum filtering and composite logic.
+/// Avoids traditional min/max functions by constructing conditional relationships.
+/// </summary>
+/// <param name="range"></param>
+/// <returns></returns>
+public static int MinValue(IEnumerable<int> range)
+{
+    var values = new Eigenstates<int>(range, intOps);
+    // Combine filtering operators.
+    var filtered = values.Any() <= values.All();
+    return filtered.ToValues().First();
+}
+```
