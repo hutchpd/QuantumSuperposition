@@ -301,6 +301,40 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
+    /// Returns or creates the default PositronicVariable with the initial value.
+    /// </summary>
+    public static PositronicVariable<T> GetOrCreate(T initialValue)
+    {
+        if (registry.TryGetValue("default", out var instance))
+        {
+            return instance;
+        }
+        else
+        {
+            instance = new PositronicVariable<T>(initialValue);
+            registry["default"] = instance;
+            return instance;
+        }
+    }
+
+    /// <summary>
+    /// Returns the or creates the default PositronicVariable given no value or id.
+    /// </summary>
+    public static PositronicVariable<T> GetOrCreate()
+    {
+        if (registry.TryGetValue("default", out var instance))
+        {
+            return instance;
+        }
+        else
+        {
+            instance = new PositronicVariable<T>(default(T));
+            registry["default"] = instance;
+            return instance;
+        }
+    }
+
+    /// <summary>
     /// Returns true if all registered positronic variables have converged.
     /// </summary>
     public static bool AllConverged()
@@ -859,7 +893,7 @@ public class NeuralNodule<T> where T : struct, IComparable
     /// <param name="nodes"></param>
     public static void ConvergeNetwork(params NeuralNodule<T>[] nodes)
     {
-        PositronicVariable<T>.RunConvergenceLoop(() =>  
+        PositronicVariable<T>.RunConvergenceLoop(() =>
         {
             foreach (var node in nodes)
                 node.Fire();
