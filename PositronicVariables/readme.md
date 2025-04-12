@@ -168,42 +168,10 @@ This is a state machine **without explicit states** — just a variable inching 
 97
 ```
 
----
-
-## String Example (for the literate variables)
-
-Now you can quantum-entangle your strings too:
-
-```csharp
-internal static class Program
-{
-    [PositronicEntry]
-    private static void Main()
-    {
-        var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
-        Console.WriteLine($"Current greeting: {greeting}");
-        
-        var nextGreeting = greeting.ToValues().First() switch
-        {
-            "Hello" => "Hi",
-            "Hi" => "Hey",
-            "Hey" => "Hello",
-            _ => "Hello"
-        };
-
-        greeting.Assign(nextGreeting);
-    }
-}
-```
-
-### Output (after convergence)
-```
-Current greeting: any("Hello", "Hi", "Hey")
-```
 
 ---
 
-## 🧠 In Summary
+## In Summary
 
 - You can **print values before they're calculated.**
 - You can create **logical time paradoxes.**
