@@ -105,7 +105,7 @@ The final value (of the not empty list) is the one that successfully stabilized 
 
 ---
 
-###  **Too Far? Let’s Fold the Universe for Pascal’s Triangle**
+### Advanced: Folding Time with Pascal’s Triangle
 
 ##  Pascal’s Triangle via Causal Iteration
 
