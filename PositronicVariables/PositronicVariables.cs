@@ -61,16 +61,136 @@ internal static class AethericRedirectionGrid
 
             var entryPoint = entryPoints[0];
 
+            // Determine the generic type to use for the convergence loop.
+            // Here we assume at least one PositronicVariable exists in the runtime.
+            if (PositronicRuntime.Instance.Variables.Any())
+            {
+                // Get the runtime type of the last variable, e.g. PositronicVariable<double>
+                var lastVariable = PositronicRuntime.Instance.Variables.Last();
+                // Extract the generic type argument (e.g. double)
+                var genericArg = lastVariable.GetType().GetGenericArguments()[0];
 
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+                // Get the generic method RunConvergenceLoop on PositronicVariable<>
+                var methodInfo = typeof(PositronicVariable<>)
+                    .MakeGenericType(genericArg)
+                    .GetMethod("RunConvergenceLoop", BindingFlags.Public | BindingFlags.Static);
+
+                // Invoke the convergence loop by passing the code (which calls the entry point)
+                methodInfo.Invoke(
+                    null,
+                    new object[] { (Action)(() =>
             {
                 entryPoint.Invoke(null, null);
-            });
+            }) }
+                );
+            }
+            else
+            {
+                throw new InvalidOperationException("No PositronicVariable was registered. Cannot determine a generic type for convergence.");
+            }
 
             // Restore the original output and write only the converged output.
             Console.SetOut(originalOut);
-            originalOut.Write(_outputBuffer.ToString());
+            originalOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
         };
+
+    }
+}
+
+public interface IOperation
+{
+    /// <summary>
+    /// Invokes the logic to undo the operation.
+    /// </summary>
+    void Undo();
+
+    /// <summary>
+    /// Optional name for debugging/logging.
+    /// </summary>
+    string OperationName { get; }
+}
+
+/// <summary>
+/// A stack-based operation log for recording and undoing operations.
+/// </summary>
+public static class OperationLog
+{
+    private static readonly Stack<IOperation> _log = new Stack<IOperation>();
+
+    /// <summary>
+    /// Record an operation that was just performed, along with its undo data.
+    /// </summary>
+    public static void Record(IOperation op)
+    {
+        _log.Push(op);
+    }
+
+    /// <summary>
+    /// Rewinds all recorded operations by popping each IOperation and calling Undo().
+    /// </summary>
+    public static void ReverseLastOperations()
+    {
+        while (_log.Count > 0)
+        {
+            var op = _log.Pop();
+            op.Undo();
+        }
+    }
+
+    /// <summary>
+    /// Clears the log without undoing.
+    /// </summary>
+    public static void Clear() => _log.Clear();
+}
+
+/// <summary>
+/// Operation that reverts the timeline to a previous snapshot after an Append.
+/// </summary>
+public class TimelineAppendOperation<T> : IOperation
+{
+    private readonly PositronicVariable<T> _variable;
+    private readonly List<QuBit<T>> _backupTimeline;
+
+    public string OperationName => "TimelineAppend";
+
+    public TimelineAppendOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline)
+    {
+        _variable = variable;
+        // Make a safe copy so we can fully restore:
+        _backupTimeline = backupTimeline
+            .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
+            .ToList();
+    }
+
+    public void Undo()
+    {
+        _variable.timeline.Clear();
+        _variable.timeline.AddRange(_backupTimeline);
+    }
+}
+
+/// <summary>
+/// Operation that reverts the timeline to a previous snapshot after a Replace.
+/// </summary>
+public class TimelineReplaceOperation<T> : IOperation
+{
+    private readonly PositronicVariable<T> _variable;
+    private readonly List<QuBit<T>> _backupTimeline;
+
+    public string OperationName => "TimelineReplace";
+
+    public TimelineReplaceOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline)
+    {
+        _variable = variable;
+        _backupTimeline = backupTimeline
+            .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
+            .ToList();
+    }
+
+    public void Undo()
+    {
+        _variable.timeline.Clear();
+        _variable.timeline.AddRange(_backupTimeline);
     }
 }
 
@@ -165,7 +285,7 @@ public interface IPositronicRuntime
 /// </summary>
 public class DefaultPositronicRuntime : IPositronicRuntime
 {
-    public int Entropy { get; set; } = -1;
+    public int Entropy { get; set; } = 1;
     public bool Converged { get; set; } = false;
     public TextWriter OracularStream { get; set; } = null;
     public IList<IPositronicVariable> Variables { get; } = new List<IPositronicVariable>();
@@ -176,7 +296,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 
     public void Reset()
     {
-        Entropy = -1;
+        Entropy = 1;
         Converged = false;
         OracularStream = null;
         Variables.Clear();
@@ -301,6 +421,26 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
+    /// Returns an existing instance or creates a new PositronicVariable with the given id.
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    public static PositronicVariable<T> GetOrCreate(string id)
+    {
+        if (registry.TryGetValue(id, out var instance))
+        {
+            return instance;
+        }
+        else
+        {
+            instance = new PositronicVariable<T>(default(T));
+            registry[id] = instance;
+            return instance;
+        }
+    }
+
+
+    /// <summary>
     /// Returns or creates the default PositronicVariable with the initial value.
     /// </summary>
     public static PositronicVariable<T> GetOrCreate(T initialValue)
@@ -364,10 +504,10 @@ public class PositronicVariable<T> : IPositronicVariable
 
         while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
         {
-            code();
 
-            (PositronicRuntime.Instance as DefaultPositronicRuntime).TotalConvergenceIterations = iteration;
+            code();  // Execute the simulation step
 
+            // Check convergence across all variables.
             bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
             if (allVarsConverged)
             {
@@ -375,19 +515,23 @@ public class PositronicVariable<T> : IPositronicVariable
                 foreach (var pv in PositronicRuntime.Instance.Variables)
                     pv.UnifyAll();
 
-                // Clear prior output so that only final output appears.
+                // Clear the current output buffer so only the final output shows.
                 AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
                 Console.SetOut(PositronicRuntime.Instance.OracularStream);
                 break;
             }
+
+            // Flip entropy so the next iteration goes “backwards”
+            PositronicRuntime.Instance.Entropy = -PositronicRuntime.Instance.Entropy;
             iteration++;
         }
 
+        // Restore original output and perform the final forward run.
         Console.SetOut(PositronicRuntime.Instance.OracularStream);
         PositronicRuntime.Instance.Entropy = 1;
-        // Final run produces only converged output.
         code();
     }
+
 
     /// <summary>
     /// Checks for convergence by comparing timeline slices.
@@ -396,8 +540,9 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         if (PositronicRuntime.Instance.Converged)
             return 1;
-        if (timeline.Count < 2)
-            return 0;
+
+        if (timeline.Count < 3) return 0;
+
 
         var current = timeline[^1];
         for (int i = 2; i <= timeline.Count; i++)
@@ -475,31 +620,58 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
-        if (PositronicRuntime.Instance.Converged)
+        // Capture the previous timeline
+        var runtime = PositronicRuntime.Instance;
+
+        if (runtime.Entropy < 0)
         {
+            // In reverse time, we simply do nothing.
+            // We want arithmetic to pick up the last forward (penultimate) value instead.
+            return;
+        }
+
+        // If time is moving forward, then proceed with normal logic...
+        if (runtime.Converged)
+        {
+            // If we already converged, unify states (same as your original)
             var current = timeline[^1].ToCollapsedValues().ToList();
             var incoming = qb.ToCollapsedValues().ToList();
             var merged = current.Union(incoming).Distinct().ToList();
             var newQb = new QuBit<T>(merged);
             newQb.Any();
             timeline[^1] = newQb;
+            // [Don't forget: no timeline append here if already converged]
             return;
         }
 
+
+        // If only one timeslice exists, update (replace) it rather than appending.
         if (!replacedInitialSlice && timeline.Count == 1)
         {
             var existing = timeline[0];
             if (!SameStates(existing, qb))
+
             {
+
                 timeline[0] = qb;
+
             }
+
             replacedInitialSlice = true;
             return;
         }
 
+        var previousTimeline = new List<QuBit<T>>(timeline
+            .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray())));
+
+
+        // If the timeline is empty, just add the new slice.
         timeline.Add(qb);
         OnTimelineAppended?.Invoke();
 
+        OperationLog.Record(new TimelineAppendOperation<T>(this, previousTimeline));
+
+        // Check if a unification should occur.
         for (int cycle = 2; cycle <= 20; cycle++)
         {
             if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
@@ -510,109 +682,122 @@ public class PositronicVariable<T> : IPositronicVariable
         }
     }
 
+    #region region Operator Overloads
     // --- Operator Overloads ---
-    public static PositronicVariable<T> operator +(PositronicVariable<T> left, T right)
+    public static QuBit<T> operator +(PositronicVariable<T> left, T right)
     {
+        // Get the current quantum state, perform arithmetic and ensure state is activated.
         var resultQB = left.GetCurrentQBit() + right;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator +(T left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator +(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() + left;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator +(PositronicVariable<T> left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator +(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
 
-    public static PositronicVariable<T> operator %(PositronicVariable<T> left, T right)
+    public static QuBit<T> operator %(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() % right;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator %(T left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator %(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() % left;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator %(PositronicVariable<T> left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator %(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
 
-    public static PositronicVariable<T> operator -(PositronicVariable<T> left, T right)
+    public static QuBit<T> operator -(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() - right;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator -(T left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator -(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() - left;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator -(PositronicVariable<T> left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator -(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator -(PositronicVariable<T> value)
+
+    public static QuBit<T> operator -(PositronicVariable<T> value)
     {
-        // Use dynamic negation. Be cautious if T does not support negation.
+        // Unary negation: compute the dynamic negation of each collapsed value.
         var qb = value.GetCurrentQBit();
-        var negatedValues = qb.ToCollapsedValues()
-            .Select(v => (T)(-(dynamic)v))
-            .ToArray();
+        var negatedValues = qb.ToCollapsedValues().Select(v => (T)(-(dynamic)v)).ToArray();
         var negatedQb = new QuBit<T>(negatedValues);
         negatedQb.Any();
-        return new PositronicVariable<T>(negatedQb);
+        return negatedQb;
     }
-    public static PositronicVariable<T> operator *(PositronicVariable<T> left, T right)
+
+    public static QuBit<T> operator *(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() * right;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator *(T left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator *(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() * left;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator /(PositronicVariable<T> left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator /(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator /(T left, PositronicVariable<T> right)
+
+    public static QuBit<T> operator /(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() / left;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
-    public static PositronicVariable<T> operator /(PositronicVariable<T> left, T right)
+
+    public static QuBit<T> operator /(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() / right;
         resultQB.Any();
-        return new PositronicVariable<T>(resultQB);
+        return resultQB;
     }
 
     // --- Comparison Operators Using Comparer<T>.Default ---
@@ -676,6 +861,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         return !(left == right);
     }
+    #endregion
 
     public override bool Equals(object obj)
     {
@@ -826,6 +1012,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// Returns the most recent quantum slice.
     /// </summary>
     public QuBit<T> GetCurrentQBit() => timeline[^1];
+
 
     /// <summary>
     /// Checks whether two QuBits represent the same state.

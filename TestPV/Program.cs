@@ -5,10 +5,11 @@ internal static class Program
     [PositronicEntry]
     private static void Main()
     {
-        var test = PositronicVariable<double>.GetOrCreate();
+        var temperature = PositronicVariable<double>.GetOrCreate();
 
-        Console.WriteLine($"The test is {test}");
+        Console.WriteLine($"The temperature is {temperature}");
 
-        test.Assign(2);
+        temperature.Assign(temperature + 1);
+        temperature.Assign(1); 
     }
 }

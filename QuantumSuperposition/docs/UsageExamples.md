@@ -64,3 +64,40 @@ var qubit = new QuBit<Complex>(new[] { new Complex(1, 1), new Complex(2, 2) });
 var result = qubit.Select(x => x * new Complex(2, 0));
 Console.WriteLine(result.SampleWeighted());
 ```
+
+### Prime Number Checking
+
+```csharp
+static bool IsPrime(int number)
+{
+    var divisors = new QuBit<int>(Enumerable.Range(2, number - 2));
+    return (number % divisors).EvaluateAll();
+}
+    
+for (int i = 1; i <= 100; i++)
+{
+    if (IsPrime(i))
+        Console.WriteLine($"{i} is prime!");
+}
+```
+
+### Finding Factors
+```csharp
+
+static Eigenstates<int> Factors(int number)
+{
+    var candidates = new Eigenstates<int>(Enumerable.Range(1, number), x => number % x);
+    return candidates == 0; // Give me the ones that divide cleanly
+}
+```
+
+### Minimum Value Calculation
+```csharp
+
+static int MinValue(IEnumerable<int> numbers)
+{
+    var eigen = new Eigenstates<int>(numbers);
+    var result = eigen.Any() <= eigen.All(); // anyone less than or equal to everyone
+    return result.ToValues().First();
+}
+```
