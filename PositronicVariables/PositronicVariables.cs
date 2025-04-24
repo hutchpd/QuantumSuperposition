@@ -400,6 +400,8 @@ public class TimelineAppendOperation<T> : IOperation
 {
     private readonly PositronicVariable<T> _variable;
     private readonly List<QuBit<T>> _backupTimeline;
+    public PositronicVariable<T> Variable => _variable;
+
 
     public string OperationName => "TimelineAppend";
 
@@ -586,6 +588,9 @@ public class PositronicVariable<T> : IPositronicVariable
     private readonly bool isValueType = typeof(T).IsValueType;
     private readonly HashSet<T> _domain = new();
     private static bool _reverseReplayDone;
+    internal static int _loopDepth;
+    internal static bool InConvergenceLoop => _loopDepth > 0;
+
 
     internal static void ResetReverseReplayFlag()
     {
@@ -794,6 +799,10 @@ public class PositronicVariable<T> : IPositronicVariable
 
         while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
         {
+            // start-of-half-cycle housekeeping
+            if (PositronicRuntime.Instance.Entropy > 0)
+                sawForwardAppend = false; // re-arm the "did we append?" flag
+
             // reset-per-half-cycle bookkeeping for reverse replay
             if (PositronicRuntime.Instance.Entropy < 0)
                 PositronicVariable<T>.ResetReverseReplayFlag();
@@ -821,22 +830,14 @@ public class PositronicVariable<T> : IPositronicVariable
                 // undo whatever reversible ops the *just-finished* forward pass did
                 OperationLog.ReverseLastOperations();
 
-                // ← **THIS BLOCK IS REMOVED**:
-                //   we no longer exit on “first ever reverse with no appends”
-                //   because that was stopping us before any forward append.
-                //
-                // if (!hadForwardCycle && !sawAnyAppend)
-                // {
-                //     PositronicRuntime.Instance.Converged = true;
-                //     Console.SetOut(PositronicRuntime.Instance.OracularStream);
-                //     TimelineAppendedHook = previousHook;
-                //     break;
-                // }
+                OperationLog.Clear();
+
             }
 
             // …then the existing “full convergence” check, direction flip, etc.
             bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
-            if (allVarsConverged && PositronicRuntime.Instance.Entropy < 0)
+            // don’t allow an exit until we have seen at least one forward tick
+            if (hadForwardCycle && allVarsConverged && PositronicRuntime.Instance.Entropy < 0)
             {
                 if (unifyOnConvergence)
                 {
@@ -866,6 +867,9 @@ public class PositronicVariable<T> : IPositronicVariable
         }
 
         TimelineAppendedHook = previousHook;
+
+        // safety check
+        OperationLog.Clear();
     }
 
 
@@ -1036,13 +1040,38 @@ public class PositronicVariable<T> : IPositronicVariable
             && replacedInitialSlice
             && timeline.Count == 1)
         {
-            var snapshot = timeline
-                .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
-                .ToList();
+            if (!InConvergenceLoop)                       // ← we’re outside the loop
+            {
+                // just mutate the existing slice – no new timeline entry
+                var merged = timeline[0].ToCollapsedValues()
+                                        .Union(qb.ToCollapsedValues())
+                                        .Distinct()
+                                        .ToList();
+                timeline[0] = new QuBit<T>(merged);
+                return;
+            }
 
-            timeline[0] = qb;
-            OperationLog.Record(new TimelineReplaceOperation<T>(this, snapshot));
-            // no OnTimelineAppended or TimelineAppendedHook, since count didn't grow
+            bool alreadyAppendedThisHalfCycle =
+                    OperationLog.Peek() is TimelineAppendOperation<T> a
+                    && ReferenceEquals(a.Variable, this);
+
+            if (alreadyAppendedThisHalfCycle)
+            {
+                /* --- replace, don’t append again --- */
+                var backup = timeline.Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
+                                     .ToList();
+                timeline[^1] = qb;                          // mutate in-place
+                OperationLog.Record(new TimelineReplaceOperation<T>(this, backup));
+                return;
+            }
+
+            /* --- this is the *first* write of the half-cycle → normal append --- */
+            var snap = timeline.Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
+                               .ToList();
+            timeline.Add(qb);
+            OnTimelineAppended?.Invoke();
+            TimelineAppendedHook?.Invoke();                 // tells the loop “I changed”
+            OperationLog.Record(new TimelineAppendOperation<T>(this, snap));
             return;
         }
 

@@ -8,6 +8,7 @@ using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Core;
 using NUnit.Framework;
 using System.Collections;
+using NUnit.Framework.Legacy;
 
 namespace PositronicVariables.Tests
 {
@@ -469,6 +470,25 @@ namespace PositronicVariables.Tests
                 "ConvergenceLoop should have run at least one forward + one reverse half-cycle.");
         }
 
+        [Test]
+        public void ConvergenceLoop_Should_Run_At_Least_One_Forward_Tick()
+        {
+            PositronicVariable<int>.ResetStaticVariables();
+            bool sawForward = false;
+
+            PositronicVariable<int>.RunConvergenceLoop(
+                () =>
+                {
+                    if (PositronicVariable<int>.GetEntropy() > 0)
+                        sawForward = true;          // ← marker
+                },
+                runFinalIteration: false);
+
+            Assert.That(sawForward,
+                "We never saw a forward half-cycle.  The loop exited on the first reverse pass.");
+        }
+
+
 
         [Test]
         public void Convergence_Fires_On_First_Reverse_Before_Any_Forward_Ticks()
@@ -728,6 +748,30 @@ namespace PositronicVariables.Tests
             Assert.That(actual, Is.EqualTo(expected),
                 $"Unexpected final output.  Actual:\n{actual}\nExpected:\n{expected}\n");
         }
+
+        [Test]
+        public void ReverseReplay_Should_Rebuild_With_All_Forward_Values()
+        {
+            // arrange
+            PositronicVariable<int>.ResetStaticVariables();
+            var v = PositronicVariable<int>.GetOrCreate("x", 0);
+
+            // do one forward half-cycle that appends a union {1,2}
+            PositronicVariable<int>.SetEntropy(1);
+            v.Assign(1);
+            v.Assign(2);               // now top slice is any(1,2)
+            var forwardSlice = v.GetCurrentQBit();
+
+            // trigger one reverse half-cycle
+            PositronicVariable<int>.SetEntropy(-1);
+            v.Assign(forwardSlice);    // makes ReplaceOrAppendOrUnify run in reverse mode
+
+            // assert – rebuilt slice must still contain BOTH values
+            var rebuilt = v.GetCurrentQBit().ToCollapsedValues().OrderBy(x => x).ToList();
+            CollectionAssert.AreEquivalent(new[] { 1, 2 }, rebuilt,
+                "Reverse replay rebuilt the slice as scalar instead of preserving the union.");
+        }
+
 
         /// <summary>
         /// Unified QuBit should display full union in ToString().
