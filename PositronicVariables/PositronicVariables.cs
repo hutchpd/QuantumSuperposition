@@ -430,6 +430,8 @@ public class TimelineReplaceOperation<T> : IOperation
     private readonly PositronicVariable<T> _variable;
     private readonly List<QuBit<T>> _backupTimeline;
 
+    public PositronicVariable<T> Variable => _variable;
+
     public string OperationName => "TimelineReplace";
 
     public TimelineReplaceOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline)
@@ -592,6 +594,10 @@ public class PositronicVariable<T> : IPositronicVariable
     internal static int _loopDepth;
     internal static bool InConvergenceLoop => _loopDepth > 0;
 
+     private void Remember(IEnumerable<T> xs)
+     {
+         foreach (var x in xs) _domain.Add(x);
+     }
 
     internal static void ResetReverseReplayFlag()
     {
@@ -944,7 +950,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         // Everything we've ever seen.
         // Whatever is in the *current* slice is what survived the argument.
-        var vals = timeline.SelectMany(q => q.ToCollapsedValues()).Distinct();
+        var vals = _domain;
 
         // build one canonical disjunction that still shows all possibilities
         var unified = new QuBit<T>(vals);
@@ -1017,6 +1023,8 @@ public class PositronicVariable<T> : IPositronicVariable
         if (runtime.Converged)
             return;
 
+        Remember(qb.ToCollapsedValues());
+
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
         if (runtime.Entropy < 0)
         {
@@ -1039,8 +1047,8 @@ public class PositronicVariable<T> : IPositronicVariable
                 }
                 else if (top is TimelineReplaceOperation<T> trp)
                 {
-                    poppedSnapshots.Add(trp);
-                    OperationLog.Pop();
+                    foreach (var x in trp.Variable.GetCurrentQBit().ToCollapsedValues())
+                        forwardValues.Add(x);
                 }
                 else if (top is IReversibleOperation<T> rOp)
                 {
@@ -1077,6 +1085,7 @@ public class PositronicVariable<T> : IPositronicVariable
             rebuilt.Any();
 
             // Overwrite timeline with the rebuilt slice
+            Remember(rebuiltSet);
             timeline.Clear();
             timeline.Add(rebuilt);
             TimelineAppendedHook?.Invoke();
