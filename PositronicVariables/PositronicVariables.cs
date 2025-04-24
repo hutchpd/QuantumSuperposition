@@ -1,15 +1,262 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
 using QuantumSuperposition.QuantumSoup;
+using static System.Net.Mime.MediaTypeNames;
 
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class PositronicEntryAttribute : Attribute
 {
 }
+
+public interface IReversibleOperation<T> : IOperation
+{
+    /// <summary>
+    /// Given the result of a forward operation, computes the inverse value.
+    /// For example, if the forward op was division by 9 then the inverse is multiplication by 9.
+    /// </summary>
+    T ApplyInverse(T result);
+    /// <summary>
+    /// Given the result of a forward operation, computes the forward value.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    T ApplyForward(T value);
+}
+
+public interface IReversibleSnapshotOperation<T> : IReversibleOperation<T>
+{
+    PositronicVariable<T> Variable { get; }
+    T Original { get; }
+    void IOperation.Undo()
+    {
+        var qb = new QuBit<T>(new[] { Original });
+        qb.Any();
+        // overwrite the slice produced by the forward op
+        Variable.timeline[Variable.timeline.Count - 1] = qb;
+    }
+}
+
+// Addition: forward op is x + A, so inverse is (result - A).
+public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _addend;
+    public T Original { get; }
+
+    public string OperationName => $"Addition of {_addend}";
+
+    public AdditionOperation(PositronicVariable<T> variable, T addend)
+    {
+        Variable = variable;
+        _addend = addend;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();   // snapshot
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)result - _addend);
+    public T ApplyForward(T value) => (T)((dynamic)value + _addend);
+
+}
+
+// Subtraction: forward op is x - B, so inverse is (result + B).
+public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _subtrahend;
+    public T Original { get; }
+
+    public string OperationName => $"Subtraction of {_subtrahend}";
+
+    public SubtractionOperation(PositronicVariable<T> variable, T subtrahend)
+    {
+        Variable = variable;
+        _subtrahend = subtrahend;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)result + _subtrahend);
+    public T ApplyForward(T value) => (T)((dynamic)value - _subtrahend);
+
+}
+
+// SubtractionReversed: for T - x. Forward op is: result = M - x, so the inverse is x = M - result.
+public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _minuend;
+    public T Original { get; }
+
+    public string OperationName => $"SubtractionReversed with minuend {_minuend}";
+
+    public SubtractionReversedOperation(PositronicVariable<T> variable, T minuend)
+    {
+        Variable = variable;
+        _minuend = minuend;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)_minuend - result);
+    public T ApplyForward(T value) => (T)((dynamic)_minuend - value);
+
+}
+
+// Multiplication: forward op is x * M, so inverse is (result / M).
+public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _multiplier;
+    public T Original { get; }
+
+    public string OperationName => $"Multiplication by {_multiplier}";
+
+    public MultiplicationOperation(PositronicVariable<T> variable, T multiplier)
+    {
+        Variable = variable;
+        _multiplier = multiplier;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)result / _multiplier);
+    public T ApplyForward(T value) => (T)((dynamic)value * _multiplier);
+
+}
+
+// Division: forward op is x / D, so inverse is (result * D).
+public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _divisor;
+    public T Original { get; }
+
+    public string OperationName => $"Division by {_divisor}";
+
+    public DivisionOperation(PositronicVariable<T> variable, T divisor)
+    {
+        Variable = variable;
+        _divisor = divisor;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)result * _divisor);
+    public T ApplyForward(T value) => (T)((dynamic)value / _divisor);
+
+}
+
+// DivisionReversed: for T / x. Forward op is: result = N / x, so inverse is x = N / result.
+public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _numerator;
+    public T Original { get; }
+
+    public string OperationName => $"DivisionReversed with numerator {_numerator}";
+
+    public DivisionReversedOperation(PositronicVariable<T> variable, T numerator)
+    {
+        Variable = variable;
+        _numerator = numerator;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)((dynamic)_numerator / result);
+    public T ApplyForward(T value) => (T)((dynamic)_numerator / value);
+
+}
+
+// Unary Negation: forward op is -x, and its own inverse.
+public class NegationOperation<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    public T Original { get; }
+
+    public string OperationName => "Negation";
+
+    public NegationOperation(PositronicVariable<T> variable)
+    {
+        Variable = variable;
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
+    }
+
+    public T ApplyInverse(T result) => (T)(-(dynamic)result);
+    public T ApplyForward(T value) => (T)(-(dynamic)value);
+
+}
+
+
+/// <summary>
+///  x % d   — but logged with enough information so the step
+///  can be undone later.
+/// </summary>
+public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
+{
+    public PositronicVariable<T> Variable { get; }
+    private readonly T _divisor;
+    private readonly T _quotient;     // ⟵  floor(original/divisor)
+    public T Original { get; }
+
+    public string OperationName => $"Modulus by {_divisor}";
+
+    public ReversibleModulusOp(PositronicVariable<T> variable, T divisor)
+    {
+        Variable  = variable;
+        _divisor  = divisor;
+
+        // snapshot the value *before* the %
+        Original  = variable.GetCurrentQBit().ToCollapsedValues().First();
+        _quotient = (T) ((dynamic) Original / divisor);
+    }
+
+    // Forward:   r  ⟶  q·d + r  (rebuild the original value)
+    public T ApplyForward(T remainder)
+        => (T)((dynamic)_quotient * _divisor + remainder);
+
+    // Inverse:   x  ⟶  x % d   (rarely used by the engine but nice to have)
+    public T ApplyInverse(T value)
+        => (T)((dynamic)value % _divisor);
+
+    void IOperation.Undo()
+    {
+        // 1. restore the original slice
+        var qb = new QuBit<T>(new[] { Original });
+        qb.Any();
+        Variable.timeline[^1] = qb;
+
+        // 2. tell the convergence loop we're done
+        PositronicRuntime.Instance.Converged = true;
+    }
+
+}
+
+
+public class InversionOperation<T> : IOperation
+{
+    private readonly PositronicVariable<T> _variable;
+    private readonly T _originalValue;
+    private readonly T _invertedValue;
+    public string OperationName { get; }
+
+    public InversionOperation(PositronicVariable<T> variable, T originalValue, T invertedValue, string opName)
+    {
+        _variable = variable;
+        _originalValue = originalValue;
+        _invertedValue = invertedValue;
+        OperationName = $"Inverse of {opName}";
+    }
+
+    public void Undo()
+    {
+        // To undo an inversion, reassign the original forward value.
+        _variable.Assign(_originalValue);
+    }
+}
+
+
 
 /// <summary>
 /// Initializes the metaphysical I/O trap, redirecting stdout into a memory buffer
@@ -117,17 +364,16 @@ public static class OperationLog
 {
     private static readonly Stack<IOperation> _log = new Stack<IOperation>();
 
-    /// <summary>
-    /// Record an operation that was just performed, along with its undo data.
-    /// </summary>
     public static void Record(IOperation op)
     {
         _log.Push(op);
     }
 
-    /// <summary>
-    /// Rewinds all recorded operations by popping each IOperation and calling Undo().
-    /// </summary>
+    public static IOperation Peek()
+    {
+        return _log.Count > 0 ? _log.Peek() : null;
+    }
+
     public static void ReverseLastOperations()
     {
         while (_log.Count > 0)
@@ -137,9 +383,13 @@ public static class OperationLog
         }
     }
 
-    /// <summary>
-    /// Clears the log without undoing.
-    /// </summary>
+    // pop
+    public static void Pop()
+    {
+        if (_log.Count > 0)
+            _log.Pop();
+    }
+
     public static void Clear() => _log.Clear();
 }
 
@@ -334,6 +584,32 @@ public class PositronicVariable<T> : IPositronicVariable
 {
     // Determines at runtime if T is a value type.
     private readonly bool isValueType = typeof(T).IsValueType;
+    private readonly HashSet<T> _domain = new();
+    private static bool _reverseReplayDone;
+
+    internal static void ResetReverseReplayFlag()
+    {
+        _reverseReplayDone = false;           // called each time the direction flips
+    }
+
+    /// <summary>
+    /// Internal hook called on *any* forward append
+    /// </summary>
+    internal static Action TimelineAppendedHook;
+
+    /// <summary>
+    /// Injects an explicit QuBit into the timeline **without collapsing it**.
+    /// </summary>
+    public void Assign(QuBit<T> qb)
+    {
+        if (qb is null)
+            throw new ArgumentNullException(nameof(qb));
+
+        // Ensure it’s been observed at least once so that
+        // subsequent operator overloads won’t collapse accidentally.
+        qb.Any();
+        ReplaceOrAppendOrUnify(qb);
+    }
 
     // Automatically enable simulation on first use.
     private static readonly bool _ = EnableSimulation();
@@ -356,6 +632,7 @@ public class PositronicVariable<T> : IPositronicVariable
 
         // Trigger initialization of the environment.
         var trigger = AethericRedirectionGrid.Initialized;
+
     }
 
 
@@ -381,6 +658,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
         timeline.Add(qb);
+        _domain.Add(initialValue);
         PositronicRuntime.Instance.Variables.Add(this);
     }
 
@@ -398,6 +676,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         registry.Clear();
         PositronicRuntime.Instance.Reset();
+        OperationLog.Clear();
     }
 
     public static void SetEntropy(int e) => PositronicRuntime.Instance.Entropy = e;
@@ -490,47 +769,105 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Runs your code in a convergence loop until all variables have settled.
     /// </summary>
-    public static void RunConvergenceLoop(Action code)
+    public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true)
     {
         if (PositronicRuntime.Instance.OracularStream == null)
             PositronicRuntime.Instance.OracularStream = Console.Out;
 
         PositronicRuntime.Instance.Converged = false;
         Console.SetOut(TextWriter.Null);
-        PositronicRuntime.Instance.Entropy = -1;
+        PositronicRuntime.Instance.Entropy = -1;    // ← begin with the reverse half-cycle
 
         const int maxIters = 1000;
         int iteration = 0;
 
+        bool sawForwardAppend = false;   // an append during a forward half-cycle
+        bool sawAnyAppend = false;   // an append during *any* half-cycle
+        bool hadForwardCycle = false;   // have we ever done a forward pass?
+        var previousHook = TimelineAppendedHook;
+        TimelineAppendedHook = () =>
+        {
+            sawAnyAppend = true;
+            if (PositronicRuntime.Instance.Entropy > 0)
+                sawForwardAppend = true;
+        };
+
         while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
         {
+            // reset-per-half-cycle bookkeeping for reverse replay
+            if (PositronicRuntime.Instance.Entropy < 0)
+                PositronicVariable<T>.ResetReverseReplayFlag();
 
-            code();  // Execute the simulation step
+            // ==== YOUR CODE RUNS ====
+            code();
 
-            // Check convergence across all variables.
-            bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
-            if (allVarsConverged)
+            // ← **NEW**: once we’ve executed code() in a forward half-cycle,
+            // record that we’ve had at least one forward pass.
+            if (PositronicRuntime.Instance.Entropy > 0)
+                hadForwardCycle = true;
+
+            if (PositronicRuntime.Instance.Entropy < 0)
             {
-                PositronicRuntime.Instance.Converged = true;
-                foreach (var pv in PositronicRuntime.Instance.Variables)
-                    pv.UnifyAll();
+                // if we’ve already done a forward tick and it produced nothing new,
+                // we really have converged
+                if (hadForwardCycle && !sawForwardAppend)
+                {
+                    PositronicRuntime.Instance.Converged = true;
+                    Console.SetOut(PositronicRuntime.Instance.OracularStream);
+                    TimelineAppendedHook = previousHook;
+                    break;
+                }
 
-                // Clear the current output buffer so only the final output shows.
-                AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+                // undo whatever reversible ops the *just-finished* forward pass did
+                OperationLog.ReverseLastOperations();
+
+                // ← **THIS BLOCK IS REMOVED**:
+                //   we no longer exit on “first ever reverse with no appends”
+                //   because that was stopping us before any forward append.
+                //
+                // if (!hadForwardCycle && !sawAnyAppend)
+                // {
+                //     PositronicRuntime.Instance.Converged = true;
+                //     Console.SetOut(PositronicRuntime.Instance.OracularStream);
+                //     TimelineAppendedHook = previousHook;
+                //     break;
+                // }
+            }
+
+            // …then the existing “full convergence” check, direction flip, etc.
+            bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+            if (allVarsConverged && PositronicRuntime.Instance.Entropy < 0)
+            {
+                if (unifyOnConvergence)
+                {
+                    PositronicRuntime.Instance.Converged = true;
+                    foreach (var pv in PositronicRuntime.Instance.Variables)
+                        pv.UnifyAll();
+                    AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+                }
+                PositronicRuntime.Instance.Converged = true;
                 Console.SetOut(PositronicRuntime.Instance.OracularStream);
                 break;
             }
 
-            // Flip entropy so the next iteration goes “backwards”
             PositronicRuntime.Instance.Entropy = -PositronicRuntime.Instance.Entropy;
             iteration++;
         }
 
-        // Restore original output and perform the final forward run.
+        // …and the final forward replay logic remains unchanged
         Console.SetOut(PositronicRuntime.Instance.OracularStream);
-        PositronicRuntime.Instance.Entropy = 1;
-        code();
+        if (runFinalIteration && PositronicRuntime.Instance.Converged)
+        {
+            PositronicRuntime.Instance.Entropy = 1;
+            PositronicRuntime.Instance.Converged = false;
+            code();
+            OperationLog.ReverseLastOperations();
+            PositronicRuntime.Instance.Converged = true;
+        }
+
+        TimelineAppendedHook = previousHook;
     }
+
 
 
     /// <summary>
@@ -541,14 +878,17 @@ public class PositronicVariable<T> : IPositronicVariable
         if (PositronicRuntime.Instance.Converged)
             return 1;
 
-        if (timeline.Count < 3) return 0;
+        if (timeline.Count < 3)
+            return 0;
+
+        if (SameStates(timeline[^1], timeline[^2]))
+            return 1;
 
 
-        var current = timeline[^1];
         for (int i = 2; i <= timeline.Count; i++)
         {
             var older = timeline[timeline.Count - i];
-            if (SameStates(older, current))
+            if (SameStates(older, timeline[^1]))
                 return i - 1;
         }
         return 0;
@@ -559,19 +899,27 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public void UnifyAll()
     {
-        var allStates = timeline
-            .SelectMany(qb => qb.ToCollapsedValues())
-            .Distinct()
-            .ToList();
+        // Everything we've ever seen.
+        // Whatever is in the *current* slice is what survived the argument.
+        var vals = timeline[^1].ToCollapsedValues()
+                                   .Distinct()
+                                   .ToList();      // ← could be 1 or many
 
-        var unified = new QuBit<T>(allStates);
+        // build one canonical disjunction that still shows all possibilities
+        var unified = new QuBit<T>(vals);
+
         unified.Any();
+
         timeline.Clear();
         timeline.Add(unified);
+
+        OperationLog.Clear();
+
         PositronicRuntime.Instance.Converged = true;
         OnCollapse?.Invoke();
         OnConverged?.Invoke();
     }
+
 
     /// <summary>
     /// Unifies the last 'count' timeline slices into one.
@@ -614,67 +962,140 @@ public class PositronicVariable<T> : IPositronicVariable
         qb.Any();
         ReplaceOrAppendOrUnify(qb);
     }
-
+    /// <summary>
+    /// Either replaces, appends, or unifies the current timeline slice with a new quantum slice.
+    /// </summary>
     /// <summary>
     /// Either replaces, appends, or unifies the current timeline slice with a new quantum slice.
     /// </summary>
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
-        // Capture the previous timeline
         var runtime = PositronicRuntime.Instance;
 
+        // If we’ve already converged, do nothing.
+        if (runtime.Converged)
+            return;
+
+        // --- Reverse‐time pass (Entropy < 0) -----------------------------
         if (runtime.Entropy < 0)
         {
-            // In reverse time, we simply do nothing.
-            // We want arithmetic to pick up the last forward (penultimate) value instead.
+            // 1) Pop off everything belonging to the *last* forward half-cycle
+            var poppedSnapshots = new List<IOperation>();
+            var poppedReversibles = new List<IReversibleOperation<T>>();
+            while (true)
+            {
+                var top = OperationLog.Peek();
+                if (top is TimelineAppendOperation<T> || top is TimelineReplaceOperation<T>)
+                {
+                    poppedSnapshots.Add(top);
+                    OperationLog.Pop();
+                }
+                else if (top is IReversibleOperation<T> rOp)
+                {
+                    poppedReversibles.Add(rOp);
+                    OperationLog.Pop();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            // 2) Restore timeline to the snapshot before that forward pass
+            foreach (var snap in poppedSnapshots)
+                snap.Undo();
+
+            // 3) Replay the reversible ops forward to rebuild the slice
+            var value = qb.ToCollapsedValues().First();
+            for (int i = poppedReversibles.Count - 1; i >= 0; i--)
+                value = poppedReversibles[i].ApplyForward(value);
+
+            var rebuilt = new QuBit<T>(new[] { value });
+            rebuilt.Any();
+
+            // 4) Overwrite timeline with the rebuilt slice
+            timeline.Clear();
+            timeline.Add(rebuilt);
+            TimelineAppendedHook?.Invoke();
+
+            // 5) Mark that the “original” slice has now been replaced
+            replacedInitialSlice = true;
+
+            // 6) Push everything back onto the log in original order
+            foreach (var snap in poppedSnapshots.AsEnumerable().Reverse())
+                OperationLog.Record(snap);
+            foreach (var rop in poppedReversibles.AsEnumerable().Reverse())
+                OperationLog.Record(rop);
+
             return;
         }
 
-        // If time is moving forward, then proceed with normal logic...
+        // --- Forward‐time pass, but we’ve already replaced the first slice ---
+        //   Instead of appending a duplicate slice, *replace* the sole slice
+        if (runtime.Entropy > 0
+            && replacedInitialSlice
+            && timeline.Count == 1)
+        {
+            var snapshot = timeline
+                .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
+                .ToList();
+
+            timeline[0] = qb;
+            OperationLog.Record(new TimelineReplaceOperation<T>(this, snapshot));
+            // no OnTimelineAppended or TimelineAppendedHook, since count didn't grow
+            return;
+        }
+
+        // --- If globally converged, just merge or overwrite the last slice ---
         if (runtime.Converged)
         {
-            // If we already converged, unify states (same as your original)
-            var current = timeline[^1].ToCollapsedValues().ToList();
-            var incoming = qb.ToCollapsedValues().ToList();
-            var merged = current.Union(incoming).Distinct().ToList();
-            var newQb = new QuBit<T>(merged);
-            newQb.Any();
-            timeline[^1] = newQb;
-            // [Don't forget: no timeline append here if already converged]
+            var collapsed = qb.ToCollapsedValues();
+            if (collapsed.Count() == 1)
+            {
+                timeline[^1] = qb;
+            }
+            else
+            {
+                var merged = timeline[^1].ToCollapsedValues()
+                                         .Union(collapsed)
+                                         .Distinct()
+                                         .ToList();
+                timeline[^1] = new QuBit<T>(merged);
+            }
             return;
         }
 
-
-        // If only one timeslice exists, update (replace) it rather than appending.
+        // --- First genuine forward tick: append alongside the original slice ---
         if (!replacedInitialSlice && timeline.Count == 1)
         {
-            var existing = timeline[0];
-            if (!SameStates(existing, qb))
+            var previousTimeline = timeline
+                .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
+                .ToList();
 
-            {
-
-                timeline[0] = qb;
-
-            }
+            timeline.Add(qb);
+            OnTimelineAppended?.Invoke();
+            TimelineAppendedHook?.Invoke();
+            OperationLog.Record(new TimelineAppendOperation<T>(this, previousTimeline));
 
             replacedInitialSlice = true;
             return;
         }
 
-        var previousTimeline = new List<QuBit<T>>(timeline
-            .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray())));
+        // --- Every subsequent forward tick: normal append ---
+        var snapshot2 = timeline
+            .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
+            .ToList();
 
-
-        // If the timeline is empty, just add the new slice.
         timeline.Add(qb);
         OnTimelineAppended?.Invoke();
+        TimelineAppendedHook?.Invoke();
+        OperationLog.Record(new TimelineAppendOperation<T>(this, snapshot2));
 
-        OperationLog.Record(new TimelineAppendOperation<T>(this, previousTimeline));
-
-        // Check if a unification should occur.
+        // Check for cycles to trigger unification
         for (int cycle = 2; cycle <= 20; cycle++)
         {
-            if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
+            if (timeline.Count >= cycle + 1
+                && SameStates(timeline[^1], timeline[^(cycle + 1)]))
             {
                 Unify(cycle);
                 break;
@@ -682,13 +1103,19 @@ public class PositronicVariable<T> : IPositronicVariable
         }
     }
 
+
+
     #region region Operator Overloads
     // --- Operator Overloads ---
+    // --- Addition Overloads ---
     public static QuBit<T> operator +(PositronicVariable<T> left, T right)
     {
-        // Get the current quantum state, perform arithmetic and ensure state is activated.
         var resultQB = left.GetCurrentQBit() + right;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new AdditionOperation<T>(left, right));
+        }
         return resultQB;
     }
 
@@ -696,6 +1123,10 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() + left;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new AdditionOperation<T>(right, left));
+        }
         return resultQB;
     }
 
@@ -703,41 +1134,71 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            // Record addition using the collapsed value from the right variable.
+            T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+            OperationLog.Record(new AdditionOperation<T>(left, operand));
+        }
         return resultQB;
     }
 
+    // --- Modulus Overloads ---
     public static QuBit<T> operator %(PositronicVariable<T> left, T right)
     {
+        var before = left.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = left.GetCurrentQBit() % right;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+            OperationLog.Record(new ReversibleModulusOp<T>(left, right));
         return resultQB;
     }
+
 
     public static QuBit<T> operator %(T left, PositronicVariable<T> right)
     {
+        var before = right.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = right.GetCurrentQBit() % left;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+            OperationLog.Record(new ReversibleModulusOp<T>(right, left));
         return resultQB;
     }
+
 
     public static QuBit<T> operator %(PositronicVariable<T> left, PositronicVariable<T> right)
     {
+        var before = left.GetCurrentQBit().ToCollapsedValues().First();
+        var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+            OperationLog.Record(new ReversibleModulusOp<T>(left, divisor));
         return resultQB;
     }
 
+    // --- Subtraction Overloads ---
     public static QuBit<T> operator -(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() - right;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new SubtractionOperation<T>(left, right));
+        }
         return resultQB;
     }
 
     public static QuBit<T> operator -(T left, PositronicVariable<T> right)
     {
+        // Here, result = left - rightValue.
         var resultQB = right.GetCurrentQBit() - left;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            // Use a reversed subtraction so that the inverse is: value = left - result.
+            OperationLog.Record(new SubtractionReversedOperation<T>(right, left));
+        }
         return resultQB;
     }
 
@@ -745,30 +1206,37 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+            OperationLog.Record(new SubtractionOperation<T>(left, operand));
+        }
         return resultQB;
     }
 
+    // --- Unary Negation ---
     public static QuBit<T> operator -(PositronicVariable<T> value)
     {
-        // Unary negation: compute the dynamic negation of each collapsed value.
         var qb = value.GetCurrentQBit();
         var negatedValues = qb.ToCollapsedValues().Select(v => (T)(-(dynamic)v)).ToArray();
         var negatedQb = new QuBit<T>(negatedValues);
         negatedQb.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new NegationOperation<T>(value));
+        }
         return negatedQb;
     }
 
+    // --- Multiplication Overloads ---
     public static QuBit<T> operator *(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() * right;
         resultQB.Any();
-        return resultQB;
-    }
-
-    public static QuBit<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
-    {
-        var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
-        resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new MultiplicationOperation<T>(left, right));
+        }
         return resultQB;
     }
 
@@ -776,13 +1244,35 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() * left;
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new MultiplicationOperation<T>(right, left));
+        }
         return resultQB;
     }
 
-    public static QuBit<T> operator /(PositronicVariable<T> left, PositronicVariable<T> right)
+    public static QuBit<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
     {
-        var resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
+        var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
         resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+            OperationLog.Record(new MultiplicationOperation<T>(left, operand));
+        }
+        return resultQB;
+    }
+
+    // --- Division Overloads ---
+    public static QuBit<T> operator /(PositronicVariable<T> left, T right)
+    {
+        var currentQB = left.GetCurrentQBit();
+        var resultQB = currentQB / right;
+        resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new DivisionOperation<T>(left, right));
+        }
         return resultQB;
     }
 
@@ -790,13 +1280,10 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() / left;
         resultQB.Any();
-        return resultQB;
-    }
-
-    public static QuBit<T> operator /(PositronicVariable<T> left, T right)
-    {
-        var resultQB = left.GetCurrentQBit() / right;
-        resultQB.Any();
+        if (PositronicRuntime.Instance.Entropy >= 0)
+        {
+            OperationLog.Record(new DivisionReversedOperation<T>(right, left));
+        }
         return resultQB;
     }
 
@@ -1038,6 +1525,7 @@ public class PositronicVariable<T> : IPositronicVariable
 #endregion
 
 
+
 #region NeuralNodule<T>
 
 /// <summary>
@@ -1087,5 +1575,4 @@ public class NeuralNodule<T> where T : struct, IComparable
         });
     }
 }
-
 #endregion
