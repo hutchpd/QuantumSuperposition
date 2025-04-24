@@ -508,8 +508,8 @@ namespace PositronicVariables.Tests
                   if (PositronicVariable<int>.GetEntropy() > 0)
                       v.Assign(v + 1);
               },
-              runFinalIteration: false
-            );
+              runFinalIteration: false,
+              bailOnFirstReverseWhenIdle: true);
 
             // We should have converged before ever doing a single forward append.
             Assert.That(forwardAppends, Is.Zero,

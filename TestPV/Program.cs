@@ -5,13 +5,12 @@ internal static class Program
     [PositronicEntry]
     private static void Main()
     {
-        var temperature = PositronicVariable<double>.GetOrCreate();
+        var antival = PositronicVariable<double>.GetOrCreate();
 
-        Console.WriteLine($"The temperature in c is {temperature}");
-
-        temperature.Assign(temperature + 1);
-        temperature.Assign(temperature + 1);
-        temperature.Assign(10);
+        Console.WriteLine($"The antival is {antival}");
+        var val = (antival + 1) % 3;
+        Console.WriteLine($"The value is {val}");
+        antival.Assign(val);
 
     }
 }

@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
+using Microsoft.CodeAnalysis.Scripting.Hosting;
 using QuantumSuperposition.QuantumSoup;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -774,7 +775,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Runs your code in a convergence loop until all variables have settled.
     /// </summary>
-    public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true)
+    public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true, bool bailOnFirstReverseWhenIdle = false)
     {
         if (PositronicRuntime.Instance.OracularStream == null)
             PositronicRuntime.Instance.OracularStream = Console.Out;
@@ -797,8 +798,20 @@ public class PositronicVariable<T> : IPositronicVariable
                 sawForwardAppend = true;
         };
 
+        static bool HasOnlyOneSlice(IPositronicVariable v)
+        {
+            var field = v.GetType()
+                         .GetField("timeline",
+                                   BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            if (field == null) return false;
+            var list = field.GetValue(v) as System.Collections.ICollection;
+            return list != null && list.Count == 1;
+        }
+
+
         while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
         {
+
             // start-of-half-cycle housekeeping
             if (PositronicRuntime.Instance.Entropy > 0)
                 sawForwardAppend = false; // re-arm the "did we append?" flag
@@ -807,10 +820,36 @@ public class PositronicVariable<T> : IPositronicVariable
             if (PositronicRuntime.Instance.Entropy < 0)
                 PositronicVariable<T>.ResetReverseReplayFlag();
 
-            // ==== YOUR CODE RUNS ====
+            // ==== THE CODE RUNS ====
             code();
 
-            // ← **NEW**: once we’ve executed code() in a forward half-cycle,
+            // -- optional "first-path" early exit on the FIRST reverse pass
+            if (bailOnFirstReverseWhenIdle)
+            {
+                bool allAlreadyConverged =
+                    PositronicRuntime.Instance.Variables.All(v =>
+                    v.Converged() > 0          // classic cycle-detected case
+                    || HasOnlyOneSlice(v));    // brand-new → already stable
+
+                bool replayPending =
+                    OperationLog.Peek() is TimelineAppendOperation<T> ||
+                    OperationLog.Peek() is TimelineReplaceOperation<T>;
+
+                // if we’re still in that very first reverse, nothing changed,
+                // and there’s no forward write queued, bail out now
+                if (!hadForwardCycle       /* still in initial reverse */
+                    && allAlreadyConverged  /* every var already says “converged” */
+                    && !sawAnyAppend        /* user did _not_ mutate during reverse */
+                    && !replayPending)      /* no write scheduled for forward */
+                {
+                    PositronicRuntime.Instance.Converged = true;
+                    Console.SetOut(PositronicRuntime.Instance.OracularStream);
+                    TimelineAppendedHook = previousHook;
+                    break;
+                }
+            }
+
+            // once we’ve executed code() in a forward half-cycle,
             // record that we’ve had at least one forward pass.
             if (PositronicRuntime.Instance.Entropy > 0)
                 hadForwardCycle = true;
@@ -905,9 +944,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         // Everything we've ever seen.
         // Whatever is in the *current* slice is what survived the argument.
-        var vals = timeline[^1].ToCollapsedValues()
-                                   .Distinct()
-                                   .ToList();      // ← could be 1 or many
+        var vals = timeline.SelectMany(q => q.ToCollapsedValues()).Distinct();
 
         // build one canonical disjunction that still shows all possibilities
         var unified = new QuBit<T>(vals);
@@ -983,15 +1020,26 @@ public class PositronicVariable<T> : IPositronicVariable
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
         if (runtime.Entropy < 0)
         {
-            // 1) Pop off everything belonging to the *last* forward half-cycle
+            // Pop off everything belonging to the *last* forward half-cycle
             var poppedSnapshots = new List<IOperation>();
             var poppedReversibles = new List<IReversibleOperation<T>>();
+            var forwardValues = new HashSet<T>();
+
             while (true)
             {
                 var top = OperationLog.Peek();
-                if (top is TimelineAppendOperation<T> || top is TimelineReplaceOperation<T>)
+                if (top is TimelineAppendOperation<T> tap)
                 {
-                    poppedSnapshots.Add(top);
+                    // Collect values that were added during the forward half-cycle
+                    foreach (var x in tap.Variable.GetCurrentQBit().ToCollapsedValues())
+                        forwardValues.Add(x);
+
+                    poppedSnapshots.Add(tap);
+                    OperationLog.Pop();
+                }
+                else if (top is TimelineReplaceOperation<T> trp)
+                {
+                    poppedSnapshots.Add(trp);
                     OperationLog.Pop();
                 }
                 else if (top is IReversibleOperation<T> rOp)
@@ -1005,27 +1053,38 @@ public class PositronicVariable<T> : IPositronicVariable
                 }
             }
 
-            // 2) Restore timeline to the snapshot before that forward pass
+            // Restore timeline to the snapshot before that forward pass
             foreach (var snap in poppedSnapshots)
                 snap.Undo();
 
-            // 3) Replay the reversible ops forward to rebuild the slice
-            var value = qb.ToCollapsedValues().First();
-            for (int i = poppedReversibles.Count - 1; i >= 0; i--)
-                value = poppedReversibles[i].ApplyForward(value);
+            // instead of a single seed, we reply *every* state found in the incoming slice
+            var seeds = forwardValues
+                .Union(qb.ToCollapsedValues())
+                .Distinct();
+            var rebuiltSet = new HashSet<T>();
 
-            var rebuilt = new QuBit<T>(new[] { value });
+            foreach (var seed in seeds)
+            {
+                var v = seed;
+                for (int i = poppedReversibles.Count - 1; i >= 0; i--)
+                    v = poppedReversibles[i].ApplyForward(v);
+
+                rebuiltSet.Add(v);  // ← always add the value we ended with
+
+            }
+
+            var rebuilt = new QuBit<T>(rebuiltSet.ToArray());
             rebuilt.Any();
 
-            // 4) Overwrite timeline with the rebuilt slice
+            // Overwrite timeline with the rebuilt slice
             timeline.Clear();
             timeline.Add(rebuilt);
             TimelineAppendedHook?.Invoke();
 
-            // 5) Mark that the “original” slice has now been replaced
+            // Mark that the “original” slice has now been replaced
             replacedInitialSlice = true;
 
-            // 6) Push everything back onto the log in original order
+            // Push everything back onto the log in original order
             foreach (var snap in poppedSnapshots.AsEnumerable().Reverse())
                 OperationLog.Record(snap);
             foreach (var rop in poppedReversibles.AsEnumerable().Reverse())
@@ -1057,10 +1116,16 @@ public class PositronicVariable<T> : IPositronicVariable
 
             if (alreadyAppendedThisHalfCycle)
             {
-                /* --- replace, don’t append again --- */
-                var backup = timeline.Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
+                /* — replace, _but_ preserve everything that was already in there — */
+            var backup = timeline.Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
                                      .ToList();
-                timeline[^1] = qb;                          // mutate in-place
+
+                var merged = timeline[^1].ToCollapsedValues()
+                                        .Union(qb.ToCollapsedValues())
+                                        .Distinct()
+                                        .ToList();
+
+                timeline[^1] = new QuBit<T>(merged);
                 OperationLog.Record(new TimelineReplaceOperation<T>(this, backup));
                 return;
             }
