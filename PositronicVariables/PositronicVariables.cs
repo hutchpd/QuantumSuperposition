@@ -1075,7 +1075,7 @@ public void Reset()
         Entropy = 1;
         Converged = false;
         OracularStream = AethericRedirectionGrid.OutputBuffer;
-        Variables.Clear();
+        Registry.Clear();
         TotalConvergenceIterations = 0;
     }
 
@@ -1198,8 +1198,8 @@ public class PositronicVariable<T> : IPositronicVariable
 
 
 
-    // Unified registry for all PositronicVariable<T> instances.
-    private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
+    // (removed) static registry in favor of instance‐based IPositronicVariableRegistry
+    //private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
 
     // The timeline of quantum slices.
     public readonly List<QuBit<T>> timeline = new List<QuBit<T>>();
@@ -1216,91 +1216,103 @@ public class PositronicVariable<T> : IPositronicVariable
 
     
 
-    /// <summary>
-    /// Resets the registry and the global runtime.
-    /// </summary>
-    public static void ResetStaticVariables()
-    {
-        registry.Clear();
-        var rt = new DefaultPositronicRuntime();
-        PositronicAmbient.Current = rt;
-        rt.Reset();
-        OperationLog.Clear();
-    }
+    // removed
+    ///// <summary>
+    ///// Resets the registry and the global runtime.
+    ///// </summary>
+    //public static void ResetStaticVariables()
+    //{
+    //    registry.Clear();
+    //    var rt = new DefaultPositronicRuntime();
+    //    PositronicAmbient.Current = rt;
+    //    rt.Reset();
+    //    OperationLog.Clear();
+    //}
 
     public static void SetEntropy(IPositronicRuntime rt, int e) => rt.Entropy = e;
     public static int GetEntropy(IPositronicRuntime rt) => rt.Entropy;
 
-    /// <summary>
-    /// Returns an existing instance or creates a new PositronicVariable with the given id and initial value.
-    /// </summary>
+    ///// <summary>
+    ///// Returns an existing instance or creates a new PositronicVariable with the given id and initial value.
+    ///// </summary>
+    //public static PositronicVariable<T> GetOrCreate(string id, T initialValue, IPositronicRuntime runtime)
+    //{
+    //    if (registry.TryGetValue(id, out var instance))
+    //    {
+    //        return instance;
+    //    }
+    //    else
+    //    {
+    //        instance = new PositronicVariable<T>(initialValue, runtime);
+    //        registry[id] = instance;
+    //        return instance;
+    //    }
+    //}
+
     public static PositronicVariable<T> GetOrCreate(string id, T initialValue, IPositronicRuntime runtime)
-    {
-        if (registry.TryGetValue(id, out var instance))
-        {
-            return instance;
-        }
-        else
-        {
-            instance = new PositronicVariable<T>(initialValue, runtime);
-            registry[id] = instance;
-            return instance;
-        }
-    }
+        => runtime.Factory.GetOrCreate<T>(id, initialValue);
 
-    /// <summary>
-    /// Returns an existing instance or creates a new PositronicVariable with the given id.
-    /// </summary>
-    /// <param name="id"></param>
-    /// <returns></returns>
+    ///// <summary>
+    ///// Returns an existing instance or creates a new PositronicVariable with the given id.
+    ///// </summary>
+    ///// <param name="id"></param>
+    ///// <returns></returns>
+    //public static PositronicVariable<T> GetOrCreate(string id, IPositronicRuntime runtime)
+    //{
+    //    if (registry.TryGetValue(id, out var instance))
+    //    {
+    //        return instance;
+    //    }
+    //    else
+    //    {
+    //        instance = new PositronicVariable<T>(default(T), runtime);
+    //        registry[id] = instance;
+    //        return instance;
+    //    }
+    //}
+
     public static PositronicVariable<T> GetOrCreate(string id, IPositronicRuntime runtime)
-    {
-        if (registry.TryGetValue(id, out var instance))
-        {
-            return instance;
-        }
-        else
-        {
-            instance = new PositronicVariable<T>(default(T), runtime);
-            registry[id] = instance;
-            return instance;
-        }
-    }
+        => runtime.Factory.GetOrCreate<T>(id);
 
-
-    /// <summary>
-    /// Returns or creates the default PositronicVariable with the initial value.
-    /// </summary>
+    ///// <summary>
+    ///// Returns or creates the default PositronicVariable with the initial value.
+    ///// </summary>
+    //public static PositronicVariable<T> GetOrCreate(T initialValue, IPositronicRuntime runtime)
+    //{
+    //    if (registry.TryGetValue("default", out var instance))
+    //    {
+    //        return instance;
+    //    }
+    //    else
+    //    {
+    //        instance = new PositronicVariable<T>(initialValue, runtime);
+    //        registry["default"] = instance;
+    //        return instance;
+    //    }
+    //}
     public static PositronicVariable<T> GetOrCreate(T initialValue, IPositronicRuntime runtime)
-    {
-        if (registry.TryGetValue("default", out var instance))
-        {
-            return instance;
-        }
-        else
-        {
-            instance = new PositronicVariable<T>(initialValue, runtime);
-            registry["default"] = instance;
-            return instance;
-        }
-    }
+        => runtime.Factory.GetOrCreate<T>(initialValue);
 
-    /// <summary>
-    /// Returns the or creates the default PositronicVariable given no value or id.
-    /// </summary>
+    ///// <summary>
+    ///// Returns the or creates the default PositronicVariable given no value or id.
+    ///// </summary>
+    //public static PositronicVariable<T> GetOrCreate(IPositronicRuntime runtime)
+    //{
+    //    if (registry.TryGetValue("default", out var instance))
+    //    {
+    //        return instance;
+    //    }
+    //    else
+    //    {
+    //        instance = new PositronicVariable<T>(default(T), runtime);
+    //        registry["default"] = instance;
+    //        return instance;
+    //    }
+    //}
+
+    // maybe lose idless creation? default for now
     public static PositronicVariable<T> GetOrCreate(IPositronicRuntime runtime)
-    {
-        if (registry.TryGetValue("default", out var instance))
-        {
-            return instance;
-        }
-        else
-        {
-            instance = new PositronicVariable<T>(default(T), runtime);
-            registry["default"] = instance;
-            return instance;
-        }
-    }
+            => runtime.Factory.GetOrCreate<T>("default");
 
     /// <summary>
     /// Returns true if all registered positronic variables have converged.
