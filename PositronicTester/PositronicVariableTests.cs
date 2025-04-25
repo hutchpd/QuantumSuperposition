@@ -9,21 +9,33 @@ using QuantumSuperposition.Core;
 using NUnit.Framework;
 using System.Collections;
 using NUnit.Framework.Legacy;
+using Microsoft.Extensions.DependencyInjection;
+using QuantumSuperposition.DependencyInjection;
 
 namespace PositronicVariables.Tests
 {
     [TestFixture]
     public class PositronicVariableTests
     {
+        private ServiceProvider _provider;
+        private IPositronicRuntime _runtime;
+
         // Before each test, reset the runtime (and thus the global state).
         [SetUp]
         public void SetUp()
         {
-            var runtime = new DefaultPositronicRuntime();
-            PositronicRuntimeProvider.Initialize(runtime);
-            PositronicVariable<int>.ResetStaticVariables(); // this is now safe
+            _provider = new ServiceCollection()
+                           .AddPositronicRuntime()
+                           .BuildServiceProvider();
+            
+            _runtime = _provider.GetRequiredService<IPositronicRuntime>();
+
+            PositronicVariable<int>.ResetStaticVariables(); 
             QuantumConfig.ForbidDefaultOnCollapse = true;
         }
+
+        [TearDown]
+        public void TearDown() => _provider.Dispose();
 
         [Test]
         public void SnapshotOps_Should_Be_Cleared_Before_Convergence()
@@ -33,7 +45,7 @@ namespace PositronicVariables.Tests
             var t = PositronicVariable<double>.GetOrCreate();
 
             // Act
-            PositronicVariable<double>.RunConvergenceLoop(() =>
+            PositronicVariable<double>.RunConvergenceLoop(_runtime, () =>
             {
                 t.Assign(t + 1);   // +1
                 t.Assign(t + 1);   // +1
@@ -59,7 +71,7 @@ namespace PositronicVariables.Tests
             Console.SetOut(output);
 
             // 3) Run the exact sequence of Main(), under convergence
-            PositronicVariable<double>.RunConvergenceLoop(() =>
+            PositronicVariable<double>.RunConvergenceLoop(_runtime , () =>
             {
                 var temperature = PositronicVariable<double>.GetOrCreate();
 
@@ -88,7 +100,7 @@ namespace PositronicVariables.Tests
             int halfCycles = 0;
 
             // act
-            PositronicVariable<double>.RunConvergenceLoop(
+            PositronicVariable<double>.RunConvergenceLoop(_runtime,
                 () =>
                 {
                     halfCycles++;                           // <-- count the passes
@@ -129,10 +141,10 @@ namespace PositronicVariables.Tests
             Assert.That(value, Is.EqualTo(0));
         }
 
-        public static void RunStep(Action code, int entropy)
+        public void RunStep(Action code, int entropy)
         {
-            PositronicRuntimeProvider.Instance.Converged = false;
-            PositronicRuntimeProvider.Instance.Entropy = entropy;
+            _runtime.Converged = false;
+            _runtime.Entropy = entropy;
             code();
             if (entropy < 0)
                 OperationLog.ReverseLastOperations();
@@ -145,17 +157,35 @@ namespace PositronicVariables.Tests
         [Test]
         public void Modulus_Is_Reversible()
         {
-            PositronicVariable<int>.ResetStaticVariables();   // now also clears the op-log
-            var v = PositronicVariable<int>.GetOrCreate("v", 4);   // 4 % 3 == 1
+            /*  ────────────────────────────────────────────────────────────────
+                1.  🎛  Spin-up a brand-new runtime under the DI container
+                    (no global state is touched any more).
+            ───────────────────────────────────────────────────────────────── */
+            var sp = new ServiceCollection()
+                         .AddPositronicRuntime()
+                         .BuildServiceProvider();
 
-            PositronicVariable<int>.RunConvergenceLoop(() =>
-            {
-                if (PositronicVariable<int>.GetEntropy() > 0)
-                    v.Assign(v % 3);
-            });
+            var rt = sp.GetRequiredService<IPositronicRuntime>();
 
+            /*  ────────────────────────────────────────────────────────────────
+                2.  🧮  Create the positronic variable *inside* that runtime.
+                    (All ctors now take an optional `runtime:` parameter.)
+            ───────────────────────────────────────────────────────────────── */
+            var v = new PositronicVariable<int>(4, runtime: rt);   // 4 % 3 → 1
+
+            /*  ────────────────────────────────────────────────────────────────
+                3.  🔄  Run the convergence loop.  Every helper that used to
+                    be parameter-less now takes `rt` as the first argument.
+            ───────────────────────────────────────────────────────────────── */
+            PositronicVariable<int>.RunConvergenceLoop(_runtime,
+                code: () =>
+                {
+                    if (rt.Entropy > 0)         // or:  if (rt.GetEntropy(rt) > 0)
+                        v.Assign(v % 3);        // forward pass does the %3
+                });
             Assert.That(v.ToValues().Single(), Is.EqualTo(4));
         }
+
 
         [Test]
         public void ModPlusModulus_Reversal_Should_Restore_Original_Value()
@@ -165,14 +195,14 @@ namespace PositronicVariables.Tests
             var v = PositronicVariable<int>.GetOrCreate("v", -1);
 
             // emulate a single **forward** half-cycle
-            PositronicVariable<int>.SetEntropy(1);             // forward
+            PositronicVariable<int>.SetEntropy(_runtime, 1);             // forward
             var q = (v + 1) % 3;                               // records +1 and %3
             v.Assign(q);                                       // timeline now holds 0
             Assert.That(v.ToValues().Single(), Is.EqualTo(0),  // sanity
                 "forward calculation should give 0");
 
             // emulate the **reverse** half-cycle
-            PositronicVariable<int>.SetEntropy(-1);            // reverse
+            PositronicVariable<int>.SetEntropy(_runtime, -1);            // reverse
             OperationLog.ReverseLastOperations();              // runtime’s global undo
             v.Assign(v);                                       // identical to what the user code would do
 
@@ -190,7 +220,7 @@ namespace PositronicVariables.Tests
         public void TimelineState_BeforeAndAfterForwardPass()
         {
             // Set to negative time and cycle through values 0->1->2 several times.
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             // Using the interface type for external operations.
             var testVar = PositronicVariable<int>.GetOrCreate("testVar", 0);
             var pv = testVar as PositronicVariable<int>;
@@ -208,7 +238,7 @@ namespace PositronicVariables.Tests
                 TestContext.WriteLine($"Slice: [{string.Join(", ", slice.OrderBy(x => x))}]");
 
             // Switch to forward time.
-            PositronicVariable<int>.SetEntropy(1);
+            PositronicVariable<int>.SetEntropy(_runtime, 1);
             var forwardVal = (pv + 1) % 3;
             pv.Assign(forwardVal);
 
@@ -265,13 +295,13 @@ namespace PositronicVariables.Tests
         {
             PositronicVariable<int>.ResetStaticVariables();
 
-            PositronicVariable<int>.SetEntropy(1);
+            PositronicVariable<int>.SetEntropy(_runtime, 1);
             var variable1 = PositronicVariable<int>.GetOrCreate("testVar4", 5);
             var variable2 = PositronicVariable<int>.GetOrCreate("testVar5", 10);
             variable1.Assign(variable2);
             var expectedValues = new List<int> { 10 };
             Assert.That(variable1.Value.ToValues(), Is.EquivalentTo(expectedValues));
-            PositronicVariable<int>.SetEntropy(-1); // Reset entropy
+            PositronicVariable<int>.SetEntropy(_runtime, -1); // Reset entropy
         }
 
         /// <summary>
@@ -312,7 +342,7 @@ namespace PositronicVariables.Tests
 
 
             // Run the bouncing simulation using the convergence loop
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
 
                 // Cycle it forward with wrapping mod 3
@@ -334,7 +364,7 @@ namespace PositronicVariables.Tests
             PositronicVariable<int>.ResetStaticVariables();
 
             // run exactly one forward + one reverse half-cycle
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
                 var v = PositronicVariable<int>.GetOrCreate("x", 0);
 
@@ -390,14 +420,14 @@ namespace PositronicVariables.Tests
             var forwardValues = new HashSet<int>();
             v.OnTimelineAppended += () =>
             {
-                if (PositronicVariable<int>.GetEntropy() > 0)
+                if (PositronicVariable<int>.GetEntropy(_runtime) > 0)
                     forwardValues.Add(v.GetCurrentQBit().ToCollapsedValues().First());
             };
 
             // 3  classic “+1 mod 3” bounce
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
-                if (PositronicVariable<int>.GetEntropy() > 0)
+                if (PositronicVariable<int>.GetEntropy(_runtime) > 0)
                     v.Assign((v + 1) % 3);
             },
             runFinalIteration: false);           // don’t let the tidy-up tick hide the bug
@@ -418,12 +448,12 @@ namespace PositronicVariables.Tests
             int iterations = 0;
 
             // Callback mutates ONLY on reverse half-cycles
-            PositronicVariable<int>.RunConvergenceLoop(
+            PositronicVariable<int>.RunConvergenceLoop(_runtime,
                 () =>
                 {
                     iterations++;
 
-                    if (PositronicVariable<int>.GetEntropy() < 0)
+                    if (PositronicVariable<int>.GetEntropy(_runtime) < 0)
                         v.Assign(v);               // same value, forces a duplicate slice
                 },
                 runFinalIteration: false           // we only care about the loop body
@@ -447,11 +477,11 @@ namespace PositronicVariables.Tests
             int iterations = 0;
 
             // code that appends ONLY on the forward half-cycle
-            PositronicVariable<int>.RunConvergenceLoop(
+            PositronicVariable<int>.RunConvergenceLoop(_runtime,
                 () =>
                 {
                     iterations++;
-                    if (PositronicVariable<int>.GetEntropy() > 0)
+                    if (PositronicVariable<int>.GetEntropy(_runtime) > 0)
                         v.Assign(v + 1);
                 },
                 runFinalIteration: false      // we only care about what happens *inside* the loop
@@ -478,10 +508,10 @@ namespace PositronicVariables.Tests
             PositronicVariable<int>.ResetStaticVariables();
             bool sawForward = false;
 
-            PositronicVariable<int>.RunConvergenceLoop(
+            PositronicVariable<int>.RunConvergenceLoop(_runtime,
                 () =>
                 {
-                    if (PositronicVariable<int>.GetEntropy() > 0)
+                    if (PositronicVariable<int>.GetEntropy(_runtime) > 0)
                         sawForward = true;          // ← marker
                 },
                 runFinalIteration: false);
@@ -504,10 +534,10 @@ namespace PositronicVariables.Tests
 
             // Run the same bouncing code, but suppress the final forward tick so we only
             // see what happens inside the loop itself.
-            PositronicVariable<int>.RunConvergenceLoop(
+            PositronicVariable<int>.RunConvergenceLoop(_runtime,
               () =>
               {
-                  if (PositronicVariable<int>.GetEntropy() > 0)
+                  if (PositronicVariable<int>.GetEntropy(_runtime) > 0)
                       v.Assign(v + 1);
               },
               runFinalIteration: false,
@@ -527,7 +557,7 @@ namespace PositronicVariables.Tests
         {
             PositronicVariable<double>.ResetStaticVariables();
 
-            PositronicVariable<double>.RunConvergenceLoop(() =>
+            PositronicVariable<double>.RunConvergenceLoop(_runtime, () =>
             {
                 var t = PositronicVariable<double>.GetOrCreate();
                 t.Assign(t + 1);
@@ -560,11 +590,11 @@ namespace PositronicVariables.Tests
             PositronicVariable<int>.ResetStaticVariables();
             int entropyAtFirstTick = int.MaxValue;
 
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime ,() =>
             {
                 // capture entropy on first entry only
                 if (entropyAtFirstTick == int.MaxValue)
-                    entropyAtFirstTick = PositronicVariable<int>.GetEntropy();
+                    entropyAtFirstTick = PositronicVariable<int>.GetEntropy(_runtime);
 
                 // exit immediately – we only care about the first value
                 PositronicRuntimeProvider.Instance.Converged = true;
@@ -582,7 +612,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void NegativeTimeTimelineInspection()
         {
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             var antival = PositronicVariable<int>.GetOrCreate("testVar", -1);
 
             for (int i = 0; i < 10; i++)
@@ -645,7 +675,7 @@ namespace PositronicVariables.Tests
             // 1) Temporarily discard console output.
             Console.SetOut(TextWriter.Null);
 
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             var antival = PositronicVariable<int>.GetOrCreate("testVar", -1);
 
             // Negative runs.
@@ -654,11 +684,11 @@ namespace PositronicVariables.Tests
                 var val = (antival + 1) % 3;
                 antival.Assign(val);
 
-                bool allConverged = PositronicVariable<int>.AllConverged();
+                bool allConverged = PositronicVariable<int>.AllConverged(_runtime);
                 if (allConverged)
                 {
                     // Unify only the looped portion.
-                    foreach (var v in PositronicVariable<int>.GetAllVariables())
+                    foreach (var v in PositronicVariable<int>.GetAllVariables(_runtime))
                     {
                         int dist = v.Converged();
                         if (dist > 0)
@@ -674,7 +704,7 @@ namespace PositronicVariables.Tests
 
             // 2) Now do one forward pass, capturing the output.
             Console.SetOut(writer);
-            PositronicVariable<int>.SetEntropy(1);
+            PositronicVariable<int>.SetEntropy(_runtime, 1);
 
             Console.WriteLine($"The antival is {antival}");
             var forwardVal = (antival + 1) % 3;
@@ -696,7 +726,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ZeroConvergence_NoRepeatedStates_AlwaysUnique()
         {
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             var var1 = PositronicVariable<int>.GetOrCreate("testVar", 10);
             for (int i = 0; i < 10; i++)
             {
@@ -718,7 +748,7 @@ namespace PositronicVariables.Tests
             {
                 pv.Assign(1);
             }
-            PositronicVariable<int>.RunConvergenceLoop(Code);
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, Code);
             Assert.That(pv.timeline.Count, Is.EqualTo(1));
             Assert.That(pv.Converged(), Is.GreaterThan(0));
         }
@@ -734,7 +764,7 @@ namespace PositronicVariables.Tests
             Console.SetOut(writer);
             PositronicVariable<int>.ResetStaticVariables();
             var antival = PositronicVariable<int>.GetOrCreate("testVar", -1);
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
                 Console.WriteLine($"The antival is {antival}");
                 var val = (antival + 1) % 3;
@@ -759,13 +789,13 @@ namespace PositronicVariables.Tests
             var v = PositronicVariable<int>.GetOrCreate("x", 0);
 
             // do one forward half-cycle that appends a union {1,2}
-            PositronicVariable<int>.SetEntropy(1);
+            PositronicVariable<int>.SetEntropy(_runtime, 1);
             v.Assign(1);
             v.Assign(2);               // now top slice is any(1,2)
             var forwardSlice = v.GetCurrentQBit();
 
             // trigger one reverse half-cycle
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             v.Assign(forwardSlice);    // makes ReplaceOrAppendOrUnify run in reverse mode
 
             // assert – rebuilt slice must still contain BOTH values
@@ -798,9 +828,9 @@ namespace PositronicVariables.Tests
         {
             int iterationCount = 0;
             PositronicVariable<int>.ResetStaticVariables();
-            PositronicVariable<int>.SetEntropy(-1);
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
             var antival = PositronicVariable<int>.GetOrCreate("testVar", -1);
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
                 iterationCount++;
                 TestContext.WriteLine($"Iteration {iterationCount}: antival = {antival}, timeline count = {GetTimelineSnapshot(antival).Count}");
@@ -820,7 +850,7 @@ namespace PositronicVariables.Tests
         {
             PositronicVariable<int>.ResetStaticVariables();
 
-            PositronicVariable<int>.RunConvergenceLoop(() =>
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
                 var v = PositronicVariable<int>.GetOrCreate("testVar3", 1);
                 var next = (v + 1) % 3;
@@ -842,7 +872,7 @@ namespace PositronicVariables.Tests
         {
             // 1) Reset everything and force forward time
             PositronicVariable<double>.ResetStaticVariables();
-            PositronicVariable<double>.SetEntropy(1);
+            PositronicVariable<double>.SetEntropy(_runtime, 1);
 
             // 2) Create the variable only once
             var sqrt = PositronicVariable<double>.GetOrCreate("antisqrt", 1.5);
@@ -869,7 +899,7 @@ namespace PositronicVariables.Tests
         {
             // 1) Start forward
             PositronicVariable<double>.ResetStaticVariables();
-            PositronicVariable<double>.SetEntropy(1);
+            PositronicVariable<double>.SetEntropy(_runtime, 1);
 
             // 2) Tie the variable at 1.5
             var antisqrt = PositronicVariable<double>.GetOrCreate("antisqrt", 1.5);
@@ -886,7 +916,7 @@ namespace PositronicVariables.Tests
             }
 
             // 4) Flip to backward: do 1 iteration (which does "nothing")
-            PositronicVariable<double>.SetEntropy(-1);
+            PositronicVariable<double>.SetEntropy(_runtime, -1);
 
             for (int i = 0; i < 1; i++)
             {
@@ -898,7 +928,7 @@ namespace PositronicVariables.Tests
             }
 
             // 5) Flip to forward again
-            PositronicVariable<double>.SetEntropy(1);
+            PositronicVariable<double>.SetEntropy(_runtime, 1);
 
             // 6) Do two more forward updates
             for (int i = 0; i < 2; i++)
@@ -927,7 +957,7 @@ namespace PositronicVariables.Tests
             var ex = Assert.Throws<TypeInitializationException>(() =>
             {
                 PositronicVariable<List<int>>.ResetStaticVariables();
-                PositronicVariable<List<int>>.SetEntropy(-1);
+                PositronicVariable<List<int>>.SetEntropy(_runtime, - 1);
 
                 // First access to the generic type will trigger the static initializer
                 var baseList = new List<int> { 1, 2, 3 };

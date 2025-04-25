@@ -16,22 +16,13 @@ namespace QuantumSuperposition.DependencyInjection
         /// </summary>
         public static IServiceCollection AddPositronicRuntime(this IServiceCollection services)
         {
-            // Register the runtime
-            services.AddSingleton<IPositronicRuntime, DefaultPositronicRuntime>();
-            // Initialize the static fallback
-            services.AddSingleton(provider =>
-            {
-                var rt = provider.GetRequiredService<IPositronicRuntime>();
-                PositronicRuntimeProvider.Initialize(rt);
-                return rt;
-            });
-            // seeind our static fallback
-            services.AddSingleton(provider =>
-            {
-                var rt = provider.GetRequiredService<IPositronicRuntime>();
-                rt.Reset();
-                return rt;
-            });
+            // Register a single, DI-managed runtime – no static fallback
+            services.AddSingleton<IPositronicRuntime, DefaultPositronicRuntime>(sp =>
+                        {
+                            var rt = new DefaultPositronicRuntime();
+                            rt.Reset();       // start clean every build
+                            return rt;
+                        });
 
             return services;
         }
@@ -307,6 +298,9 @@ public interface IVersioningService<T>
     void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice);
     void RestoreLastSnapshot();
     void RegisterTimelineAppendedHook(Action hook);
+    void ReplaceLastSlice(PositronicVariable<T> variable, QuBit<T> mergedSlice);
+    void OverwriteBootstrap(PositronicVariable<T> variable, QuBit<T> slice);
+
 }
 
 public class DefaultVersioningService<T> : IVersioningService<T>
@@ -329,9 +323,10 @@ public class DefaultVersioningService<T> : IVersioningService<T>
         _snapshots.Push((variable, copy));
 
         // 2) append the new qubit
-        variable.timeline.Add(newSlice);
+        OperationLog.Record(new TimelineAppendOperation<T>(variable, copy));
 
         // 3) fire the hook so the convergence engine knows “something changed”
+        variable.timeline.Add(newSlice);
         _onAppend?.Invoke();
     }
 
@@ -345,6 +340,24 @@ public class DefaultVersioningService<T> : IVersioningService<T>
 
     public void OnTimelineAppended(Action hook)
       => throw new NotImplementedException(); // if you still need hooks
+
+    public void ReplaceLastSlice(PositronicVariable<T> variable, QuBit<T> mergedSlice)
+    {
+        var backup = variable.timeline
+                                    .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
+                                    .ToList();
+        OperationLog.Record(new TimelineReplaceOperation<T>(variable, backup));
+
+        variable.timeline[^1] = mergedSlice;
+        _onAppend?.Invoke();
+    }
+
+    public void OverwriteBootstrap(PositronicVariable<T> variable, QuBit<T> slice)
+    {
+        variable.timeline.Clear();
+        variable.timeline.Add(slice);
+        _onAppend?.Invoke();
+    }
 }
 
 
@@ -388,7 +401,7 @@ public class DefaultOutputRedirector : IOutputRedirector
     public void Redirect()
     {
         _originalOut = Console.Out;
-        Console.SetOut(_runtime.OracularStream);
+        Console.SetOut(AethericRedirectionGrid.OutputBuffer);
         _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
     }
     public void Restore() => Console.SetOut(_originalOut);
@@ -473,11 +486,11 @@ public class ConvergenceEngine<T>
                 break;
             }
 
-            if (hadForwardCycle && PositronicVariable<T>.AllConverged() && _entropy.Entropy < 0)
+            if (hadForwardCycle && PositronicVariable<T>.AllConverged(_runtime) && _entropy.Entropy < 0)
             {
                 if (unifyOnConvergence)
                 {
-                    foreach( var pv in PositronicVariable<T>.GetAllVariables())
+                    foreach( var pv in PositronicVariable<T>.GetAllVariables(_runtime))
                         pv.UnifyAll();
                 }
 
@@ -486,6 +499,16 @@ public class ConvergenceEngine<T>
             }
 
             _entropy.Flip();
+            // if we just switched into reverse time,
+            // trigger a self-assignment on every variable so that
+            // ReverseReplayEngine can rebuild the original values
+            if (_entropy.Entropy < 0)
+                {
+                    foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
+                    ((PositronicVariable<T>)v)
+                                .Assign(((PositronicVariable<T>)v).GetCurrentQBit());
+                }
+
             iteration++;
         }
 
@@ -742,7 +765,7 @@ public class ReverseReplayEngine<T>
     /// </summary>
     public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
     {
-        // 1) Pop off operations from the global OperationLog
+        // 1) Pop the whole forward half-cycle off the global OperationLog
         var poppedSnapshots = new List<IOperation>();
         var poppedReversibles = new List<IReversibleOperation<T>>();
         var forwardValues = new HashSet<T>();
@@ -750,43 +773,55 @@ public class ReverseReplayEngine<T>
         while (true)
         {
             var top = OperationLog.Peek();
-            if (top is TimelineAppendOperation<T> tap)
+            switch (top)
             {
-                foreach (var x in tap.Variable.GetCurrentQBit().ToCollapsedValues())
-                    forwardValues.Add(x);
-                poppedSnapshots.Add(tap);
-                OperationLog.Pop();
+                case TimelineAppendOperation<T> tap:
+                    forwardValues.UnionWith(tap.Variable
+                                                                    .GetCurrentQBit()
+                                                                    .ToCollapsedValues());
+                    poppedSnapshots.Add(tap);
+                    OperationLog.Pop();
+                    continue;
+
+                case TimelineReplaceOperation<T> trp:
+                    forwardValues.UnionWith(trp.Variable
+                                                                    .GetCurrentQBit()
+                                                                    .ToCollapsedValues());
+                    poppedSnapshots.Add(trp);
+                    OperationLog.Pop();
+                    continue;
+
+                case IReversibleOperation<T> rop:
+                    poppedReversibles.Add(rop);
+                    OperationLog.Pop();
+                    continue;
+
+                default:
+                    break;          // nothing left to peel
             }
-            else if (top is TimelineReplaceOperation<T> trp)
-            {
-                foreach (var x in trp.Variable.GetCurrentQBit().ToCollapsedValues())
-                    forwardValues.Add(x);
-                poppedSnapshots.Add(trp);
-                OperationLog.Pop();
-            }
-            else if (top is IReversibleOperation<T> rop)
-            {
-                poppedReversibles.Add(rop);
-                OperationLog.Pop();
-            }
-            else
-            {
-                break;
-            }
+            break;
         }
 
-        // 2) Restore each snapshot we popped
-        foreach (var _ in poppedSnapshots)
+        // 2) Rewind the timeline back to the state that preceded
+        //    the whole forward half-cycle **only for operations that
+        //    actually captured a snapshot** (i.e. TimelineAppendOperation).
+        foreach (var op in poppedSnapshots.OfType<TimelineAppendOperation<T>>())
             _versioningService.RestoreLastSnapshot();
+
+
 
         // 3) Rebuild: for each seed (old forwards ∪ incoming), replay all reversibles
         var seeds = forwardValues.Union(incoming.ToCollapsedValues()).Distinct();
         var rebuiltSet = new HashSet<T>();
+        bool hadSnapshots = poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any();
+
         foreach (var seed in seeds)
         {
             var v = seed;
-            for (int i = poppedReversibles.Count - 1; i >= 0; i--)
-                v = poppedReversibles[i].ApplyForward(v);
+            if (hadSnapshots)
+                for (int i = poppedReversibles.Count - 1; i >= 0; i--)
+                    v = poppedReversibles[i].ApplyForward(v);
+
             rebuiltSet.Add(v);
         }
 
@@ -1041,8 +1076,8 @@ public class PositronicVariable<T> : IPositronicVariable
         OperationLog.Clear();
     }
 
-    public static void SetEntropy(int e) => PositronicRuntimeProvider.Instance.Entropy = e;
-    public static int GetEntropy() => PositronicRuntimeProvider.Instance.Entropy;
+    public static void SetEntropy(IPositronicRuntime rt, int e) => rt.Entropy = e;
+    public static int GetEntropy(IPositronicRuntime rt) => rt.Entropy;
 
     /// <summary>
     /// Returns an existing instance or creates a new PositronicVariable with the given id and initial value.
@@ -1118,23 +1153,27 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Returns true if all registered positronic variables have converged.
     /// </summary>
-    public static bool AllConverged()
+    public static bool AllConverged(IPositronicRuntime rt)
     {
-        var rt = PositronicRuntimeProvider.Instance;
         bool all = rt.Variables.All(v => v.Converged() > 0);
         if (all)
             (rt as DefaultPositronicRuntime)?.FireAllConverged();
         return all;
     }
 
-    public static IEnumerable<IPositronicVariable> GetAllVariables() => PositronicRuntimeProvider.Instance.Variables;
+    public static IEnumerable<IPositronicVariable> GetAllVariables(IPositronicRuntime rt) => rt.Variables;
 
     /// <summary>
     /// Runs your code in a convergence loop until all variables have settled.
     /// </summary>
-    public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true, bool bailOnFirstReverseWhenIdle = false)
+    public static void RunConvergenceLoop(
+        IPositronicRuntime rt,
+        Action code,
+        bool runFinalIteration = true,
+        bool unifyOnConvergence = true,
+        bool bailOnFirstReverseWhenIdle = false)
     {
-        var runtime = PositronicRuntimeProvider.Instance;
+        var runtime = rt;
         var entropy = new DefaultEntropyController(runtime);
         var opsHandler = new DefaultOperationLogHandler<T>();
         var redirect = new DefaultOutputRedirector(runtime);
@@ -1145,7 +1184,17 @@ public class PositronicVariable<T> : IPositronicVariable
             redirect,
             runtime);
 
-        engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
+        try
+        {
+            // ‼️ mark “we’re inside the loop” so the fast-path is disabled
+            _loopDepth++;
+            engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
+        }
+        finally
+        {
+            _loopDepth--;
+        }
+
     }
 
     /// <summary>
@@ -1251,6 +1300,34 @@ public class PositronicVariable<T> : IPositronicVariable
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
         var runtime = _runtime;
+        var _fastPathHasWritten = false;
+
+        // fast path
+        if (runtime.Entropy > 0 && !InConvergenceLoop)
+        {
+            // ignore exact duplicates
+            if (SameStates(qb, timeline[^1]))
+                return;
+
+            // first ever forward-only write: *replace* the bootstrap slice
+            if (!_fastPathHasWritten)
+            {
+                _versioningService.OverwriteBootstrap(this,qb);
+                _fastPathHasWritten = true;
+                return;
+            }
+
+            // subsequent writes in the same forward-only context:
+            //   – always **merge**,
+            //   – but put the newest value first so iterative algorithms
+            //     that read .First() see the fresh value.
+            var merged = qb.ToCollapsedValues()                 // newest first
+                               .Concat(timeline[^1].ToCollapsedValues())
+                               .Distinct()
+                               .ToList();
+            _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
+            return;
+        }
 
         // If we’ve already converged, do nothing.
         if (_runtime.Converged)
@@ -1264,8 +1341,7 @@ public class PositronicVariable<T> : IPositronicVariable
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
 
             // Now mutate *this* variable’s timeline:
-            timeline.Clear();
-            timeline.Add(rebuilt);
+            _versioningService.OverwriteBootstrap(this, rebuilt);
             replacedInitialSlice = true;
             return;
         }
@@ -1278,12 +1354,10 @@ public class PositronicVariable<T> : IPositronicVariable
         {
             if (!InConvergenceLoop)                       // ← we’re outside the loop
             {
-                // just mutate the existing slice – no new timeline entry
-                var merged = timeline[0].ToCollapsedValues()
-                                        .Union(qb.ToCollapsedValues())
-                                        .Distinct()
-                                        .ToList();
-                timeline[0] = new QuBit<T>(merged);
+                // we are in “straight-forward, single-thread” land:
+                // overwrite the slicence instead of union-merging so that iterative
+                // algorithms (e.g. babylon sqrt) see the newest scalar value.
+                _versioningService.OverwriteBootstrap(this, qb);
                 return;
             }
 
@@ -1302,19 +1376,16 @@ public class PositronicVariable<T> : IPositronicVariable
                                         .Distinct()
                                         .ToList();
 
-                timeline[^1] = new QuBit<T>(merged);
-                OperationLog.Record(new TimelineReplaceOperation<T>(this, backup));
+                _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
                 return;
             }
 
             /* --- this is the *first* write of the half-cycle → normal append --- */
-            var snap = timeline.Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
-                               .ToList();
-            timeline.Add(qb);
-            OnTimelineAppended?.Invoke();
-            TimelineAppendedHook?.Invoke();                 // tells the loop “I changed”
-            OperationLog.Record(new TimelineAppendOperation<T>(this, snap));
-            _ops.HadForwardAppend = true;
+            if (!SameStates(qb, timeline[^1]))          // ← ignore exact duplicates
+            {
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
+            }
             return;
         }
 
@@ -1324,7 +1395,7 @@ public class PositronicVariable<T> : IPositronicVariable
             var collapsed = qb.ToCollapsedValues();
             if (collapsed.Count() == 1)
             {
-                timeline[^1] = qb;
+                _versioningService.OverwriteBootstrap(this, qb);
             }
             else
             {
@@ -1332,7 +1403,7 @@ public class PositronicVariable<T> : IPositronicVariable
                                          .Union(collapsed)
                                          .Distinct()
                                          .ToList();
-                timeline[^1] = new QuBit<T>(merged);
+                _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
             }
             return;
         }
@@ -1348,8 +1419,25 @@ public class PositronicVariable<T> : IPositronicVariable
         }
 
         // --- Every subsequent forward tick: normal append ---
-        _versioningService.SnapshotAppend(this, qb);
-        _ops.HadForwardAppend = true;
+        if (!_ops.HadForwardAppend && !SameStates(qb, timeline[^1])) // skip dups
+        {
+            _versioningService.SnapshotAppend(this, qb);
+            _ops.HadForwardAppend = true;
+        }
+        else
+        {
+            // “replace” semantics: merge into the last slice, record a replace-op
+            var backup = timeline
+                .Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
+                .ToList();
+
+            var merged = timeline[^1].ToCollapsedValues()
+                             .Union(qb.ToCollapsedValues())
+                             .Distinct()
+                             .ToList();
+
+            _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
+        }
 
         // Check for cycles to trigger unification
         for (int cycle = 2; cycle <= 20; cycle++)
@@ -1372,7 +1460,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() + right;
         resultQB.Any();
-        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
+        if (left._runtime.Entropy >= 0)
         {
             OperationLog.Record(new AdditionOperation<T>(left, right));
         }
@@ -1826,9 +1914,9 @@ public class NeuralNodule<T> where T : struct, IComparable
     /// Side effects may include enlightenment or light smoking.
     /// </summary>
     /// <param name="nodes"></param>
-    public static void ConvergeNetwork(params NeuralNodule<T>[] nodes)
+    public static void ConvergeNetwork(IPositronicRuntime runtime, params NeuralNodule<T>[] nodes)
     {
-        PositronicVariable<T>.RunConvergenceLoop(() =>
+        PositronicVariable<T>.RunConvergenceLoop(runtime, () =>
         {
             foreach (var node in nodes)
                 node.Fire();
