@@ -1,15 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
-using Microsoft.CodeAnalysis.Scripting.Hosting;
 using QuantumSuperposition.QuantumSoup;
-using static System.Net.Mime.MediaTypeNames;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace QuantumSuperposition.DependencyInjection
+{
+    public static class PositronicServiceCollectionExtensions
+    {
+        /// <summary>
+        /// Registers the Positronic runtime and initializes the static fallback provider.
+        /// </summary>
+        public static IServiceCollection AddPositronicRuntime(this IServiceCollection services)
+        {
+            // Register the runtime
+            services.AddSingleton<IPositronicRuntime, DefaultPositronicRuntime>();
+            // Initialize the static fallback
+            services.AddSingleton(provider =>
+            {
+                var rt = provider.GetRequiredService<IPositronicRuntime>();
+                PositronicRuntimeProvider.Initialize(rt);
+                return rt;
+            });
+            // seeind our static fallback
+            services.AddSingleton(provider =>
+            {
+                var rt = provider.GetRequiredService<IPositronicRuntime>();
+                rt.Reset();
+                return rt;
+            });
+
+            return services;
+        }
+
+    }
+}
 
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class PositronicEntryAttribute : Attribute
@@ -196,6 +224,7 @@ public class NegationOperation<T> : IReversibleSnapshotOperation<T>
 /// </summary>
 public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 {
+    private readonly IPositronicRuntime _runtime;
     public PositronicVariable<T> Variable { get; }
     private readonly T _divisor;
     private readonly T _quotient;     // ⟵  floor(original/divisor)
@@ -203,10 +232,11 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
     public string OperationName => $"Modulus by {_divisor}";
 
-    public ReversibleModulusOp(PositronicVariable<T> variable, T divisor)
+    public ReversibleModulusOp(PositronicVariable<T> variable, T divisor, IPositronicRuntime runtime = null)
     {
         Variable  = variable;
         _divisor  = divisor;
+        _runtime = runtime ?? PositronicRuntimeProvider.Instance;
 
         // snapshot the value *before* the %
         Original  = variable.GetCurrentQBit().ToCollapsedValues().First();
@@ -229,7 +259,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
         Variable.timeline[^1] = qb;
 
         // 2. tell the convergence loop we're done
-        PositronicRuntime.Instance.Converged = true;
+        _runtime.Converged = true;
     }
 
 }
@@ -274,7 +304,7 @@ public interface IOperationLogHandler<T>
 
 public interface IVersioningService<T>
 {
-    void SnapshotAppend(PositronicVariable<T> variable);
+    void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice);
     void RestoreLastSnapshot();
     void RegisterTimelineAppendedHook(Action hook);
 }
@@ -290,7 +320,7 @@ public class DefaultVersioningService<T> : IVersioningService<T>
         _onAppend = hook;
     }
 
-    public void SnapshotAppend(PositronicVariable<T> variable)
+    public void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice)
     {
         // 1) snapshot current state
         var copy = variable.timeline
@@ -299,7 +329,7 @@ public class DefaultVersioningService<T> : IVersioningService<T>
         _snapshots.Push((variable, copy));
 
         // 2) append the new qubit
-        variable.timeline.Add(variable.GetCurrentQBit());
+        variable.timeline.Add(newSlice);
 
         // 3) fire the hook so the convergence engine knows “something changed”
         _onAppend?.Invoke();
@@ -328,8 +358,13 @@ public interface IOutputRedirector
 public class DefaultEntropyController : IEntropyController
 {
     private readonly IPositronicRuntime _runtime;
-    public DefaultEntropyController(IPositronicRuntime runtime) => _runtime = runtime;
+    public DefaultEntropyController(IPositronicRuntime runtime)
+        => _runtime = runtime;
+
     public int Entropy => _runtime.Entropy;
+    /// <summary>
+    /// Start every convergence run in **reverse** time.
+    /// </summary>
     public void Initialize() => _runtime.Entropy = -1;
     public void Flip() => _runtime.Entropy = -_runtime.Entropy;
 }
@@ -345,18 +380,36 @@ public class DefaultOperationLogHandler<T> : IOperationLogHandler<T>
 public class DefaultOutputRedirector : IOutputRedirector
 {
     private readonly IPositronicRuntime _runtime;
-    private TextWriter _original;
+    private TextWriter _originalOut;
+
     public DefaultOutputRedirector(IPositronicRuntime runtime)
         => _runtime = runtime;
 
     public void Redirect()
     {
-        _original = Console.Out;
-        Console.SetOut(TextWriter.Null);
+        _originalOut = Console.Out;
+        Console.SetOut(_runtime.OracularStream);
         _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
     }
-    public void Restore() => Console.SetOut(_original);
+    public void Restore() => Console.SetOut(_originalOut);
 }
+
+public static class PositronicRuntimeProvider
+{
+    private static IPositronicRuntime _instance;
+
+    public static void Initialize(IPositronicRuntime runtime)
+    {
+        _instance = runtime;
+        _instance.OracularStream = AethericRedirectionGrid.OutputBuffer;
+        _instance.Reset();
+    }
+
+    public static IPositronicRuntime Instance =>
+        _instance ?? throw new InvalidOperationException(
+            "Positronic runtime not initialized. Call AddPositronicRuntime() on IServiceCollection.");
+}
+
 
 // --- 3. Convergence engine orchestrating the core loop ---
 public class ConvergenceEngine<T>
@@ -379,36 +432,56 @@ public class ConvergenceEngine<T>
         _runtime = runtime;
     }
 
-    public void Run(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true)
+    public void Run(Action code,
+                    bool runFinalIteration = true,
+                    bool unifyOnConvergence = true,
+                    bool bailOnFirstReverseWhenIdle = false)
     {
-        _redirect.Redirect();
-        _entropy.Initialize();
         _redirect.Redirect();
         _entropy.Initialize();
 
         bool hadForwardCycle = false;
+        bool skippedFirstForward = false;
         int iteration = 0;
 
         while (!_runtime.Converged && iteration < _maxIters)
         {
+            // clear append-flag at start of each forward half
             if (_entropy.Entropy > 0)
                 _ops.HadForwardAppend = false;
 
-            code();
+            // skip the *very* first forward cycle if requested
+            if (!(bailOnFirstReverseWhenIdle
+                && _entropy.Entropy > 0
+                && !skippedFirstForward))
+            {
+                code();
+            }
+            else
+            {
+                skippedFirstForward = true;
+            }
 
             if (_entropy.Entropy > 0)
                 hadForwardCycle = true;
 
-            if (_entropy.Entropy < 0 && hadForwardCycle && !_ops.HadForwardAppend)
+            if (bailOnFirstReverseWhenIdle
+                && _entropy.Entropy < 0
+                && !_ops.HadForwardAppend)
             {
-                PositronicRuntime.Instance.Converged = true;
+                _runtime.Converged = false;
                 break;
             }
 
             if (hadForwardCycle && PositronicVariable<T>.AllConverged() && _entropy.Entropy < 0)
             {
-                // unify if needed...
-                PositronicRuntime.Instance.Converged = true;
+                if (unifyOnConvergence)
+                {
+                    foreach( var pv in PositronicVariable<T>.GetAllVariables())
+                        pv.UnifyAll();
+                }
+
+                _runtime.Converged = true;
                 break;
             }
 
@@ -418,7 +491,7 @@ public class ConvergenceEngine<T>
 
         _redirect.Restore();
 
-        if (runFinalIteration && PositronicRuntime.Instance.Converged)
+        if (runFinalIteration && _runtime.Converged)
         {
             // replay once forward so Console output and side‐effects occur
             _runtime.Entropy = 1;
@@ -453,11 +526,18 @@ internal static class AethericRedirectionGrid
     {
         var originalOut = Console.Out;
         _outputBuffer = new StringWriter();
-
-        // Redirect Console output into our buffer.
         Console.SetOut(_outputBuffer);
-        PositronicRuntime.Instance.OracularStream = _outputBuffer;
-        PositronicRuntime.Instance.Reset();
+
+        try
+        {
+            var rt = PositronicRuntimeProvider.Instance;
+            rt.OracularStream = _outputBuffer;
+            rt.Reset();
+        }
+        catch (InvalidOperationException)
+        {
+            // no runtime yet – defer until DI calls Initialize()
+        }
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
@@ -488,10 +568,10 @@ internal static class AethericRedirectionGrid
 
             // Determine the generic type to use for the convergence loop.
             // Here we assume at least one PositronicVariable exists in the runtime.
-            if (PositronicRuntime.Instance.Variables.Any())
+            if (PositronicRuntimeProvider.Instance.Variables.Any())
             {
                 // Get the runtime type of the last variable, e.g. PositronicVariable<double>
-                var lastVariable = PositronicRuntime.Instance.Variables.Last();
+                var lastVariable = PositronicRuntimeProvider.Instance.Variables.Last();
                 // Extract the generic type argument (e.g. double)
                 var genericArg = lastVariable.GetType().GetGenericArguments()[0];
 
@@ -648,10 +728,12 @@ public static class NeuroCascadeInitializer
 public class ReverseReplayEngine<T>
 {
     private readonly IOperationLogHandler<T> _ops;
+    private readonly IVersioningService<T> _versioningService;
 
-    public ReverseReplayEngine(IOperationLogHandler<T> ops)
+    public ReverseReplayEngine(IOperationLogHandler<T> ops, IVersioningService<T> versioningService)
     {
         _ops = ops;
+        _versioningService = versioningService;
     }
 
     /// <summary>
@@ -693,9 +775,9 @@ public class ReverseReplayEngine<T>
             }
         }
 
-        // 2) Undo all the timeline‐snapshot operations
-        foreach (var snap in poppedSnapshots)
-            snap.Undo();
+        // 2) Restore each snapshot we popped
+        foreach (var _ in poppedSnapshots)
+            _versioningService.RestoreLastSnapshot();
 
         // 3) Rebuild: for each seed (old forwards ∪ incoming), replay all reversibles
         var seeds = forwardValues.Union(incoming.ToCollapsedValues()).Distinct();
@@ -790,38 +872,30 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 {
     public int Entropy { get; set; } = 1;
     public bool Converged { get; set; } = false;
-    public TextWriter OracularStream { get; set; } = null;
+    public TextWriter OracularStream { get; set; }
     public IList<IPositronicVariable> Variables { get; } = new List<IPositronicVariable>();
-
-    // --- Added Diagnostics ---
     public int TotalConvergenceIterations { get; set; } = 0;
     public event Action OnAllConverged;
+
+
+    public DefaultPositronicRuntime()
+    {
+        // as soon as we create one, point its OracularStream
+        // at the shared AethericRedirectionGrid buffer:
+        OracularStream = AethericRedirectionGrid.OutputBuffer;
+    }
 
     public void Reset()
     {
         Entropy = 1;
         Converged = false;
-        OracularStream = null;
+        OracularStream = AethericRedirectionGrid.OutputBuffer;
         Variables.Clear();
         TotalConvergenceIterations = 0;
     }
 
     // Helper to invoke the global convergence event.
     public void FireAllConverged() => OnAllConverged?.Invoke();
-}
-
-/// <summary>
-/// A static holder for the Positronic runtime context.
-/// In production this is set to a DefaultPositronicRuntime,
-/// but tests can swap it out with a fake implementation.
-/// </summary>
-public static class PositronicRuntime
-{
-    /// <summary>
-    /// The one global runtime to rule them all.
-    /// Swappable for testing, regrettably not swappable for existential stability.
-    /// </summary>
-    public static IPositronicRuntime Instance { get; set; } = new DefaultPositronicRuntime();
 }
 
 #endregion
@@ -840,6 +914,7 @@ public class PositronicVariable<T> : IPositronicVariable
     private readonly HashSet<T> _domain = new();
     private static bool _reverseReplayDone;
     internal static int _loopDepth;
+    private readonly IPositronicRuntime _runtime;
 
     internal static bool InConvergenceLoop => _loopDepth > 0;
     private readonly ReverseReplayEngine<T> _reverseReplay;
@@ -861,23 +936,25 @@ public class PositronicVariable<T> : IPositronicVariable
     public PositronicVariable(
         T initialValue,
         IVersioningService<T> versioningService = null,
-        IOperationLogHandler<T> opsHandler = null)
+        IOperationLogHandler<T> opsHandler = null,
+        IPositronicRuntime runtime = null)
     {
+        _runtime = runtime ?? PositronicRuntimeProvider.Instance;
+
         // 1) seed the timeline exactly once
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
         timeline.Add(qb);
         _domain.Add(initialValue);
-        PositronicRuntime.Instance.Variables.Add(this);
+        _runtime.Variables.Add(this);
 
         // 2) wire up your services
         _ops = opsHandler ?? new DefaultOperationLogHandler<T>();
-        _reverseReplay = new ReverseReplayEngine<T>(_ops);
         _versioningService = versioningService ?? new DefaultVersioningService<T>();
+        _reverseReplay = new ReverseReplayEngine<T>(_ops, versioningService);
 
         // register the old static “something appended” hook
-        _versioningService.RegisterTimelineAppendedHook(PositronicVariable<T>.TimelineAppendedHook);
-
+        _versioningService.RegisterTimelineAppendedHook(() => OnTimelineAppended?.Invoke());
     }
 
     static PositronicVariable()
@@ -958,12 +1035,14 @@ public class PositronicVariable<T> : IPositronicVariable
     public static void ResetStaticVariables()
     {
         registry.Clear();
-        PositronicRuntime.Instance.Reset();
+        var rt = new DefaultPositronicRuntime();
+        PositronicRuntimeProvider.Initialize(rt);
+        rt.Reset();
         OperationLog.Clear();
     }
 
-    public static void SetEntropy(int e) => PositronicRuntime.Instance.Entropy = e;
-    public static int GetEntropy() => PositronicRuntime.Instance.Entropy;
+    public static void SetEntropy(int e) => PositronicRuntimeProvider.Instance.Entropy = e;
+    public static int GetEntropy() => PositronicRuntimeProvider.Instance.Entropy;
 
     /// <summary>
     /// Returns an existing instance or creates a new PositronicVariable with the given id and initial value.
@@ -1041,23 +1120,21 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public static bool AllConverged()
     {
-        bool all = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
+        var rt = PositronicRuntimeProvider.Instance;
+        bool all = rt.Variables.All(v => v.Converged() > 0);
         if (all)
-            (PositronicRuntime.Instance as DefaultPositronicRuntime)?.FireAllConverged();
+            (rt as DefaultPositronicRuntime)?.FireAllConverged();
         return all;
     }
 
-    public static IEnumerable<IPositronicVariable> GetAllVariables() => PositronicRuntime.Instance.Variables;
+    public static IEnumerable<IPositronicVariable> GetAllVariables() => PositronicRuntimeProvider.Instance.Variables;
 
     /// <summary>
     /// Runs your code in a convergence loop until all variables have settled.
     /// </summary>
     public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true, bool bailOnFirstReverseWhenIdle = false)
     {
-        // grab the (injectable) runtime…
-        var runtime = PositronicRuntime.Instance;
-
-        // and hand it to everything that needs global state:
+        var runtime = PositronicRuntimeProvider.Instance;
         var entropy = new DefaultEntropyController(runtime);
         var opsHandler = new DefaultOperationLogHandler<T>();
         var redirect = new DefaultOutputRedirector(runtime);
@@ -1068,7 +1145,7 @@ public class PositronicVariable<T> : IPositronicVariable
             redirect,
             runtime);
 
-        engine.Run(code, runFinalIteration, unifyOnConvergence);
+        engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
     }
 
     /// <summary>
@@ -1076,7 +1153,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public int Converged()
     {
-        if (PositronicRuntime.Instance.Converged)
+        if (_runtime.Converged)
             return 1;
 
         // one slice means "done" only after we have *ever* executed a
@@ -1118,7 +1195,7 @@ public class PositronicVariable<T> : IPositronicVariable
 
         OperationLog.Clear();
 
-        PositronicRuntime.Instance.Converged = true;
+        _runtime.Converged = true;
         OnCollapse?.Invoke();
         OnConverged?.Invoke();
     }
@@ -1141,7 +1218,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var newQb = new QuBit<T>(merged);
         newQb.Any();
         timeline.Add(newQb);
-        PositronicRuntime.Instance.Converged = true;
+        _runtime.Converged = true;
         OnCollapse?.Invoke();
         OnConverged?.Invoke();
     }
@@ -1173,16 +1250,16 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     private void ReplaceOrAppendOrUnify(QuBit<T> qb)
     {
-        var runtime = PositronicRuntime.Instance;
+        var runtime = _runtime;
 
         // If we’ve already converged, do nothing.
-        if (runtime.Converged)
+        if (_runtime.Converged)
             return;
 
         Remember(qb.ToCollapsedValues());
 
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
-        if (runtime.Entropy < 0)
+        if (_runtime.Entropy < 0)
         {
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
 
@@ -1195,7 +1272,7 @@ public class PositronicVariable<T> : IPositronicVariable
 
         // --- Forward‐time pass, but we’ve already replaced the first slice ---
         //   Instead of appending a duplicate slice, *replace* the sole slice
-        if (runtime.Entropy > 0
+        if (_runtime.Entropy > 0
             && replacedInitialSlice
             && timeline.Count == 1)
         {
@@ -1237,6 +1314,7 @@ public class PositronicVariable<T> : IPositronicVariable
             OnTimelineAppended?.Invoke();
             TimelineAppendedHook?.Invoke();                 // tells the loop “I changed”
             OperationLog.Record(new TimelineAppendOperation<T>(this, snap));
+            _ops.HadForwardAppend = true;
             return;
         }
 
@@ -1262,28 +1340,16 @@ public class PositronicVariable<T> : IPositronicVariable
         // --- First genuine forward tick: append alongside the original slice ---
         if (!replacedInitialSlice && timeline.Count == 1)
         {
-            var previousTimeline = timeline
-                .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
-                .ToList();
-
-            timeline.Add(qb);
-            OnTimelineAppended?.Invoke();
-            TimelineAppendedHook?.Invoke();
-            OperationLog.Record(new TimelineAppendOperation<T>(this, previousTimeline));
-
+            // fully delegate snapshot + append (including hooks) to the service
+            _versioningService.SnapshotAppend(this, qb);
+            _ops.HadForwardAppend = true;
             replacedInitialSlice = true;
             return;
         }
 
         // --- Every subsequent forward tick: normal append ---
-        var snapshot2 = timeline
-            .Select(x => new QuBit<T>(x.ToCollapsedValues().ToArray()))
-            .ToList();
-
-        timeline.Add(qb);
-        OnTimelineAppended?.Invoke();
-        TimelineAppendedHook?.Invoke();
-        OperationLog.Record(new TimelineAppendOperation<T>(this, snapshot2));
+        _versioningService.SnapshotAppend(this, qb);
+        _ops.HadForwardAppend = true;
 
         // Check for cycles to trigger unification
         for (int cycle = 2; cycle <= 20; cycle++)
@@ -1306,7 +1372,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() + right;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new AdditionOperation<T>(left, right));
         }
@@ -1317,7 +1383,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() + left;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new AdditionOperation<T>(right, left));
         }
@@ -1328,7 +1394,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             // Record addition using the collapsed value from the right variable.
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
@@ -1343,7 +1409,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var before = left.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = left.GetCurrentQBit() % right;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
             OperationLog.Record(new ReversibleModulusOp<T>(left, right));
         return resultQB;
     }
@@ -1354,7 +1420,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var before = right.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = right.GetCurrentQBit() % left;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
             OperationLog.Record(new ReversibleModulusOp<T>(right, left));
         return resultQB;
     }
@@ -1366,7 +1432,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
         var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
             OperationLog.Record(new ReversibleModulusOp<T>(left, divisor));
         return resultQB;
     }
@@ -1376,7 +1442,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() - right;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new SubtractionOperation<T>(left, right));
         }
@@ -1388,7 +1454,7 @@ public class PositronicVariable<T> : IPositronicVariable
         // Here, result = left - rightValue.
         var resultQB = right.GetCurrentQBit() - left;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             // Use a reversed subtraction so that the inverse is: value = left - result.
             OperationLog.Record(new SubtractionReversedOperation<T>(right, left));
@@ -1400,7 +1466,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
             OperationLog.Record(new SubtractionOperation<T>(left, operand));
@@ -1415,7 +1481,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var negatedValues = qb.ToCollapsedValues().Select(v => (T)(-(dynamic)v)).ToArray();
         var negatedQb = new QuBit<T>(negatedValues);
         negatedQb.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new NegationOperation<T>(value));
         }
@@ -1427,7 +1493,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() * right;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new MultiplicationOperation<T>(left, right));
         }
@@ -1438,7 +1504,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() * left;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new MultiplicationOperation<T>(right, left));
         }
@@ -1449,7 +1515,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
             OperationLog.Record(new MultiplicationOperation<T>(left, operand));
@@ -1463,7 +1529,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var currentQB = left.GetCurrentQBit();
         var resultQB = currentQB / right;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new DivisionOperation<T>(left, right));
         }
@@ -1474,7 +1540,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var resultQB = right.GetCurrentQBit() / left;
         resultQB.Any();
-        if (PositronicRuntime.Instance.Entropy >= 0)
+        if (PositronicRuntimeProvider.Instance.Entropy >= 0)
         {
             OperationLog.Record(new DivisionReversedOperation<T>(right, left));
         }
