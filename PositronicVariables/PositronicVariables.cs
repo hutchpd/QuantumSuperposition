@@ -257,7 +257,184 @@ public class InversionOperation<T> : IOperation
     }
 }
 
+public interface IEntropyController
+{
+    int Entropy { get; }
+    void Initialize();         // set initial entropy
+    void Flip();               // flip direction
+}
 
+public interface IOperationLogHandler<T>
+{
+    void Record(IOperation op);
+    void UndoLastForwardCycle();
+    void Clear();
+    bool HadForwardAppend { get; set; }
+}
+
+public interface IVersioningService<T>
+{
+    void SnapshotAppend(PositronicVariable<T> variable);
+    void RestoreLastSnapshot();
+    void RegisterTimelineAppendedHook(Action hook);
+}
+
+public class DefaultVersioningService<T> : IVersioningService<T>
+{
+    private readonly Stack<(PositronicVariable<T> Variable, List<QuBit<T>> Timeline)> _snapshots = new();
+
+    private Action _onAppend;
+
+    public void RegisterTimelineAppendedHook(Action hook)
+    {
+        _onAppend = hook;
+    }
+
+    public void SnapshotAppend(PositronicVariable<T> variable)
+    {
+        // 1) snapshot current state
+        var copy = variable.timeline
+                           .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
+                           .ToList();
+        _snapshots.Push((variable, copy));
+
+        // 2) append the new qubit
+        variable.timeline.Add(variable.GetCurrentQBit());
+
+        // 3) fire the hook so the convergence engine knows “something changed”
+        _onAppend?.Invoke();
+    }
+
+    public void RestoreLastSnapshot()
+    {
+        // pop both the variable *and* its saved timeline
+        var (variable, oldTimeline) = _snapshots.Pop();
+        variable.timeline.Clear();
+        variable.timeline.AddRange(oldTimeline);
+    }
+
+    public void OnTimelineAppended(Action hook)
+      => throw new NotImplementedException(); // if you still need hooks
+}
+
+
+public interface IOutputRedirector
+{
+    void Redirect();
+    void Restore();
+}
+
+// --- 2. Implement default services (omitting full bodies) ---
+public class DefaultEntropyController : IEntropyController
+{
+    private readonly IPositronicRuntime _runtime;
+    public DefaultEntropyController(IPositronicRuntime runtime) => _runtime = runtime;
+    public int Entropy => _runtime.Entropy;
+    public void Initialize() => _runtime.Entropy = -1;
+    public void Flip() => _runtime.Entropy = -_runtime.Entropy;
+}
+
+public class DefaultOperationLogHandler<T> : IOperationLogHandler<T>
+{
+    public bool HadForwardAppend { get; set; }
+    public void Record(IOperation op) => OperationLog.Record(op);
+    public void UndoLastForwardCycle() => OperationLog.ReverseLastOperations();
+    public void Clear() => OperationLog.Clear();
+}
+
+public class DefaultOutputRedirector : IOutputRedirector
+{
+    private readonly IPositronicRuntime _runtime;
+    private TextWriter _original;
+    public DefaultOutputRedirector(IPositronicRuntime runtime)
+        => _runtime = runtime;
+
+    public void Redirect()
+    {
+        _original = Console.Out;
+        Console.SetOut(TextWriter.Null);
+        _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
+    }
+    public void Restore() => Console.SetOut(_original);
+}
+
+// --- 3. Convergence engine orchestrating the core loop ---
+public class ConvergenceEngine<T>
+{
+    private readonly IEntropyController _entropy;
+    private readonly IOperationLogHandler<T> _ops;
+    private readonly IOutputRedirector _redirect;
+    private readonly IPositronicRuntime _runtime;
+    private readonly int _maxIters = 1000;
+
+    public ConvergenceEngine(
+        IEntropyController entropy,
+        IOperationLogHandler<T> ops,
+        IOutputRedirector redirect,
+        IPositronicRuntime runtime)
+    {
+        _entropy = entropy;
+        _ops = ops;
+        _redirect = redirect;
+        _runtime = runtime;
+    }
+
+    public void Run(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true)
+    {
+        _redirect.Redirect();
+        _entropy.Initialize();
+        _redirect.Redirect();
+        _entropy.Initialize();
+
+        bool hadForwardCycle = false;
+        int iteration = 0;
+
+        while (!_runtime.Converged && iteration < _maxIters)
+        {
+            if (_entropy.Entropy > 0)
+                _ops.HadForwardAppend = false;
+
+            code();
+
+            if (_entropy.Entropy > 0)
+                hadForwardCycle = true;
+
+            if (_entropy.Entropy < 0 && hadForwardCycle && !_ops.HadForwardAppend)
+            {
+                PositronicRuntime.Instance.Converged = true;
+                break;
+            }
+
+            if (hadForwardCycle && PositronicVariable<T>.AllConverged() && _entropy.Entropy < 0)
+            {
+                // unify if needed...
+                PositronicRuntime.Instance.Converged = true;
+                break;
+            }
+
+            _entropy.Flip();
+            iteration++;
+        }
+
+        _redirect.Restore();
+
+        if (runFinalIteration && PositronicRuntime.Instance.Converged)
+        {
+            // replay once forward so Console output and side‐effects occur
+            _runtime.Entropy = 1;
+            _runtime.Converged = false;
+
+            code();
+
+            // undo any reversible ops from that final pass
+            _ops.UndoLastForwardCycle();
+
+            _runtime.Converged = true;
+        }
+
+        _ops.Clear();
+    }
+}
 
 /// <summary>
 /// Initializes the metaphysical I/O trap, redirecting stdout into a memory buffer
@@ -468,6 +645,77 @@ public static class NeuroCascadeInitializer
 
 #endregion
 
+public class ReverseReplayEngine<T>
+{
+    private readonly IOperationLogHandler<T> _ops;
+
+    public ReverseReplayEngine(IOperationLogHandler<T> ops)
+    {
+        _ops = ops;
+    }
+
+    /// <summary>
+    /// Peel off the last forward half‐cycle, rebuild every possible state,
+    /// and return a single QuBit<T> that contains the union.
+    /// </summary>
+    public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
+    {
+        // 1) Pop off operations from the global OperationLog
+        var poppedSnapshots = new List<IOperation>();
+        var poppedReversibles = new List<IReversibleOperation<T>>();
+        var forwardValues = new HashSet<T>();
+
+        while (true)
+        {
+            var top = OperationLog.Peek();
+            if (top is TimelineAppendOperation<T> tap)
+            {
+                foreach (var x in tap.Variable.GetCurrentQBit().ToCollapsedValues())
+                    forwardValues.Add(x);
+                poppedSnapshots.Add(tap);
+                OperationLog.Pop();
+            }
+            else if (top is TimelineReplaceOperation<T> trp)
+            {
+                foreach (var x in trp.Variable.GetCurrentQBit().ToCollapsedValues())
+                    forwardValues.Add(x);
+                poppedSnapshots.Add(trp);
+                OperationLog.Pop();
+            }
+            else if (top is IReversibleOperation<T> rop)
+            {
+                poppedReversibles.Add(rop);
+                OperationLog.Pop();
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        // 2) Undo all the timeline‐snapshot operations
+        foreach (var snap in poppedSnapshots)
+            snap.Undo();
+
+        // 3) Rebuild: for each seed (old forwards ∪ incoming), replay all reversibles
+        var seeds = forwardValues.Union(incoming.ToCollapsedValues()).Distinct();
+        var rebuiltSet = new HashSet<T>();
+        foreach (var seed in seeds)
+        {
+            var v = seed;
+            for (int i = poppedReversibles.Count - 1; i >= 0; i--)
+                v = poppedReversibles[i].ApplyForward(v);
+            rebuiltSet.Add(v);
+        }
+
+        // 4) Package into one QuBit<T> and return
+        var rebuilt = new QuBit<T>(rebuiltSet.ToArray());
+        rebuilt.Any();
+        return rebuilt;
+    }
+}
+
+
 
 #region Interfaces and Runtime
 
@@ -592,9 +840,62 @@ public class PositronicVariable<T> : IPositronicVariable
     private readonly HashSet<T> _domain = new();
     private static bool _reverseReplayDone;
     internal static int _loopDepth;
-    internal static bool InConvergenceLoop => _loopDepth > 0;
 
-     private void Remember(IEnumerable<T> xs)
+    internal static bool InConvergenceLoop => _loopDepth > 0;
+    private readonly ReverseReplayEngine<T> _reverseReplay;
+    private readonly IVersioningService<T> _versioning;
+    private readonly IOperationLogHandler<T> _ops;
+
+    private readonly IVersioningService<T> _versioningService;
+
+    // Constructors
+    internal PositronicVariable(T initialValue)
+        : this(
+            initialValue,
+            new DefaultVersioningService<T>(),
+            new DefaultOperationLogHandler<T>())
+    {
+        // All of the heavy lifting is done in the public ctor
+    }
+
+    public PositronicVariable(
+        T initialValue,
+        IVersioningService<T> versioningService = null,
+        IOperationLogHandler<T> opsHandler = null)
+    {
+        // 1) seed the timeline exactly once
+        var qb = new QuBit<T>(new[] { initialValue });
+        qb.Any();
+        timeline.Add(qb);
+        _domain.Add(initialValue);
+        PositronicRuntime.Instance.Variables.Add(this);
+
+        // 2) wire up your services
+        _ops = opsHandler ?? new DefaultOperationLogHandler<T>();
+        _reverseReplay = new ReverseReplayEngine<T>(_ops);
+        _versioningService = versioningService ?? new DefaultVersioningService<T>();
+
+        // register the old static “something appended” hook
+        _versioningService.RegisterTimelineAppendedHook(PositronicVariable<T>.TimelineAppendedHook);
+
+    }
+
+    static PositronicVariable()
+    {
+        // 1) Do the old IComparable guard
+        if (!(typeof(IComparable).IsAssignableFrom(typeof(T)) ||
+              typeof(IComparable<T>).IsAssignableFrom(typeof(T))))
+        {
+            throw new InvalidOperationException(
+                $"Type parameter '{typeof(T).Name}' for PositronicVariable " +
+                "must implement IComparable or IComparable<T> to enable proper convergence checking.");
+        }
+
+        // 2) Trigger the neuro-cascade init, etc.
+        var _ = AethericRedirectionGrid.Initialized;
+    }
+
+    private void Remember(IEnumerable<T> xs)
      {
          foreach (var x in xs) _domain.Add(x);
      }
@@ -631,21 +932,6 @@ public class PositronicVariable<T> : IPositronicVariable
         return true;
     }
 
-    static PositronicVariable()
-    {
-        // Ensure T implements IComparable or IComparable<T>
-        if (!(typeof(IComparable).IsAssignableFrom(typeof(T)) ||
-              typeof(IComparable<T>).IsAssignableFrom(typeof(T))))
-        {
-            throw new InvalidOperationException(
-                $"Type parameter '{typeof(T).Name}' for PositronicVariable " +
-                "must implement IComparable or IComparable<T> to enable proper convergence checking.");
-        }
-
-        // Trigger initialization of the environment.
-        var trigger = AethericRedirectionGrid.Initialized;
-
-    }
 
 
     // Unified registry for all PositronicVariable<T> instances.
@@ -664,22 +950,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public int TimelineLength => timeline.Count;
 
-    // Constructors
-    internal PositronicVariable(T initialValue)
-    {
-        var qb = new QuBit<T>(new[] { initialValue });
-        qb.Any();
-        timeline.Add(qb);
-        _domain.Add(initialValue);
-        PositronicRuntime.Instance.Variables.Add(this);
-    }
-
-    internal PositronicVariable(QuBit<T> qb)
-    {
-        qb.Any();
-        timeline.Add(qb);
-        PositronicRuntime.Instance.Variables.Add(this);
-    }
+    
 
     /// <summary>
     /// Resets the registry and the global runtime.
@@ -783,141 +1054,22 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public static void RunConvergenceLoop(Action code, bool runFinalIteration = true, bool unifyOnConvergence = true, bool bailOnFirstReverseWhenIdle = false)
     {
-        if (PositronicRuntime.Instance.OracularStream == null)
-            PositronicRuntime.Instance.OracularStream = Console.Out;
+        // grab the (injectable) runtime…
+        var runtime = PositronicRuntime.Instance;
 
-        PositronicRuntime.Instance.Converged = false;
-        Console.SetOut(TextWriter.Null);
-        PositronicRuntime.Instance.Entropy = -1;    // ← begin with the reverse half-cycle
+        // and hand it to everything that needs global state:
+        var entropy = new DefaultEntropyController(runtime);
+        var opsHandler = new DefaultOperationLogHandler<T>();
+        var redirect = new DefaultOutputRedirector(runtime);
 
-        const int maxIters = 1000;
-        int iteration = 0;
+        var engine = new ConvergenceEngine<T>(
+            entropy,
+            opsHandler,
+            redirect,
+            runtime);
 
-        bool sawForwardAppend = false;   // an append during a forward half-cycle
-        bool sawAnyAppend = false;   // an append during *any* half-cycle
-        bool hadForwardCycle = false;   // have we ever done a forward pass?
-        var previousHook = TimelineAppendedHook;
-        TimelineAppendedHook = () =>
-        {
-            sawAnyAppend = true;
-            if (PositronicRuntime.Instance.Entropy > 0)
-                sawForwardAppend = true;
-        };
-
-        static bool HasOnlyOneSlice(IPositronicVariable v)
-        {
-            var field = v.GetType()
-                         .GetField("timeline",
-                                   BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            if (field == null) return false;
-            var list = field.GetValue(v) as System.Collections.ICollection;
-            return list != null && list.Count == 1;
-        }
-
-
-        while (!PositronicRuntime.Instance.Converged && iteration < maxIters)
-        {
-
-            // start-of-half-cycle housekeeping
-            if (PositronicRuntime.Instance.Entropy > 0)
-                sawForwardAppend = false; // re-arm the "did we append?" flag
-
-            // reset-per-half-cycle bookkeeping for reverse replay
-            if (PositronicRuntime.Instance.Entropy < 0)
-                PositronicVariable<T>.ResetReverseReplayFlag();
-
-            // ==== THE CODE RUNS ====
-            code();
-
-            // -- optional "first-path" early exit on the FIRST reverse pass
-            if (bailOnFirstReverseWhenIdle)
-            {
-                bool allAlreadyConverged =
-                    PositronicRuntime.Instance.Variables.All(v =>
-                    v.Converged() > 0          // classic cycle-detected case
-                    || HasOnlyOneSlice(v));    // brand-new → already stable
-
-                bool replayPending =
-                    OperationLog.Peek() is TimelineAppendOperation<T> ||
-                    OperationLog.Peek() is TimelineReplaceOperation<T>;
-
-                // if we’re still in that very first reverse, nothing changed,
-                // and there’s no forward write queued, bail out now
-                if (!hadForwardCycle       /* still in initial reverse */
-                    && allAlreadyConverged  /* every var already says “converged” */
-                    && !sawAnyAppend        /* user did _not_ mutate during reverse */
-                    && !replayPending)      /* no write scheduled for forward */
-                {
-                    PositronicRuntime.Instance.Converged = true;
-                    Console.SetOut(PositronicRuntime.Instance.OracularStream);
-                    TimelineAppendedHook = previousHook;
-                    break;
-                }
-            }
-
-            // once we’ve executed code() in a forward half-cycle,
-            // record that we’ve had at least one forward pass.
-            if (PositronicRuntime.Instance.Entropy > 0)
-                hadForwardCycle = true;
-
-            if (PositronicRuntime.Instance.Entropy < 0)
-            {
-                // if we’ve already done a forward tick and it produced nothing new,
-                // we really have converged
-                if (hadForwardCycle && !sawForwardAppend)
-                {
-                    PositronicRuntime.Instance.Converged = true;
-                    Console.SetOut(PositronicRuntime.Instance.OracularStream);
-                    TimelineAppendedHook = previousHook;
-                    break;
-                }
-
-                // undo whatever reversible ops the *just-finished* forward pass did
-                OperationLog.ReverseLastOperations();
-
-                OperationLog.Clear();
-
-            }
-
-            // …then the existing “full convergence” check, direction flip, etc.
-            bool allVarsConverged = PositronicRuntime.Instance.Variables.All(v => v.Converged() > 0);
-            // don’t allow an exit until we have seen at least one forward tick
-            if (hadForwardCycle && allVarsConverged && PositronicRuntime.Instance.Entropy < 0)
-            {
-                if (unifyOnConvergence)
-                {
-                    PositronicRuntime.Instance.Converged = true;
-                    foreach (var pv in PositronicRuntime.Instance.Variables)
-                        pv.UnifyAll();
-                    AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
-                }
-                PositronicRuntime.Instance.Converged = true;
-                Console.SetOut(PositronicRuntime.Instance.OracularStream);
-                break;
-            }
-
-            PositronicRuntime.Instance.Entropy = -PositronicRuntime.Instance.Entropy;
-            iteration++;
-        }
-
-        // …and the final forward replay logic remains unchanged
-        Console.SetOut(PositronicRuntime.Instance.OracularStream);
-        if (runFinalIteration && PositronicRuntime.Instance.Converged)
-        {
-            PositronicRuntime.Instance.Entropy = 1;
-            PositronicRuntime.Instance.Converged = false;
-            code();
-            OperationLog.ReverseLastOperations();
-            PositronicRuntime.Instance.Converged = true;
-        }
-
-        TimelineAppendedHook = previousHook;
-
-        // safety check
-        OperationLog.Clear();
+        engine.Run(code, runFinalIteration, unifyOnConvergence);
     }
-
-
 
     /// <summary>
     /// Checks for convergence by comparing timeline slices.
@@ -926,6 +1078,11 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         if (PositronicRuntime.Instance.Converged)
             return 1;
+
+        // one slice means "done" only after we have *ever* executed a
+        // forward <-> reverse pair (i.e. after we replaced the initial slice)
+        if (timeline.Count == 1)
+            return replacedInitialSlice ? 1 : 0;
 
         if (timeline.Count < 3)
             return 0;
@@ -948,9 +1105,8 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public void UnifyAll()
     {
-        // Everything we've ever seen.
-        // Whatever is in the *current* slice is what survived the argument.
-        var vals = _domain;
+
+        var vals = _domain.ToList(); // union of **all** observed values
 
         // build one canonical disjunction that still shows all possibilities
         var unified = new QuBit<T>(vals);
@@ -1028,77 +1184,12 @@ public class PositronicVariable<T> : IPositronicVariable
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
         if (runtime.Entropy < 0)
         {
-            // Pop off everything belonging to the *last* forward half-cycle
-            var poppedSnapshots = new List<IOperation>();
-            var poppedReversibles = new List<IReversibleOperation<T>>();
-            var forwardValues = new HashSet<T>();
+            var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
 
-            while (true)
-            {
-                var top = OperationLog.Peek();
-                if (top is TimelineAppendOperation<T> tap)
-                {
-                    // Collect values that were added during the forward half-cycle
-                    foreach (var x in tap.Variable.GetCurrentQBit().ToCollapsedValues())
-                        forwardValues.Add(x);
-
-                    poppedSnapshots.Add(tap);
-                    OperationLog.Pop();
-                }
-                else if (top is TimelineReplaceOperation<T> trp)
-                {
-                    foreach (var x in trp.Variable.GetCurrentQBit().ToCollapsedValues())
-                        forwardValues.Add(x);
-                }
-                else if (top is IReversibleOperation<T> rOp)
-                {
-                    poppedReversibles.Add(rOp);
-                    OperationLog.Pop();
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            // Restore timeline to the snapshot before that forward pass
-            foreach (var snap in poppedSnapshots)
-                snap.Undo();
-
-            // instead of a single seed, we reply *every* state found in the incoming slice
-            var seeds = forwardValues
-                .Union(qb.ToCollapsedValues())
-                .Distinct();
-            var rebuiltSet = new HashSet<T>();
-
-            foreach (var seed in seeds)
-            {
-                var v = seed;
-                for (int i = poppedReversibles.Count - 1; i >= 0; i--)
-                    v = poppedReversibles[i].ApplyForward(v);
-
-                rebuiltSet.Add(v);  // ← always add the value we ended with
-
-            }
-
-            var rebuilt = new QuBit<T>(rebuiltSet.ToArray());
-            rebuilt.Any();
-
-            // Overwrite timeline with the rebuilt slice
-            Remember(rebuiltSet);
+            // Now mutate *this* variable’s timeline:
             timeline.Clear();
             timeline.Add(rebuilt);
-            TimelineAppendedHook?.Invoke();
-
-            // Mark that the “original” slice has now been replaced
             replacedInitialSlice = true;
-
-            // Push everything back onto the log in original order
-            foreach (var snap in poppedSnapshots.AsEnumerable().Reverse())
-                OperationLog.Record(snap);
-            foreach (var rop in poppedReversibles.AsEnumerable().Reverse())
-                OperationLog.Record(rop);
-
             return;
         }
 
