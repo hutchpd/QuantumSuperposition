@@ -7,6 +7,9 @@ using System.Text.Json;
 using QuantumSuperposition.QuantumSoup;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
+using System.Numerics;
+using System.Collections;
+using Microsoft.Win32;
 
 namespace QuantumSuperposition.DependencyInjection
 {
@@ -17,20 +20,92 @@ namespace QuantumSuperposition.DependencyInjection
         /// </summary>
         public static IServiceCollection AddPositronicRuntime(this IServiceCollection services)
         {
-            // Register a single, DI-managed runtime – no static fallback
-            services.AddSingleton<IPositronicRuntime, DefaultPositronicRuntime>(sp =>
-                        {
-                            var rt = new DefaultPositronicRuntime();
-                            rt.Reset();
-                            PositronicAmbient.Current = rt;
-                            return rt;
-                        });
+            services.AddScoped<ScopedPositronicVariableFactory>();
+            services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+            services.AddScoped<IPositronicVariableFactory>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+
+            services.AddSingleton<IPositronicRuntime>(sp => {
+                var scoped = sp.GetRequiredService<ScopedPositronicVariableFactory>();
+                var rt = new DefaultPositronicRuntime(scoped, scoped);
+                rt.Reset();
+                PositronicAmbient.Current = rt;
+                return rt;
+            });
+
 
             return services;
         }
 
     }
 }
+
+public interface IPositronicVariableFactory
+{
+    PositronicVariable<T> GetOrCreate<T>(string id, T initialValue);
+    PositronicVariable<T> GetOrCreate<T>(string id);
+    PositronicVariable<T> GetOrCreate<T>(T initialValue);
+}
+
+public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPositronicVariableRegistry
+{
+    private readonly IPositronicRuntime _runtime;
+    private readonly Dictionary<(Type, string), IPositronicVariable> _registry
+        = new();
+
+    public ScopedPositronicVariableFactory(IPositronicRuntime runtime)
+    {
+        _runtime = runtime;
+    }
+
+    public PositronicVariable<T> GetOrCreate<T>(string id, T initialValue)
+    {
+        var key = (typeof(T), id);
+        if (_registry.TryGetValue(key, out var existing))
+            return (PositronicVariable<T>)existing;
+
+        var created = new PositronicVariable<T>(initialValue, _runtime);
+        _registry[key] = created;
+        return created;
+    }
+
+    public PositronicVariable<T> GetOrCreate<T>(string id)
+    {
+        var key = (typeof(T), id);
+        if (_registry.TryGetValue(key, out var existing))
+            return (PositronicVariable<T>)existing;
+        var created = new PositronicVariable<T>(default, _runtime);
+        _registry[key] = created;
+        return created;
+    }
+
+    public PositronicVariable<T> GetOrCreate<T>(T initialValue)
+    {
+        var key = (typeof(T), Guid.NewGuid().ToString());
+        if (_registry.TryGetValue(key, out var existing))
+            return (PositronicVariable<T>)existing;
+        var created = new PositronicVariable<T>(initialValue, _runtime);
+        _registry[key] = created;
+        return created;
+    }
+
+    void IPositronicVariableRegistry.Add(IPositronicVariable v)
+    {
+        // avoid dynamic – grab the T from the concrete PositronicVariable<T>
+        var t = v.GetType().GetGenericArguments()[0];
+        var key = (t, Guid.NewGuid().ToString());
+        _registry[key] = v;
+    }
+
+void IPositronicVariableRegistry.Clear()
+        => _registry.Clear();
+
+    public IEnumerator<IPositronicVariable> GetEnumerator()
+        => _registry.Values.GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+}
+
+
 
 /// <summary>
 /// Lightweight, swappable holder for the “current” runtime.
@@ -98,8 +173,8 @@ public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)((dynamic)result - _addend);
-    public T ApplyForward(T value) => (T)((dynamic)value + _addend);
+    public T ApplyInverse(T result) => Arithmetic.Subtract(result, _addend);
+    public T ApplyForward(T result) => Arithmetic.Add(result, _addend);
 
 }
 
@@ -121,8 +196,8 @@ public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)((dynamic)result + _subtrahend);
-    public T ApplyForward(T value) => (T)((dynamic)value - _subtrahend);
+    public T ApplyInverse(T result) => Arithmetic.Add(result, _subtrahend);
+    public T ApplyForward(T value) => Arithmetic.Subtract(value, _subtrahend);
 
 }
 
@@ -144,8 +219,8 @@ public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)((dynamic)_minuend - result);
-    public T ApplyForward(T value) => (T)((dynamic)_minuend - value);
+    public T ApplyInverse(T result) => Arithmetic.Subtract(_minuend, result);
+    public T ApplyForward(T value) => Arithmetic.Subtract(_minuend, value);
 
 }
 
@@ -167,8 +242,9 @@ public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)((dynamic)result / _multiplier);
-    public T ApplyForward(T value) => (T)((dynamic)value * _multiplier);
+    // use the Arithmetic class rather than dynamic
+    public T ApplyInverse(T result) => Arithmetic.Divide(result, _multiplier);
+    public T ApplyForward(T value) => Arithmetic.Multiply(value, _multiplier);
 
 }
 
@@ -189,9 +265,9 @@ public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
         Original = variable.GetCurrentQBit().ToCollapsedValues().First();
         _rt = rt;
     }
-
-    public T ApplyInverse(T result) => (T)((dynamic)result * _divisor);
-    public T ApplyForward(T value) => (T)((dynamic)value / _divisor);
+    // use the Arithmetic class rather than dynamic
+    public T ApplyInverse(T result) => Arithmetic.Multiply(result, _divisor);
+    public T ApplyForward(T value) => Arithmetic.Divide(value, _divisor);
 
 }
 
@@ -213,8 +289,9 @@ public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)((dynamic)_numerator / result);
-    public T ApplyForward(T value) => (T)((dynamic)_numerator / value);
+    // use the Arithmetic class rather than dynamic
+    public T ApplyInverse(T result) => Arithmetic.Divide(_numerator, result);
+    public T ApplyForward(T value) => Arithmetic.Divide(_numerator, value);
 
 }
 
@@ -234,8 +311,9 @@ public class NegationOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    public T ApplyInverse(T result) => (T)(-(dynamic)result);
-    public T ApplyForward(T value) => (T)(-(dynamic)value);
+    // use the Arithmetic class rather than dynamic
+    public T ApplyInverse(T result) => Arithmetic.Negate(result);
+    public T ApplyForward(T value) => Arithmetic.Negate(value);
 
 }
 
@@ -263,16 +341,17 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
         // snapshot the value *before* the %
         Original  = variable.GetCurrentQBit().ToCollapsedValues().First();
-        _quotient = (T) ((dynamic) Original / divisor);
+        // user the arithmetic class rather than dynamic
+        _quotient = Arithmetic.Divide(Original, divisor);
     }
 
     // Forward:   r  ⟶  q·d + r  (rebuild the original value)
     public T ApplyForward(T remainder)
-        => (T)((dynamic)_quotient * _divisor + remainder);
+       => Arithmetic.Add( Arithmetic.Multiply(_quotient, _divisor), remainder);
 
     // Inverse:   x  ⟶  x % d   (rarely used by the engine but nice to have)
     public T ApplyInverse(T value)
-        => (T)((dynamic)value % _divisor);
+        => Arithmetic.Modulus(value, _divisor);
 
     void IOperation.Undo()
     {
@@ -637,10 +716,10 @@ internal static class AethericRedirectionGrid
 
             // Determine the generic type to use for the convergence loop.
             // Here we assume at least one PositronicVariable exists in the runtime.
-            if (PositronicAmbient.Current.Variables.Any())
+            if (PositronicAmbient.Current.Registry.Any())
             {
                 // Get the runtime type of the last variable, e.g. PositronicVariable<double>
-                var lastVariable = PositronicAmbient.Current.Variables.Last();
+                var lastVariable = PositronicAmbient.Current.Registry.Last();
                 // Extract the generic type argument (e.g. double)
                 var genericArg = lastVariable.GetType().GetGenericArguments()[0];
 
@@ -925,7 +1004,7 @@ public interface IPositronicRuntime
     /// <summary>
     /// The collection of all Positronic variables registered.
     /// </summary>
-    IList<IPositronicVariable> Variables { get; }
+    IPositronicVariableRegistry Variables { get; }
 
     /// <summary>
     /// Performs a ceremonial memory wipe on the runtime state.
@@ -944,6 +1023,12 @@ public interface IPositronicRuntime
     /// and agree on something for once in their chaotic lives.
     /// </summary>
     event Action OnAllConverged;
+
+    // for consumers who need to *create* new variables:
+    IPositronicVariableFactory Factory { get; }
+
+    // for code that needs to *enumerate* or *clear* the registry:
+    IPositronicVariableRegistry Registry { get; }
 }
 
 /// <summary>
@@ -954,19 +1039,38 @@ public class DefaultPositronicRuntime : IPositronicRuntime
     public int Entropy { get; set; } = 1;
     public bool Converged { get; set; } = false;
     public TextWriter OracularStream { get; set; }
-    public IList<IPositronicVariable> Variables { get; } = new List<IPositronicVariable>();
+    public IPositronicVariableRegistry Variables { get; }
     public int TotalConvergenceIterations { get; set; } = 0;
+
+
     public event Action OnAllConverged;
+    public IPositronicVariableFactory Factory { get; }
+    public IPositronicVariableRegistry Registry { get; }
 
 
-    public DefaultPositronicRuntime()
+    public DefaultPositronicRuntime(IPositronicVariableFactory factory, IPositronicVariableRegistry registry)
     {
-        // as soon as we create one, point its OracularStream
-        // at the shared AethericRedirectionGrid buffer:
+        // wire up I/O
         OracularStream = AethericRedirectionGrid.OutputBuffer;
+        // wire up DI
+        Factory = factory;
+        Variables = registry;
+        Registry = registry;
     }
 
-    public void Reset()
+        /// <summary>
+        /// Fallback for static & test code.
+        /// </summary>
+        public DefaultPositronicRuntime()
+        {
+            OracularStream = AethericRedirectionGrid.OutputBuffer;
+            var scoped = new ScopedPositronicVariableFactory(this);
+            Factory   = scoped;
+            Variables = scoped;
+            Registry  = scoped;
+        }
+
+public void Reset()
     {
         Entropy = 1;
         Converged = false;
@@ -980,6 +1084,14 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 }
 
 #endregion
+
+public interface IPositronicVariableRegistry : IEnumerable<IPositronicVariable>
+{
+    void Add(IPositronicVariable variable);
+    void Clear();
+}
+
+
 
 #region PositronicVariable<T> (Value-type version)
 
@@ -1004,16 +1116,6 @@ public class PositronicVariable<T> : IPositronicVariable
 
     private readonly IVersioningService<T> _versioningService;
 
-    // Constructors
-    internal PositronicVariable(T initialValue)
-        : this(
-            initialValue,
-            PositronicAmbient.Current,
-            new DefaultVersioningService<T>(),
-            new DefaultOperationLogHandler<T>())
-    {
-        // All of the heavy lifting is done in the public ctor
-    }
 
     public PositronicVariable(
         T initialValue,
@@ -1031,7 +1133,7 @@ public class PositronicVariable<T> : IPositronicVariable
         _hasWrittenInitialForward = true;
 
         _domain.Add(initialValue);
-        _runtime.Variables.Add(this);
+        _runtime.Registry.Add(this);
 
         // wire up the rest of our services
 
@@ -1132,7 +1234,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Returns an existing instance or creates a new PositronicVariable with the given id and initial value.
     /// </summary>
-    public static PositronicVariable<T> GetOrCreate(string id, T initialValue)
+    public static PositronicVariable<T> GetOrCreate(string id, T initialValue, IPositronicRuntime runtime)
     {
         if (registry.TryGetValue(id, out var instance))
         {
@@ -1140,7 +1242,7 @@ public class PositronicVariable<T> : IPositronicVariable
         }
         else
         {
-            instance = new PositronicVariable<T>(initialValue);
+            instance = new PositronicVariable<T>(initialValue, runtime);
             registry[id] = instance;
             return instance;
         }
@@ -1151,7 +1253,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
-    public static PositronicVariable<T> GetOrCreate(string id)
+    public static PositronicVariable<T> GetOrCreate(string id, IPositronicRuntime runtime)
     {
         if (registry.TryGetValue(id, out var instance))
         {
@@ -1159,7 +1261,7 @@ public class PositronicVariable<T> : IPositronicVariable
         }
         else
         {
-            instance = new PositronicVariable<T>(default(T));
+            instance = new PositronicVariable<T>(default(T), runtime);
             registry[id] = instance;
             return instance;
         }
@@ -1169,7 +1271,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Returns or creates the default PositronicVariable with the initial value.
     /// </summary>
-    public static PositronicVariable<T> GetOrCreate(T initialValue)
+    public static PositronicVariable<T> GetOrCreate(T initialValue, IPositronicRuntime runtime)
     {
         if (registry.TryGetValue("default", out var instance))
         {
@@ -1177,7 +1279,7 @@ public class PositronicVariable<T> : IPositronicVariable
         }
         else
         {
-            instance = new PositronicVariable<T>(initialValue);
+            instance = new PositronicVariable<T>(initialValue, runtime);
             registry["default"] = instance;
             return instance;
         }
@@ -1186,7 +1288,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Returns the or creates the default PositronicVariable given no value or id.
     /// </summary>
-    public static PositronicVariable<T> GetOrCreate()
+    public static PositronicVariable<T> GetOrCreate(IPositronicRuntime runtime)
     {
         if (registry.TryGetValue("default", out var instance))
         {
@@ -1194,7 +1296,7 @@ public class PositronicVariable<T> : IPositronicVariable
         }
         else
         {
-            instance = new PositronicVariable<T>(default(T));
+            instance = new PositronicVariable<T>(default(T), runtime);
             registry["default"] = instance;
             return instance;
         }
@@ -1205,13 +1307,13 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public static bool AllConverged(IPositronicRuntime rt)
     {
-        bool all = rt.Variables.All(v => v.Converged() > 0);
+        bool all = rt.Registry.All(v => v.Converged() > 0);
         if (all)
             (rt as DefaultPositronicRuntime)?.FireAllConverged();
         return all;
     }
 
-    public static IEnumerable<IPositronicVariable> GetAllVariables(IPositronicRuntime rt) => rt.Variables;
+    public static IEnumerable<IPositronicVariable> GetAllVariables(IPositronicRuntime rt) => rt.Registry;
 
     /// <summary>
     /// Runs your code in a convergence loop until all variables have settled.
@@ -1761,14 +1863,14 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Applies a binary function across two positronic variables, combining every possible future.
     /// </summary>
-    public static PositronicVariable<T> Apply(Func<T, T, T> op, PositronicVariable<T> left, PositronicVariable<T> right)
+    public static PositronicVariable<T> Apply(Func<T, T, T> op, PositronicVariable<T> left, PositronicVariable<T> right, IPositronicRuntime runtime)
     {
         var leftValues = left.ToValues();
         var rightValues = right.ToValues();
         var results = leftValues.SelectMany(l => rightValues, (l, r) => op(l, r)).Distinct().ToArray();
         var newQB = new QuBit<T>(results);
         newQB.Any();
-        return new PositronicVariable<T>(newQB);
+        return new PositronicVariable<T>(newQB, runtime);
     }
 
     /// <summary>
@@ -1828,7 +1930,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Creates a new branch by forking the timeline.
     /// </summary>
-    public PositronicVariable<T> Fork()
+    public PositronicVariable<T> Fork(IPositronicRuntime runtime)
     {
         var forkedTimeline = timeline.Select(qb =>
         {
@@ -1837,7 +1939,7 @@ public class PositronicVariable<T> : IPositronicVariable
             return newQB;
         }).ToList();
 
-        var forked = new PositronicVariable<T>(forkedTimeline[0]);
+        var forked = new PositronicVariable<T>(forkedTimeline[0], runtime);
         forked.timeline.Clear();
         forkedTimeline.ForEach(qb => forked.timeline.Add(qb));
         return forked;
@@ -1846,9 +1948,9 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Forks the timeline and applies a transformation to the final slice.
     /// </summary>
-    public PositronicVariable<T> Fork(Func<T, T> transform)
+    public PositronicVariable<T> Fork(Func<T, T> transform, IPositronicRuntime runtime)
     {
-        var forked = Fork();
+        var forked = Fork(runtime);
         var last = forked.timeline.Last();
         var transformedValues = last.ToCollapsedValues().Select(transform).ToArray();
         forked.timeline[forked.timeline.Count - 1] = new QuBit<T>(transformedValues);
@@ -1938,10 +2040,10 @@ public class NeuralNodule<T> where T : struct, IComparable
     /// Creates a neural nodule with a specified activation function.
     /// </summary>
     /// <param name="activation"></param>
-    public NeuralNodule(Func<IEnumerable<T>, QuBit<T>> activation)
+    public NeuralNodule(Func<IEnumerable<T>, QuBit<T>> activation, IPositronicRuntime runtime)
     {
         ActivationFunction = activation;
-        Output = new PositronicVariable<T>(default(T));
+        Output = new PositronicVariable<T>(default(T), runtime);
     }
 
     /// <summary>
@@ -1972,3 +2074,63 @@ public class NeuralNodule<T> where T : struct, IComparable
     }
 }
 #endregion
+
+
+public static class Arithmetic
+{
+    // GENERIC, zero-overhead path when T : INumber<T>
+    public static T Add<T>(T x, T y)
+        where T : INumber<T>
+        => x + y;
+
+    // FALLBACK for *any* other T
+    public static dynamic Add(dynamic x, dynamic y)
+        => x + y;
+
+
+
+    public static T Subtract<T>(T x, T y)
+        where T : ISubtractionOperators<T, T, T>
+        => x - y;
+    public static dynamic Subtract(dynamic x, dynamic y)
+        => x - y;
+
+
+
+    public static T Multiply<T>(T x, T y)
+        where T : IMultiplyOperators<T, T, T>
+        => x * y;
+    public static dynamic Multiply(dynamic x, dynamic y)
+        => x * y;
+
+
+
+    public static T Divide<T>(T x, T y)
+        where T : IDivisionOperators<T, T, T>
+        => x / y;
+    public static dynamic Divide(dynamic x, dynamic y)
+        => x / y;
+
+
+
+    public static T Remainder<T>(T x, T y)
+        where T : IModulusOperators<T, T, T>
+        => x % y;
+    public static dynamic Remainder(dynamic x, dynamic y)
+        => x % y;
+
+
+
+    public static T Negate<T>(T x)
+        where T : IUnaryNegationOperators<T, T>
+        => -x;
+    public static dynamic Negate(dynamic x)
+        => -x;
+
+    public static T Modulus<T>(T x, T y)
+        where T : IModulusOperators<T, T, T>
+        => x % y;
+
+    public static dynamic Modulus(dynamic x, dynamic y)
+        => x % y;
+}
