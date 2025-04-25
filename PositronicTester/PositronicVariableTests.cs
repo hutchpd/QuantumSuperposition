@@ -597,7 +597,7 @@ namespace PositronicVariables.Tests
                     entropyAtFirstTick = PositronicVariable<int>.GetEntropy(_runtime);
 
                 // exit immediately – we only care about the first value
-                PositronicRuntimeProvider.Instance.Converged = true;
+                PositronicAmbient.Current.Converged = true;
             }, runFinalIteration: false);
 
             Assert.That(entropyAtFirstTick, Is.EqualTo(-1),
