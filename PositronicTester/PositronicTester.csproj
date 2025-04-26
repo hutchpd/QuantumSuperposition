@@ -20,11 +20,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
-    <PackageReference Include="QuantumSuperposition" Version="1.7.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PositronicVariables\PositronicVariables.csproj" />
+    <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -210,4 +210,161 @@ namespace QuantumMathTests
 
         #endregion
     }
+
+    [TestFixture]
+    public class QuantumMathDoubleTests
+    {
+        // A sensible calculator for doubles. Less imaginary than Complex.
+        private readonly IQuantumOperators<double> doubleOps = new DoubleOperators();
+
+        private void AssertDoubleEqual(double expected, double actual, double tolerance = 1e-12)
+        {
+            Assert.That(actual, Is.EqualTo(expected).Within(tolerance));
+        }
+
+        #region QuBit Tests for double
+
+        [Test]
+        public void QuBit_AdditionOperator_WithScalar_Double()
+        {
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var qubit = new QuBit<double>(
+                new List<double> { 1.0, 2.0 },
+                doubleOps
+            );
+            var scalar = 1.5;
+            var result = (qubit + scalar).States.ToList();
+            var expected = new List<double> { 2.5, 3.5 };
+
+            Assert.That(result, Is.EquivalentTo(expected));
+        }
+
+        [Test]
+        public void QuBit_MultiplicationOperator_WithQuBit_Double()
+        {
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var qubitA = new QuBit<double>(
+                new List<double> { 2.0, 3.0 },
+                doubleOps
+            );
+            var qubitB = new QuBit<double>(
+                new List<double> { 4.0, 5.0 },
+                doubleOps
+            );
+
+            var result = (qubitA * qubitB).States.ToList();
+            var expected = new List<double> { 8.0, 10.0, 12.0, 15.0 };
+
+            Assert.That(result, Is.EquivalentTo(expected));
+        }
+
+        [Test]
+        public void QuBit_ModulusOperator_WithScalar_Double()
+        {
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var qubit = new QuBit<double>(
+                new List<double> { 5.5, 7.0 },
+                doubleOps
+            );
+            var scalar = 3.0;
+            var result = (qubit % scalar).States.ToList();
+            var expected = new List<double> { 5.5 % 3.0, 7.0 % 3.0 };
+
+            Assert.That(result, Is.EquivalentTo(expected));
+        }
+
+        [Test]
+        public void QuBit_ModulusOperator_WithQuBit_Double()
+        {
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var qubitA = new QuBit<double>(
+                new List<double> { 10.5, 12.0 },
+                doubleOps
+            );
+            var qubitB = new QuBit<double>(
+                new List<double> { 2.0, 3.0 },
+                doubleOps
+            );
+
+            var result = (qubitA % qubitB).States.ToList();
+            var expected = new List<double>
+            {
+                10.5 % 2.0,
+                10.5 % 3.0,
+                12.0 % 2.0,
+                12.0 % 3.0
+            };
+
+            Assert.That(result, Is.EquivalentTo(expected));
+        }
+
+        [Test]
+        public void QuBit_DivisionOperator_WithScalar_Double()
+        {
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var qubit = new QuBit<double>(
+                new List<double> { 8.0, 6.0 },
+                doubleOps
+            );
+            var scalar = 2.0;
+            var result = (qubit / scalar).States.ToList();
+            var expected = new List<double> { 4.0, 3.0 };
+
+            Assert.That(result, Is.EquivalentTo(expected));
+        }
+
+        [Test]
+        public void QuBit_EvaluateAll_AllPositive_ReturnsTrue_Double()
+        {
+            var qubit = new QuBit<double>(
+                new List<double> { 1.0, 2.0, 3.0 },
+                doubleOps
+            );
+
+            bool result = qubit.EvaluateAll();
+            Assert.That(result, Is.True);
+        }
+
+        [Test]
+        public void QuBit_EvaluateAll_ContainsZero_ReturnsFalse_Double()
+        {
+            var qubit = new QuBit<double>(
+                new List<double> { 0.0, 2.0 },
+                doubleOps
+            );
+
+            bool result = qubit.EvaluateAll();
+            Assert.That(result, Is.False);
+        }
+
+        [Test]
+        public void DoubleOperators_Modulus_Works()
+        {
+            var ops = new DoubleOperators();
+
+            double a = 10.5;
+            double b = 3.0;
+            double result = ops.Mod(a, b);
+
+            AssertDoubleEqual(10.5 % 3.0, result);
+        }
+
+        [Test]
+        public void DoubleOperators_Divide_Works()
+        {
+            var ops = new DoubleOperators();
+            double a = 10.0;
+            double b = 2.5;
+            double result = ops.Divide(a, b);
+
+            AssertDoubleEqual(4.0, result);
+        }
+
+        #endregion
+    }
 }

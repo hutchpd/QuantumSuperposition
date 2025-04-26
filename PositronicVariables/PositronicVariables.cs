@@ -10,35 +10,54 @@ using System.Threading;
 using System.Numerics;
 using System.Collections;
 using Microsoft.Win32;
+using Microsoft.Extensions.Hosting;
+using QuantumSuperposition.DependencyInjection;
 
 namespace QuantumSuperposition.DependencyInjection
 {
     public static class PositronicServiceCollectionExtensions
     {
-        /// <summary>
-        /// Registers the Positronic runtime and initializes the static fallback provider.
-        /// </summary>
         public static IServiceCollection AddPositronicRuntime(this IServiceCollection services)
         {
-            services.AddScoped<ScopedPositronicVariableFactory>();
+            return services.AddPositronicRuntime<double>(builder => { });
+        }
 
-            // Register the runtime as scoped and rely on constructor injection
+        public static IServiceCollection AddPositronicRuntime<T>(this IServiceCollection services, Action<ConvergenceEngineBuilder<T>> configure)
+            where T : IComparable<T>
+        {
+            services.AddScoped<ScopedPositronicVariableFactory>();
             services.AddScoped<IPositronicVariableFactory>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
             services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
-
             services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
+
+            services.AddScoped<IConvergenceEngine<T>>(sp =>
+            {
+                var runtime = sp.GetRequiredService<IPositronicRuntime>();
+
+                var defaultEngine = new ConvergenceEngine<T>(
+                    new DefaultEntropyController(runtime),
+                    new DefaultOperationLogHandler<T>(),
+                    new DefaultOutputRedirector(runtime),
+                    runtime
+                );
+
+                var builder = new ConvergenceEngineBuilder<T>();
+                configure(builder);
+
+                return builder.Build(defaultEngine);
+            });
 
             return services;
         }
-
     }
+
 }
 
 public interface IPositronicVariableFactory
 {
-    PositronicVariable<T> GetOrCreate<T>(string id, T initialValue);
-    PositronicVariable<T> GetOrCreate<T>(string id);
-    PositronicVariable<T> GetOrCreate<T>(T initialValue);
+    PositronicVariable<T> GetOrCreate<T>(string id, T initialValue) where T : IComparable<T>;
+    PositronicVariable<T> GetOrCreate<T>(string id) where T : IComparable<T>;
+    PositronicVariable<T> GetOrCreate<T>(T initialValue) where T : IComparable<T>;
 }
 
 public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPositronicVariableRegistry
@@ -55,6 +74,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
     }
 
     public PositronicVariable<T> GetOrCreate<T>(string id, T initialValue)
+        where T : IComparable<T>
     {
         var key = (typeof(T), id);
         if (_registry.TryGetValue(key, out var existing))
@@ -66,6 +86,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
     }
 
     public PositronicVariable<T> GetOrCreate<T>(string id)
+        where T : IComparable<T>
     {
         var key = (typeof(T), id);
         if (_registry.TryGetValue(key, out var existing))
@@ -76,6 +97,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
     }
 
     public PositronicVariable<T> GetOrCreate<T>(T initialValue)
+        where T : IComparable<T>
     {
         var key = (typeof(T), "default");
         if (_registry.TryGetValue(key, out var existing))
@@ -105,19 +127,52 @@ void IPositronicVariableRegistry.Clear()
 
 
 /// <summary>
-/// Lightweight, swappable holder for the “current” runtime.
-/// Tests can push their own with <c>PositronicAmbient.Current = fake;</c>
+/// Swappable holder for the “current” runtime.</c>
 /// </summary>
 public static class PositronicAmbient
 {
     private static readonly AsyncLocal<IPositronicRuntime> _ambient = new();
+    private static readonly AsyncLocal<IServiceProvider> _services = new();
+
     public static IPositronicRuntime Current
     {
         get => _ambient.Value
-                          ?? throw new InvalidOperationException("Positronic runtime not yet created");
+            ?? throw new InvalidOperationException("Positronic runtime not yet created");
         set => _ambient.Value = value;
     }
+
+    public static IServiceProvider Services
+    {
+        get => _services.Value
+            ?? throw new InvalidOperationException("Service provider not yet available");
+        private set => _services.Value = value;
+    }
+
+    public static void InitialiseWith(IHostBuilder hostBuilder)
+    {
+        if (_ambient.Value != null)
+            throw new InvalidOperationException("Positronic runtime already Initialised.");
+
+        var host = hostBuilder.Build();
+        _services.Value = host.Services;
+
+        var runtime = host.Services.GetRequiredService<IPositronicRuntime>();
+        _ambient.Value = runtime;
+    }
 }
+
+public interface IConvergenceEngine<T>
+    where T : IComparable<T>
+{
+    void Run(
+        Action code,
+        bool runFinalIteration = true,
+        bool unifyOnConvergence = true,
+        bool bailOnFirstReverseWhenIdle = false,
+        IConvergenceEngine<T> next = null);
+}
+
+
 
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class PositronicEntryAttribute : Attribute
@@ -140,6 +195,7 @@ public interface IReversibleOperation<T> : IOperation
 }
 
 public interface IReversibleSnapshotOperation<T> : IReversibleOperation<T>
+    where T : IComparable<T>
 {
     PositronicVariable<T> Variable { get; }
     T Original { get; }
@@ -154,6 +210,7 @@ public interface IReversibleSnapshotOperation<T> : IReversibleOperation<T>
 
 // Addition: forward op is x + A, so inverse is (result - A).
 public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _addend;
@@ -177,6 +234,7 @@ public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
 
 // Subtraction: forward op is x - B, so inverse is (result + B).
 public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _subtrahend;
@@ -200,6 +258,7 @@ public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
 
 // SubtractionReversed: for T - x. Forward op is: result = M - x, so the inverse is x = M - result.
 public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _minuend;
@@ -223,6 +282,7 @@ public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
 
 // Multiplication: forward op is x * M, so inverse is (result / M).
 public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _multiplier;
@@ -247,6 +307,7 @@ public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
 
 // Division: forward op is x / D, so inverse is (result * D).
 public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _divisor;
@@ -270,6 +331,7 @@ public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
 
 // DivisionReversed: for T / x. Forward op is: result = N / x, so inverse is x = N / result.
 public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _numerator;
@@ -294,6 +356,7 @@ public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
 
 // Unary Negation: forward op is -x, and its own inverse.
 public class NegationOperation<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     public PositronicVariable<T> Variable { get; }
     public T Original { get; }
@@ -320,6 +383,7 @@ public class NegationOperation<T> : IReversibleSnapshotOperation<T>
 ///  can be undone later.
 /// </summary>
 public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
+    where T : IComparable<T>
 {
     private readonly IPositronicRuntime _runtime;
     public PositronicVariable<T> Variable { get; }
@@ -365,6 +429,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
 
 public class InversionOperation<T> : IOperation
+    where T : IComparable<T>
 {
     private readonly PositronicVariable<T> _variable;
     private readonly T _originalValue;
@@ -391,7 +456,7 @@ public class InversionOperation<T> : IOperation
 public interface IEntropyController
 {
     int Entropy { get; }
-    void Initialize();         // set initial entropy
+    void Initialise();         // set initial entropy
     void Flip();               // flip direction
 }
 
@@ -404,6 +469,7 @@ public interface IOperationLogHandler<T>
 }
 
 public interface IVersioningService<T>
+    where T : IComparable<T>
 {
     void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice);
     void RestoreLastSnapshot();
@@ -414,6 +480,7 @@ public interface IVersioningService<T>
 }
 
 public class DefaultVersioningService<T> : IVersioningService<T>
+    where T : IComparable<T>
 {
     private readonly Stack<(PositronicVariable<T> Variable, List<QuBit<T>> Timeline)> _snapshots = new();
     private readonly object _syncRoot = new object();
@@ -500,7 +567,7 @@ public class DefaultEntropyController : IEntropyController
     /// <summary>
     /// Start every convergence run in **reverse** time.
     /// </summary>
-    public void Initialize() => _runtime.Entropy = -1;
+    public void Initialise() => _runtime.Entropy = -1;
     public void Flip() => _runtime.Entropy = -_runtime.Entropy;
 }
 
@@ -529,25 +596,55 @@ public class DefaultOutputRedirector : IOutputRedirector
     public void Restore() => Console.SetOut(_originalOut);
 }
 
-//public static class PositronicRuntimeProvider
-//{
-//    private static IPositronicRuntime _instance;
+public class ConvergenceEngineBuilder<T>
+    where T : IComparable<T>
+{
+    private readonly List<Func<IConvergenceEngine<T>, IConvergenceEngine<T>>> _middlewares = new();
 
-//    public static void Initialize(IPositronicRuntime runtime)
-//    {
-//        _instance = runtime;
-//        _instance.OracularStream = AethericRedirectionGrid.OutputBuffer;
-//        _instance.Reset();
-//    }
+    /// <summary>
+    /// Adds a middleware/decorator to the convergence engine chain.
+    /// </summary>
+    public ConvergenceEngineBuilder<T> Use(Func<IConvergenceEngine<T>, IConvergenceEngine<T>> middleware)
+    {
+        _middlewares.Add(middleware);
+        return this;
+    }
 
-//    public static IPositronicRuntime Instance =>
-//        _instance ?? throw new InvalidOperationException(
-//            "Positronic runtime not initialized. Call AddPositronicRuntime() on IServiceCollection.");
-//}
+    /// <summary>
+    /// Builds the final composed convergence engine.
+    /// </summary>
+    public IConvergenceEngine<T> Build(IConvergenceEngine<T> core)
+    {
+        IConvergenceEngine<T> engine = core;
+        foreach (var middleware in _middlewares.Reverse<Func<IConvergenceEngine<T>, IConvergenceEngine<T>>>())
+        {
+            engine = middleware(engine);
+        }
+        return engine;
+    }
+}
 
 
-// --- 3. Convergence engine orchestrating the core loop ---
-public class ConvergenceEngine<T>
+public class LoggingConvergenceEngine<T> : IConvergenceEngine<T>
+    where T : IComparable<T>
+{
+    public void Run(
+        Action code,
+        bool runFinalIteration = true,
+        bool unifyOnConvergence = true,
+        bool bailOnFirstReverseWhenIdle = false,
+        IConvergenceEngine<T> next = null)
+    {
+        Console.WriteLine("[🌟] Starting convergence cycle...");
+        next?.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
+        Console.WriteLine("[✅] Finished convergence cycle.");
+    }
+}
+
+
+// --- Convergence engine orchestrating the core loop ---
+public class ConvergenceEngine<T> : IConvergenceEngine<T>
+    where T : IComparable<T>
 {
     private readonly IEntropyController _entropy;
     private readonly IOperationLogHandler<T> _ops;
@@ -570,10 +667,18 @@ public class ConvergenceEngine<T>
     public void Run(Action code,
                     bool runFinalIteration = true,
                     bool unifyOnConvergence = true,
-                    bool bailOnFirstReverseWhenIdle = false)
+                    bool bailOnFirstReverseWhenIdle = false,
+                    IConvergenceEngine<T> next = null)
     {
+        if (next != null)
+        {
+            // If part of a chain, call the next engine
+            next.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
+            return;
+        }
+
         _redirect.Redirect();
-        _entropy.Initialize();
+        _entropy.Initialise();
 
         bool hadForwardCycle = false;
         bool skippedFirstForward = false;
@@ -655,23 +760,44 @@ public class ConvergenceEngine<T>
 }
 
 /// <summary>
-/// Initializes the metaphysical I/O trap, redirecting stdout into a memory buffer
+/// Initialises the metaphysical I/O trap, redirecting stdout into a memory buffer
 /// so we can toy with reality without the console knowing.
 /// </summary>
 internal static class AethericRedirectionGrid
 {
-    public static bool Initialized { get; } = true;
+    public static bool Initialised { get; } = true;
 
     // Store the actual StringWriter we create.
     private static readonly StringWriter _outputBuffer;
 
     public static StringWriter OutputBuffer => _outputBuffer;
 
+    private static bool PositronicAmbientIsUnInitialised()
+        => PositronicAmbient.Current == null;
+
+    private static void InitialiseDefaultRuntime()
+    {
+        if (PositronicAmbient.Current != null)
+            return; // Someone already called InitialiseWith()
+
+        var host = Host.CreateDefaultBuilder()
+            .ConfigureServices(services => services.AddPositronicRuntime())
+            .Build();
+
+        var runtime = host.Services.GetRequiredService<IPositronicRuntime>();
+        PositronicAmbient.Current = runtime;
+    }
+
     static AethericRedirectionGrid()
     {
         var originalOut = Console.Out;
         _outputBuffer = new StringWriter();
         Console.SetOut(_outputBuffer);
+
+        if (PositronicAmbientIsUnInitialised())
+        {
+            InitialiseDefaultRuntime();
+        }
 
         try
         {
@@ -681,7 +807,7 @@ internal static class AethericRedirectionGrid
         }
         catch (InvalidOperationException)
         {
-            // no runtime yet – defer until DI calls Initialize()
+            // no runtime yet – defer until DI calls Initialise()
         }
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
@@ -800,6 +926,7 @@ public static class OperationLog
 /// Operation that reverts the timeline to a previous snapshot after an Append.
 /// </summary>
 public class TimelineAppendOperation<T> : IOperation
+    where T : IComparable<T>
 {
     private readonly PositronicVariable<T> _variable;
     private readonly List<QuBit<T>> _backupTimeline;
@@ -828,6 +955,7 @@ public class TimelineAppendOperation<T> : IOperation
 /// Operation that reverts the timeline to a previous snapshot after a Replace.
 /// </summary>
 public class TimelineReplaceOperation<T> : IOperation
+    where T : IComparable<T>
 {
     private readonly PositronicVariable<T> _variable;
     private readonly List<QuBit<T>> _backupTimeline;
@@ -852,25 +980,26 @@ public class TimelineReplaceOperation<T> : IOperation
 }
 
 
-#region Initiate the matrix with NeuroCascadeInitializer
+#region Initiate the matrix with NeuroCascadeInitialiser
 /// <summary>
 /// The Matrix is everywhere. It is all around us. Even now, in this very room.
 /// </summary>
-public static class NeuroCascadeInitializer
+public static class NeuroCascadeInitialiser
 {
     /// <summary>
-    /// Activates the latent matrix initializer. It doesn’t *do* anything,
+    /// Activates the latent matrix Initialiser. It doesn’t *do* anything,
     /// but the side effects are, frankly, terrifying.
     /// </summary>
     public static void AutoEnable()
     {
-        var dummy = AethericRedirectionGrid.Initialized;
+        var dummy = AethericRedirectionGrid.Initialised;
     }
 }
 
 #endregion
 
 public class ReverseReplayEngine<T>
+    where T : IComparable<T>
 {
     private readonly IOperationLogHandler<T> _ops;
     private readonly IVersioningService<T> _versioningService;
@@ -1109,6 +1238,7 @@ public interface IPositronicVariableRegistry : IEnumerable<IPositronicVariable>
 /// </summary>
 /// <typeparam name="T">A type that implements IComparable.</typeparam>
 public class PositronicVariable<T> : IPositronicVariable
+    where T : IComparable<T>
 {
     // Determines at runtime if T is a value type.
     private readonly bool isValueType = typeof(T).IsValueType;
@@ -1164,7 +1294,7 @@ public class PositronicVariable<T> : IPositronicVariable
         }
 
         // Trigger the neuro-cascade init, etc.
-        var _ = AethericRedirectionGrid.Initialized;
+        var _ = AethericRedirectionGrid.Initialised;
     }
 
     private void Remember(IEnumerable<T> xs)
@@ -1193,14 +1323,14 @@ public class PositronicVariable<T> : IPositronicVariable
         // Ensure it’s been observed at least once so that
         // subsequent operator overloads won’t collapse accidentally.
         qb.Any();
-        ReplaceOrAppendOrUnify(qb);
+        ReplaceOrAppendOrUnify(qb, replace: true);
     }
 
     // Automatically enable simulation on first use.
     private static readonly bool _ = EnableSimulation();
     private static bool EnableSimulation()
     {
-        NeuroCascadeInitializer.AutoEnable();
+        NeuroCascadeInitialiser.AutoEnable();
         return true;
     }
 
@@ -1350,11 +1480,12 @@ public class PositronicVariable<T> : IPositronicVariable
         var opsHandler = new DefaultOperationLogHandler<T>();
         var redirect = new DefaultOutputRedirector(runtime);
 
-        var engine = new ConvergenceEngine<T>(
-            entropy,
-            opsHandler,
-            redirect,
-            runtime);
+        var engine = PositronicAmbient.Services.GetService<IConvergenceEngine<T>>()
+                ?? new ConvergenceEngine<T>(
+                       new DefaultEntropyController(runtime),
+                       new DefaultOperationLogHandler<T>(),
+                       new DefaultOutputRedirector(runtime),
+                       runtime);
 
         try
         {
@@ -1459,7 +1590,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var qb = other.GetCurrentQBit();
         qb.Any();
-        ReplaceOrAppendOrUnify(qb);
+        ReplaceOrAppendOrUnify(qb, replace: true);
     }
 
     /// <summary>
@@ -1469,7 +1600,7 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var qb = new QuBit<T>(new[] { scalarValue });
         qb.Any();
-        ReplaceOrAppendOrUnify(qb);
+        ReplaceOrAppendOrUnify(qb, replace: !isValueType);
     }
     /// <summary>
     /// Either replaces, appends, or unifies the current timeline slice with a new quantum slice.
@@ -1477,7 +1608,7 @@ public class PositronicVariable<T> : IPositronicVariable
     /// <summary>
     /// Either replaces, appends, or unifies the current timeline slice with a new quantum slice.
     /// </summary>
-    private void ReplaceOrAppendOrUnify(QuBit<T> qb)
+    private void ReplaceOrAppendOrUnify(QuBit<T> qb, bool replace)
     {
         var runtime = _runtime;
 
@@ -1488,23 +1619,22 @@ public class PositronicVariable<T> : IPositronicVariable
             if (SameStates(qb, timeline[^1]))
                 return;
 
-            // first ever forward-only write: *replace* the bootstrap slice
-            if (!_hasWrittenInitialForward)
+            // ── choose between REPLACE and MERGE ────────────────────
+            if (replace)
             {
-                _versioningService.OverwriteBootstrap(this,qb);
-                _hasWrittenInitialForward = true;
-                return;
+                // overwrite, but still *log* it so a final Undo() works
+                _versioningService.ReplaceLastSlice(this, qb);
             }
+            else                    // value-type scalar → merge
+            {
+                var merged = qb.ToCollapsedValues()
+                                          .Concat(timeline[^1].ToCollapsedValues())
+                                          .Distinct()
+                                          .ToList();
 
-            // subsequent writes in the same forward-only context:
-            //   – always **merge**,
-            //   – but put the newest value first so iterative algorithms
-            //     that read .First() see the fresh value.
-            var merged = qb.ToCollapsedValues()                 // newest first
-                               .Concat(timeline[^1].ToCollapsedValues())
-                               .Distinct()
-                               .ToList();
-            _versioningService.OverwriteBootstrap(this, qb);
+                var mergedQb = new QuBit<T>(merged); mergedQb.Any();
+                _versioningService.ReplaceLastSlice(this, mergedQb);
+            }
             return;
         }
 
@@ -2059,7 +2189,7 @@ public class PositronicVariable<T> : IPositronicVariable
 /// A quantum-aware neuron that collects Positronic inputs,
 /// applies an activation function, and fires an output into an alternate future.
 /// </summary>
-public class NeuralNodule<T> where T : struct, IComparable
+public class NeuralNodule<T> where T : struct, IComparable<T>
 {
     public List<PositronicVariable<T>> Inputs { get; } = new();
     public PositronicVariable<T> Output { get; }
@@ -2161,5 +2291,16 @@ public static class Arithmetic
         => x % y;
 
     public static dynamic Modulus(dynamic x, dynamic y)
-        => x % y;
+    {
+        if (x is double || x is float)
+            return x - y * Math.Floor(x / y);
+        return x % y;
+    }
+}
+
+public static class AntiVal
+{
+    public static PositronicVariable<T> GetOrCreate<T>()
+        where T : IComparable<T>
+        => PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
 }

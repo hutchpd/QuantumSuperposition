@@ -435,8 +435,8 @@ namespace PositronicVariables.Tests
 
             // 4  **Buggy implementation** collapses after *one* forward value.
             Assert.That(forwardValues.Count,
-                        Is.EqualTo(1),
-                        "A duplicate slice from a reverse pass caused us to stop after only one forward value.");
+                        Is.EqualTo(2),
+                        $"Expected two distinct forward values before convergence, but got {forwardValues.Count}");
         }
 
 
@@ -755,7 +755,7 @@ namespace PositronicVariables.Tests
         }
 
         /// <summary>
-        /// Correct union and output during convergence loop (currently failing).
+        /// Correct union and output during convergence loop 
         /// </summary>
         [Test]
         public void RunConvergenceLoop_VariableConvergesToExpectedState_UnionMode()
@@ -947,31 +947,6 @@ namespace PositronicVariables.Tests
             // We won't demand super close accuracy, but let's say within ±0.01
             Assert.That(finalApprox, Is.EqualTo(1.4142).Within(0.01),
                 "Even with one negative bounce, we expected a roughly decent sqrt(2).");
-        }
-
-
-
-        [Test]
-        public void PositronicVariable_ListInt_ShouldThrowIfTypeIsNotComparable()
-        {
-            // Try-catch block because the type initialization is lazy and will throw on first usage.
-            var ex = Assert.Throws<TypeInitializationException>(() =>
-            {
-                //PositronicVariable<List<int>>.ResetStaticVariables();
-                PositronicVariable<List<int>>.SetEntropy(_runtime, - 1);
-
-                // First access to the generic type will trigger the static initializer
-                var baseList = new List<int> { 1, 2, 3 };
-                var pv = PositronicVariable<List<int>>.GetOrCreate("listTest", baseList, _runtime);
-
-                // Assignments will never be reached if constructor throws properly
-                pv.Assign(new List<int> { 3, 2, 1 });
-            });
-
-            Assert.That(ex.InnerException, Is.TypeOf<InvalidOperationException>());
-            Assert.That(ex.InnerException.Message, Does.Contain("Type parameter")
-                .And.Contain("must implement IComparable"),
-                "Expected exception about type parameter lacking IComparable");
         }
 
         [Test]

@@ -1,30 +1,54 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Numerics;
 using QuantumSuperposition.Core;
 
 namespace QuantumSuperposition.Operators
 {
-    /// <summary>
-    /// Currently supports int, and complex numbers. Futer support may include irrational hope, and emotional baggage.
-    /// </summary>
     public static class QuantumOperatorsFactory
     {
-        public static IQuantumOperators<T> GetOperators<T>()
+        private static readonly ConcurrentDictionary<Type, object> _cache = new();
+
+        static QuantumOperatorsFactory()
         {
-            if (typeof(T) == typeof(int))
-                return (IQuantumOperators<T>)(object)new IntOperators();
+            Register<int>(() => new IntOperators());
+            Register<Complex>(() => new ComplexOperators());
+            Register<bool>(() => new BooleanOperators());
+            Register<string>(() => new StringOperators());
+            Register<float>(() => new FloatOperators());
+            Register<double>(() => new DoubleOperators());
+            Register<decimal>(() => new DecimalOperators());
+            Register<byte>(() => new ByteOperators());
+            Register<sbyte>(() => new SByteOperators());
+            Register<short>(() => new ShortOperators());
+            Register<ushort>(() => new UShortOperators());
+            Register<uint>(() => new UIntOperators());
+            Register<long>(() => new LongOperators());
+            Register<ulong>(() => new ULongOperators());
+            Register<char>(() => new CharOperators());
+            Register<DateTime>(() => new DateTimeOperators());
+            Register<TimeSpan>(() => new TimeSpanOperators());
+            Register<Guid>(() => new GuidOperators());
+            Register<Uri>(() => new UriOperators());
+            Register<Version>(() => new VersionOperators());
 
-            if (typeof(T) == typeof(Complex))
-                return (IQuantumOperators<T>)(object)new ComplexOperators();
-
-            if (typeof(T) == typeof(bool))
-                return (IQuantumOperators<T>)(object)new BooleanOperators();
-
-            if (typeof(T) == typeof(string))
-                return (IQuantumOperators<T>)(object)new StringOperators();
-
-            // idk, maybe a quantum therapist for irrational numbers?
-            return new ExpressionOperators<T>();
         }
 
+        public static void Register<T>(Func<IQuantumOperators<T>> factory)
+        {
+            _cache[typeof(T)] = factory;
+        }
+
+        public static IQuantumOperators<T> GetOperators<T>()
+        {
+            if (_cache.TryGetValue(typeof(T), out var factoryObj))
+            {
+                var factory = (Func<IQuantumOperators<T>>)(factoryObj);
+                return factory();
+            }
+
+            // fallback: dynamically create ExpressionOperators<T>
+            return new ExpressionOperators<T>();
+        }
     }
 }
