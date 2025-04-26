@@ -21,17 +21,12 @@ namespace QuantumSuperposition.DependencyInjection
         public static IServiceCollection AddPositronicRuntime(this IServiceCollection services)
         {
             services.AddScoped<ScopedPositronicVariableFactory>();
-            services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+
+            // Register the runtime as scoped and rely on constructor injection
             services.AddScoped<IPositronicVariableFactory>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+            services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
 
-            services.AddSingleton<IPositronicRuntime>(sp => {
-                var scoped = sp.GetRequiredService<ScopedPositronicVariableFactory>();
-                var rt = new DefaultPositronicRuntime(scoped, scoped);
-                rt.Reset();
-                PositronicAmbient.Current = rt;
-                return rt;
-            });
-
+            services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
 
             return services;
         }
@@ -48,13 +43,15 @@ public interface IPositronicVariableFactory
 
 public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPositronicVariableRegistry
 {
-    private readonly IPositronicRuntime _runtime;
+    private readonly IServiceProvider _provider;
+    private IPositronicRuntime Runtime => _provider.GetRequiredService<IPositronicRuntime>();
+
     private readonly Dictionary<(Type, string), IPositronicVariable> _registry
         = new();
 
-    public ScopedPositronicVariableFactory(IPositronicRuntime runtime)
+    public ScopedPositronicVariableFactory(IServiceProvider provider)
     {
-        _runtime = runtime;
+        _provider = provider;
     }
 
     public PositronicVariable<T> GetOrCreate<T>(string id, T initialValue)
@@ -63,7 +60,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         if (_registry.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
 
-        var created = new PositronicVariable<T>(initialValue, _runtime);
+        var created = new PositronicVariable<T>(initialValue, Runtime);
         _registry[key] = created;
         return created;
     }
@@ -73,17 +70,17 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         var key = (typeof(T), id);
         if (_registry.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
-        var created = new PositronicVariable<T>(default, _runtime);
+        var created = new PositronicVariable<T>(default, Runtime);
         _registry[key] = created;
         return created;
     }
 
     public PositronicVariable<T> GetOrCreate<T>(T initialValue)
     {
-        var key = (typeof(T), Guid.NewGuid().ToString());
+        var key = (typeof(T), "default");
         if (_registry.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
-        var created = new PositronicVariable<T>(initialValue, _runtime);
+        var created = new PositronicVariable<T>(initialValue, Runtime);
         _registry[key] = created;
         return created;
     }
@@ -1050,27 +1047,38 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 
     public DefaultPositronicRuntime(IPositronicVariableFactory factory, IPositronicVariableRegistry registry)
     {
-        // wire up I/O
         OracularStream = AethericRedirectionGrid.OutputBuffer;
-        // wire up DI
-        Factory = factory;
-        Variables = registry;
-        Registry = registry;
+
+        // Create a minimal fake IServiceProvider
+        var provider = new FallbackServiceProvider(this);
+        var scoped = new ScopedPositronicVariableFactory(provider);
+
+        Factory = scoped;
+        Variables = scoped;
+        Registry = scoped;
+
+        Reset();
+        PositronicAmbient.Current = this;
     }
 
-        /// <summary>
-        /// Fallback for static & test code.
-        /// </summary>
-        public DefaultPositronicRuntime()
+    private class FallbackServiceProvider : IServiceProvider
+    {
+        private readonly IPositronicRuntime _runtime;
+
+        public FallbackServiceProvider(IPositronicRuntime runtime)
         {
-            OracularStream = AethericRedirectionGrid.OutputBuffer;
-            var scoped = new ScopedPositronicVariableFactory(this);
-            Factory   = scoped;
-            Variables = scoped;
-            Registry  = scoped;
+            _runtime = runtime;
         }
 
-public void Reset()
+        public object GetService(Type serviceType)
+        {
+            if (serviceType == typeof(IPositronicRuntime))
+                return _runtime;
+            throw new InvalidOperationException($"Service {serviceType.Name} not available in fallback provider.");
+        }
+    }
+
+    public void Reset()
     {
         Entropy = 1;
         Converged = false;
@@ -1396,7 +1404,15 @@ public class PositronicVariable<T> : IPositronicVariable
     public void UnifyAll()
     {
 
-        var vals = _domain.ToList(); // union of **all** observed values
+        var vals = timeline                        // union of the *current* slices
+                               .SelectMany(qb => qb.ToCollapsedValues())
+                               .Distinct()
+                               .ToList();
+
+        // refresh the domain to match what we really kept
+        _domain.Clear();
+        foreach (var v in vals) _domain.Add(v);
+
 
         // build one canonical disjunction that still shows all possibilities
         var unified = new QuBit<T>(vals);
@@ -1502,10 +1518,11 @@ public class PositronicVariable<T> : IPositronicVariable
         if (_runtime.Entropy < 0)
         {
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
-
-            // Now mutate *this* variable’s timeline:
-            _versioningService.OverwriteBootstrap(this, rebuilt);
-            replacedInitialSlice = true;
+            if (timeline.Count == 0 || !SameStates(rebuilt, timeline[^1]))
+            {
+                timeline.Add(rebuilt);
+                OnTimelineAppended?.Invoke();
+            }
             return;
         }
 
