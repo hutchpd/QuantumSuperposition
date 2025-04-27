@@ -11,6 +11,7 @@ using System.Collections;
 using NUnit.Framework.Legacy;
 using Microsoft.Extensions.DependencyInjection;
 using QuantumSuperposition.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace PositronicVariables.Tests
 {
@@ -20,22 +21,31 @@ namespace PositronicVariables.Tests
         private ServiceProvider _provider;
         private IPositronicRuntime _runtime;
 
-        // Before each test, reset the runtime (and thus the global state).
         [SetUp]
         public void SetUp()
         {
-            _provider = new ServiceCollection()
-                           .AddPositronicRuntime()
-                           .BuildServiceProvider();
-            
-            _runtime = _provider.GetRequiredService<IPositronicRuntime>();
+            var hostBuilder = new HostBuilder()
+                .ConfigureServices(s => s.AddPositronicRuntime());
 
-            //PositronicVariable<int>.ResetStaticVariables(); 
+            // this will build the container, set Services _and_ Current for you:
+            PositronicAmbient.InitialiseWith(hostBuilder);
+
+            // now grab the runtime out of the ambient
+            _runtime = PositronicAmbient.Current;
+
             QuantumConfig.ForbidDefaultOnCollapse = true;
         }
 
         [TearDown]
-        public void TearDown() => _provider.Dispose();
+        public void TearDown()
+        {
+            // if your DI container is disposable, tear it down:
+            if (PositronicAmbient.Services is IDisposable disp)
+                disp.Dispose();
+
+            // now clear the ambient so the next test can StartFresh
+            PositronicAmbient.ResetAmbient();
+        }
 
         [Test]
         public void SnapshotOps_Should_Be_Cleared_Before_Convergence()

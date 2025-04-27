@@ -132,34 +132,57 @@ void IPositronicVariableRegistry.Clear()
 public static class PositronicAmbient
 {
     private static readonly AsyncLocal<IPositronicRuntime> _ambient = new();
-    private static readonly AsyncLocal<IServiceProvider> _services = new();
+    private static IPositronicRuntime _global;
+
+    private static readonly AsyncLocal<IServiceProvider> _servicesAmbient = new();
+    private static IServiceProvider _servicesGlobal;
+
+    public static bool IsInitialized => _ambient.Value is not null || _global is not null;
 
     public static IPositronicRuntime Current
     {
-        get => _ambient.Value
+        get => _ambient.Value ?? _global
             ?? throw new InvalidOperationException("Positronic runtime not yet created");
-        set => _ambient.Value = value;
+        set
+        {
+            _ambient.Value = value;
+            _global = value;           // keep a process-wide copy
+        }
     }
 
     public static IServiceProvider Services
     {
-        get => _services.Value
+        get => _servicesAmbient.Value ?? _servicesGlobal
             ?? throw new InvalidOperationException("Service provider not yet available");
-        private set => _services.Value = value;
+        private set
+        {
+            _servicesAmbient.Value = value;
+            _servicesGlobal = value;   // keep a process-wide copy
+        }
     }
 
     public static void InitialiseWith(IHostBuilder hostBuilder)
     {
-        if (_ambient.Value != null)
-            throw new InvalidOperationException("Positronic runtime already Initialised.");
+        if (IsInitialized)
+            throw new InvalidOperationException("Positronic runtime already initialised.");
 
         var host = hostBuilder.Build();
-        _services.Value = host.Services;
+        Services = host.Services;                   // uses the setter above
+        Current = host.Services.GetRequiredService<IPositronicRuntime>();
+    }
 
-        var runtime = host.Services.GetRequiredService<IPositronicRuntime>();
-        _ambient.Value = runtime;
+    /// <summary>
+    /// Clears out both the ambient and the global runtime+services.
+    /// </summary>
+    public static void ResetAmbient()
+    {
+        _ambient.Value = null;
+        _global = null;
+        _servicesAmbient.Value = null;
+        _servicesGlobal = null;
     }
 }
+
 
 public interface IConvergenceEngine<T>
     where T : IComparable<T>
@@ -794,10 +817,6 @@ internal static class AethericRedirectionGrid
         _outputBuffer = new StringWriter();
         Console.SetOut(_outputBuffer);
 
-        if (PositronicAmbientIsUnInitialised())
-        {
-            InitialiseDefaultRuntime();
-        }
 
         try
         {
@@ -852,13 +871,23 @@ internal static class AethericRedirectionGrid
                     .GetMethod("RunConvergenceLoop", BindingFlags.Public | BindingFlags.Static);
 
                 // Invoke the convergence loop by passing the code (which calls the entry point)
+                var rt = PositronicAmbient.Current;
+
                 methodInfo.Invoke(
                     null,
-                    new object[] { (Action)(() =>
-            {
-                entryPoint.Invoke(null, null);
-            }) }
-                );
+                    new object[]
+                    {
+                        rt,                                   // ❶ IPositronicRuntime
+                        (Action)(() =>                       // ❷ Action code
+                        {
+                            var p = entryPoint.GetParameters();
+                            object[] epArgs = p.Length == 0 ? null : new object[] { Array.Empty<string>() };
+                            entryPoint.Invoke(null, epArgs);
+                        }),
+                        true,                                // ❸ runFinalIteration (keep default)
+                        true,                                // ❹ unifyOnConvergence (keep default)
+                        false                                // ❺ bailOnFirstReverseWhenIdle (keep default)
+                    });
             }
             else
             {
@@ -2302,5 +2331,23 @@ public static class AntiVal
 {
     public static PositronicVariable<T> GetOrCreate<T>()
         where T : IComparable<T>
-        => PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
+    {
+        if (!PositronicAmbient.IsInitialized)
+        {
+            InitialiseDefaultRuntime();
+        }
+
+        return PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
+    }
+
+    private static bool PositronicAmbientIsUninitialized()
+        => PositronicAmbient.Current == null;
+
+    private static void InitialiseDefaultRuntime()
+    {
+        var hostBuilder = Host.CreateDefaultBuilder()
+            .ConfigureServices(services => services.AddPositronicRuntime());
+
+        PositronicAmbient.InitialiseWith(hostBuilder);
+    }
 }

@@ -9,8 +9,6 @@ public static class PositronicStartup
         if (PositronicAmbient.Current != null)
             return;
 
-
-
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices(services => services.AddPositronicRuntime())
             .Build();

@@ -1,22 +1,16 @@
-﻿
-internal static class Program
+﻿internal static class Program
 {
 
-
+    [PositronicEntry]
     private static void Main()
     {
-        PositronicStartup.Initialise();
-        MainLogic();
-    }
+        var temperature = AntiVal.GetOrCreate<double>();
 
-    [PositronicEntry]
-    private static void MainLogic()
-    {
-        var antival = AntiVal.GetOrCreate<Double>();
+        Console.WriteLine($"The temperature in c is {temperature}");
 
-        Console.WriteLine($"The antival is {antival}");
-        var val = (antival + 1) % 3;
-        Console.WriteLine($"The value is {val}");
-        antival.Assign(val);
+        temperature.Assign(temperature + 1);
+        temperature.Assign(temperature + 1);
+        temperature.Assign(10);
+
     }
 }
