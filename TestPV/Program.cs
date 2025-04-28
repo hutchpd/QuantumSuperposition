@@ -4,13 +4,11 @@
     [PositronicEntry]
     private static void Main()
     {
-        var temperature = AntiVal.GetOrCreate<double>();
+        var antival = AntiVal.GetOrCreate<Double>();
 
-        Console.WriteLine($"The temperature in c is {temperature}");
-
-        temperature.Assign(temperature + 1);
-        temperature.Assign(temperature + 1);
-        temperature.Assign(10);
-
+        Console.WriteLine($"The antival is {antival}");
+        var val = (antival + 1) % 3;
+        Console.WriteLine($"The value is {val}");
+        antival.Assign(val);
     }
 }
