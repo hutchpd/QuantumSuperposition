@@ -352,8 +352,6 @@ namespace PositronicVariables.Tests
                         "Every scalar write inside the convergence loop must produce its own new slice.");
         }
 
-
-
         [Test]
         public void SimpleProgram_BackwardsAssignments_Prints12()
         {

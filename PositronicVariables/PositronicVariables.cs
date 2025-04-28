@@ -1565,15 +1565,18 @@ public class PositronicVariable<T> : IPositronicVariable
     public void UnifyAll()
     {
         // grab exactly the final slice
-        var lastStates = timeline.Last().ToCollapsedValues().Distinct().ToArray();
+        var allStates = timeline
+            .SelectMany(qb => qb.ToCollapsedValues())
+            .Distinct()
+            .ToArray();
 
         // refresh the domain
         _domain.Clear();
-        foreach (var x in lastStates)
+        foreach (var x in allStates)
             _domain.Add(x);
 
         // replace entire timeline with just that one slice
-        var unified = new QuBit<T>(lastStates);
+        var unified = new QuBit<T>(allStates);
         unified.Any();
         timeline.Clear();
         timeline.Add(unified);
@@ -1673,7 +1676,7 @@ public class PositronicVariable<T> : IPositronicVariable
         Remember(qb.ToCollapsedValues());
 
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
-        if (runtime.Entropy < 0 && InConvergenceLoop && OperationLog.Peek() != null)
+        if (runtime.Entropy < 0 &&  OperationLog.Peek() != null)
         {
             // OK, this is a true reverse-replay pass
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
