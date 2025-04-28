@@ -747,6 +747,7 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             // skip the *very* first forward cycle if requested
             if (!(bailOnFirstReverseWhenIdle
                 && _entropy.Entropy > 0
+                && hadForwardCycle
                 && !skippedFirstForward))
             {
                 code();
@@ -803,10 +804,10 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             _runtime.Entropy = 1;
             _runtime.Converged = false;
 
-            code();
-
             // undo any reversible ops from that final pass
             _ops.UndoLastForwardCycle();
+
+            code();
 
             _runtime.Converged = true;
         }
@@ -1137,14 +1138,34 @@ public class ReverseReplayEngine<T>
         foreach (var op in poppedSnapshots.OfType<TimelineAppendOperation<T>>())
             _versioningService.RestoreLastSnapshot();
 
+         /* -----------------------------------------------------------
+         *  Which “seeds” should we replay?
+         *
+         *  • Outside the convergence loop (no reversible ops at all)
+         *      – we want every scalar append that happened in the
+         *        forward half-cycle   ⇒ use _forwardValues_ ∪ incoming
+         *
+         *  • Inside the loop *with* reversible ops
+         *      – if the half-cycle ended in a *scalar* overwrite
+         *        (snapshots > reversibles) we should rebuild **only**
+         *        from the incoming slice so we don’t resurrect the
+         *        intermediate states (2, 3, …)
+         *      – otherwise (no scalar overwrite) keep the old rule
+         * --------------------------------------------------------- */
+        
+        bool scalarWriteDetected = poppedReversibles.Count > 0 &&
+        poppedSnapshots.Count > poppedReversibles.Count;
+        
+        bool includeForward = poppedReversibles.Count == 0      // outside the loop
+                                      || !scalarWriteDetected;          // loop but no scalar
+        
+        IEnumerable < T > seeds = includeForward
+                    ? forwardValues
+                        .Union(incoming.ToCollapsedValues())
+                        .Except(variable.timeline[0].ToCollapsedValues())   // drop bootstrap
+                        .Distinct()
+                    : incoming.ToCollapsedValues();                           // seed-only mode
 
-
-        //  Rebuild: for each seed (old forwards ∪ incoming), replay all reversibles
-        var seeds = forwardValues                // only the states produced *during* the
-            .Union(incoming.ToCollapsedValues())
-            .Except(variable.timeline[0]        // ⭐ strip the original bootstrap value
-                 .ToCollapsedValues())
-            .Distinct();
 
         var rebuiltSet = new HashSet<T>();
 
@@ -1332,7 +1353,7 @@ public class PositronicVariable<T> : IPositronicVariable
     private readonly bool isValueType = typeof(T).IsValueType;
     private readonly HashSet<T> _domain = new();
     private static bool _reverseReplayDone;
-    internal static int _loopDepth;
+    public static int _loopDepth;
     private readonly IPositronicRuntime _runtime;
     private bool _hasWrittenInitialForward = false;
     internal void NotifyFirstAppend() => replacedInitialSlice = true;
@@ -1652,109 +1673,62 @@ public class PositronicVariable<T> : IPositronicVariable
         Remember(qb.ToCollapsedValues());
 
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
-        if (_runtime.Entropy < 0)
+        if (runtime.Entropy < 0 && InConvergenceLoop && OperationLog.Peek() != null)
         {
-            // ALWAYS rebuild the half‐cycle, even if the slice equals the last one
+            // OK, this is a true reverse-replay pass
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
             timeline.Add(rebuilt);
             OnTimelineAppended?.Invoke();
             return;
         }
 
-        // --- Forward‐time pass, but we’ve already replaced the first slice ---
-        //   Instead of appending a duplicate slice, *replace* the sole slice
-        if (_runtime.Entropy > 0
-            && replacedInitialSlice
-            && timeline.Count == 1)
+        // --- Forward‐time pass (Entropy > 0) -----------------------------
+        if (runtime.Entropy > 0)
         {
-            if (!InConvergenceLoop)                       // ← we’re outside the loop
+            // — overwrite bootstrap if that’s all we have
+            if (replacedInitialSlice && timeline.Count == 1)
             {
-                // we are in “straight-forward, single-thread” land:
-                // overwrite the slicence instead of union-merging so that iterative
-                // algorithms (e.g. babylon sqrt) see the newest scalar value.
                 _versioningService.OverwriteBootstrap(this, qb);
                 return;
             }
 
-            bool alreadyAppendedThisHalfCycle =
-                    OperationLog.Peek() is TimelineAppendOperation<T> a
-                    && ReferenceEquals(a.Variable, this);
-
-            if (alreadyAppendedThisHalfCycle)
+            // — first real forward write: snapshot+append
+            if (!replacedInitialSlice && timeline.Count == 1)
             {
-                _versioningService.SnapshotAppend(this, qb); // treat it like a fresh slice
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
+                replacedInitialSlice = true;
                 return;
             }
 
-            /* --- this is the *first* write of the half-cycle → normal append --- */
-            if (!SameStates(qb, timeline[^1]))          // ← ignore exact duplicates
+            // — every subsequent forward write: scalar vs. merge
+            if (!replace || (!_ops.HadForwardAppend && !SameStates(qb, timeline[^1])))
             {
                 _versioningService.SnapshotAppend(this, qb);
                 _ops.HadForwardAppend = true;
             }
-            return;
-        }
-
-        // --- If globally converged, just merge or overwrite the last slice ---
-        if (runtime.Converged)
-        {
-            var collapsed = qb.ToCollapsedValues();
-            if (collapsed.Count() == 1)
-            {
-                _versioningService.OverwriteBootstrap(this, qb);
-            }
             else
             {
                 var merged = timeline[^1].ToCollapsedValues()
-                                         .Union(collapsed)
-                                         .Distinct()
-                                         .ToList();
-                _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
+                                                     .Union(qb.ToCollapsedValues())
+                                                     .Distinct()
+                                                     .ToArray();
+                var mergedQb = new QuBit<T>(merged);
+                mergedQb.Any();
+                _versioningService.ReplaceLastSlice(this, mergedQb);
             }
+
+            // — detect any small cycle and unify
+            for (int cycle = 2; cycle <= 20; cycle++)
+                if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
+                {
+                    Unify(cycle);
+                    break;
+                }
+
             return;
         }
 
-        // --- First genuine forward tick: append alongside the original slice ---
-        if (!replacedInitialSlice && timeline.Count == 1)
-        {
-            // fully delegate snapshot + append (including hooks) to the service
-            _versioningService.SnapshotAppend(this, qb);
-            _ops.HadForwardAppend = true;
-            replacedInitialSlice = true;
-            return;
-        }
-
-        // --- Every subsequent forward tick: normal append ---
-        if (!_ops.HadForwardAppend && !SameStates(qb, timeline[^1])) // skip dups
-        {
-            _versioningService.SnapshotAppend(this, qb);
-            _ops.HadForwardAppend = true;
-        }
-        else
-        {
-            // “replace” semantics: merge into the last slice, record a replace-op
-            var backup = timeline
-                .Select(s => new QuBit<T>(s.ToCollapsedValues().ToArray()))
-                .ToList();
-
-            var merged = timeline[^1].ToCollapsedValues()
-                             .Union(qb.ToCollapsedValues())
-                             .Distinct()
-                             .ToList();
-
-            _versioningService.ReplaceLastSlice(this, new QuBit<T>(merged));
-        }
-
-        // Check for cycles to trigger unification
-        for (int cycle = 2; cycle <= 20; cycle++)
-        {
-            if (timeline.Count >= cycle + 1
-                && SameStates(timeline[^1], timeline[^(cycle + 1)]))
-            {
-                Unify(cycle);
-                break;
-            }
-        }
     }
 
 

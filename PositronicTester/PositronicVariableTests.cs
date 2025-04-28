@@ -322,6 +322,39 @@ namespace PositronicVariables.Tests
         #region IOAndFormatting
 
         [Test]
+        public void ConvergenceLoop_ScalarWrites_Always_AppendDistinctSlices()
+        {
+            // Arrange: start at negative time so we see all slices
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
+            var v = PositronicVariable<int>.GetOrCreate("sliceTest", 0, _runtime);
+
+            // Act: run one full negative→positive pass, but don’t unify
+            PositronicVariable<int>.RunConvergenceLoop(
+                _runtime,
+                () =>
+                {
+                    v.Assign(v + 1);   // should snapshot 1
+                    v.Assign(v + 2);   // should snapshot 3 (1+2)
+                    v.Assign(v + 3);   // should snapshot 6 (3+3)
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: false,
+                bailOnFirstReverseWhenIdle: true);
+
+            // Grab the private timeline via reflection (or use your Snapshot helper)
+            var timelineField = typeof(PositronicVariable<int>)
+                .GetField("timeline", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+            var slices = (List<QuBit<int>>)timelineField.GetValue(v);
+
+            // Assert: we expect four slices: [0], [1], [3], [6]
+            Assert.That(slices.Select(qb => qb.ToCollapsedValues().Single()),
+                        Is.EqualTo(new[] { 0, 1, 3, 6 }),
+                        "Every scalar write inside the convergence loop must produce its own new slice.");
+        }
+
+
+
+        [Test]
         public void SimpleProgram_BackwardsAssignments_Prints12()
         {
             // Arrange
