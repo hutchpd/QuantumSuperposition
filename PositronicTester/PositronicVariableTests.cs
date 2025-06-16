@@ -209,6 +209,78 @@ namespace PositronicVariables.Tests
         }
 
         [Test]
+        public void ForwardWrite_AfterLoopUnify_AppendsRatherThanOverwrites()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("chk", 0, _runtime);
+
+            // force a single‑slice timeline (simulate an in‑loop Unify)
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () => {
+                v.Assign(v + 1);
+                v.Unify(2);   // timeline length == 1 again
+            }, runFinalIteration: false);
+
+            var before = v.TimelineLength;                 // must be 1
+            PositronicVariable<int>.SetEntropy(_runtime, +1);
+            v.Assign(99);                                  // second forward write
+
+            Assert.That(v.TimelineLength, Is.EqualTo(before + 1),
+                "Second in‑loop forward write should append, not overwrite");
+        }
+
+        [Test]
+        public void Engine_Stops_When_UnifyDisabled()
+        {
+            int iterations = 0;
+            PositronicVariable<int>.RunConvergenceLoop(
+                _runtime,
+                () => iterations++,
+                runFinalIteration: false,
+                unifyOnConvergence: false);
+
+            Assert.That(iterations, Is.EqualTo(2),     // one reverse + one forward
+                "Engine should bail out after one round‑trip when unification is disabled");
+        }
+
+        [Test]
+        public void ReverseReplay_Collects_All_Forward_Appends()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("rr", 0, _runtime);
+            PositronicVariable<int>.SetEntropy(_runtime, +1);
+            v.Assign(1);                           // append slice 1
+            v.Assign(2);                           // append slice 2
+
+            var snap = v.GetCurrentQBit();         // {2}
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
+            v.Assign(snap);                        // triggers reverse replay
+
+            var final = v.GetCurrentQBit().ToCollapsedValues().OrderBy(x => x);
+            Assert.That(final, Is.EquivalentTo(new[] { 1, 2 }));
+        }
+
+
+            [Test]
+        public void ForwardHalfCycle_ShouldAppend_WhenReplaceTrue()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("antivalProbe", 0, _runtime);
+            PositronicVariable<int>.SetEntropy(_runtime, +1);   // forward, *outside* loop
+
+            v.Assign(new QuBit<int>(new[] { 1 }));  // replace==true but should APPEND
+            Assert.That(v.TimelineLength, Is.EqualTo(2), "First forward write must append, not overwrite");
+        }
+
+        [Test]
+        public void FirstScalarWrite_OutsideLoop_ShouldNotRewriteBootstrap()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("scalarProbe", 0, _runtime);
+            PositronicVariable<int>.SetEntropy(_runtime, +1);   // forward, not in loop
+
+            v.Assign(1);                                        // replace == false
+            Assert.That(v.TimelineLength, Is.EqualTo(2), "Bootstrap slice must remain untouched");
+        }
+
+
+
+        [Test]
         public void ModPlusModulus_Reversal_Should_Restore_Original_Value()
         {
             // Arrange
@@ -322,6 +394,21 @@ namespace PositronicVariables.Tests
         #region IOAndFormatting
 
         [Test]
+        public void ScalarAssign_InLoop_ShouldNotTouchBootstrap()
+        {
+            PositronicVariable<int>.SetEntropy(_runtime, -1);
+            var v = PositronicVariable<int>.GetOrCreate("p", 0, _runtime);
+
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () => v.Assign(v + 1),
+                                                       runFinalIteration: false);
+
+            var firstSlice = v.GetSlice(v.TimelineLength - 1)         // slice[0]
+                              .ToCollapsedValues().Single();
+            Assert.That(firstSlice, Is.EqualTo(0));                    // should still be 0
+        }
+
+
+        [Test]
         public void ConvergenceLoop_ScalarWrites_Always_AppendDistinctSlices()
         {
             // Arrange: start at negative time so we see all slices
@@ -335,11 +422,11 @@ namespace PositronicVariables.Tests
                 {
                     v.Assign(v + 1);   // should snapshot 1
                     v.Assign(v + 2);   // should snapshot 3 (1+2)
-                    v.Assign(v + 3);   // should snapshot 6 (3+3)
+                    v.Assign(v + 3);   // should snapshot 6 (3+3)   
                 },
                 runFinalIteration: false,
                 unifyOnConvergence: false,
-                bailOnFirstReverseWhenIdle: true);
+                bailOnFirstReverseWhenIdle: false);
 
             // Grab the private timeline via reflection (or use your Snapshot helper)
             var timelineField = typeof(PositronicVariable<int>)
@@ -376,18 +463,32 @@ namespace PositronicVariables.Tests
         }
 
         [Test]
+        public void FirstForwardScalar_Appends_NotMerges()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("probe", 0, _runtime);
+            PositronicVariable<int>.SetEntropy(_runtime, +1);   // forward, outside loop
+
+            v.Assign(1);                                        // scalar write
+
+            Assert.That(v.TimelineLength, Is.EqualTo(2));
+            Assert.That(v.GetSlice(1).ToCollapsedValues().Single(), Is.EqualTo(0));
+            Assert.That(v.GetCurrentQBit().ToCollapsedValues().Single(), Is.EqualTo(1));
+        }
+
+
+        [Test]
         public void BackwardsAssignmentOfScalarPlusAdds_YieldsCorrectAntiValue()
         {
             // Arrange
             var v = PositronicVariable<int>.GetOrCreate("x", 0, _runtime);
 
-            // 1️⃣ forward‐only pass: record +2, +3, then scalar assign 7
+            // forward‐only pass: record +2, +3, then scalar assign 7
             PositronicVariable<int>.SetEntropy(_runtime, +1);
             v.Assign(v + 2);
             v.Assign(v + 3);
             v.Assign(7);
 
-            // 2️⃣ now go backwards
+            // now go backwards
             PositronicVariable<int>.SetEntropy(_runtime, -1);
             // trigger the replay
             v.Assign(v.GetCurrentQBit());
@@ -404,14 +505,11 @@ namespace PositronicVariables.Tests
         [Test]
         public void UnifiedQuBit_ToString_ShouldDisplayFullUnion()
         {
-            // Arrange
             var qb = new QuBit<int>(new[] { 1, 0, 2 });
             qb.Any();
 
-            // Act
             var text = qb.ToString();
 
-            // Assert
             Assert.That(text, Does.Contain("any("));
             Assert.That(text, Does.Contain("0"));
             Assert.That(text, Does.Contain("1"));
@@ -425,16 +523,13 @@ namespace PositronicVariables.Tests
         [Test]
         public void Antival_CyclesThrough0_1_2_AndEventuallyConvergesToAllThree()
         {
-            // Arrange
             var v = PositronicVariable<int>.GetOrCreate("a", -1, _runtime);
 
-            // Act
             PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
                 v.Assign((v + 1) % 3);
             });
 
-            // Assert
             var result = v.ToValues().OrderBy(x => x).ToList();
             Assert.That(result, Is.EquivalentTo(new[] { 0, 1, 2 }));
         }
@@ -442,15 +537,12 @@ namespace PositronicVariables.Tests
         [Test]
         public void ZeroConvergence_NoRepeatedStates_AlwaysUnique()
         {
-            // Arrange
             var v = PositronicVariable<int>.GetOrCreate("z", 10, _runtime);
             PositronicVariable<int>.SetEntropy(_runtime, -1);
 
-            // Act
             for (int i = 0; i < 10; i++)
                 v.Assign((v + 2) % 9999);
 
-            // Assert
             Assert.That(v.Converged(), Is.EqualTo(0));
         }
 
@@ -487,10 +579,6 @@ namespace PositronicVariables.Tests
         }
 
 
-        /* ------------------------------------------------------------------ *
-         *  H Y P O T H E S I S   ①                                           *
-         * ------------------------------------------------------------------ */
-
         [Test]
         public void QuickPath_SecondAssign_ShouldMergeNotOverwrite()
         {
@@ -503,60 +591,60 @@ namespace PositronicVariables.Tests
 
             var values = v.ToValues().OrderBy(x => x).ToArray();
 
-            /* EXPECTED   = { 0,1,2 }
-             * ACTUAL NOW = { 2 }                                 ⟵ should fail
-             */
             Assert.That(values, Is.EquivalentTo(new[] { 0, 1, 2 }),
                 "Quick-path forward writes overwrite instead of merging.");
         }
 
-        /* ------------------------------------------------------------------ *
-         *  H Y P O T H E S I S   ②                                           *
-         * ------------------------------------------------------------------ */
+        [Test]
+        public void SecondForwardScalar_ShouldUnionWithExistingSlice()
+        {
+            PositronicVariable<int>.SetEntropy(_runtime, +1);
+            var v = PositronicVariable<int>.GetOrCreate("q", 0, _runtime);
+            v.Assign(1); 
+            v.Assign(2); 
+
+            Assert.That(v.GetCurrentQBit().ToCollapsedValues(),
+                        Is.EquivalentTo(new[] { 0, 1, 2 }));
+        }
+
 
         [Test]
         public void QuickPath_WritesAreNotRolledBackByFinalUndo()
         {
-            // 1️⃣ forward-only, single assignment
+            // forward-only, single assignment
             PositronicVariable<int>.SetEntropy(_runtime, +1);
             var v = PositronicVariable<int>.GetOrCreate("x", 0, _runtime);
             v.Assign(1);
 
-            // 2️⃣ simulate what ConvergenceEngine does at the *very* end:
+            // simulate what ConvergenceEngine does at the *very* end:
             OperationLog.ReverseLastOperations();
 
             // If the write had been logged, Undo() would have restored the 0.
             var final = v.ToValues().Single();
 
-            /* EXPECTED   = 0
-             * ACTUAL NOW = 1                                       ⟵ should fail
-             */
+
             Assert.That(final, Is.EqualTo(0),
                 "The final reverse pass did not undo the quick-path overwrite—" +
                 "suggests the write was never recorded.");
         }
 
-        /* ------------------------------------------------------------------ *
-         *  H Y P O T H E S I S   ③                                           *
-         * ------------------------------------------------------------------ */
-
         [Test]
         public void UnifyCycle_FailsOnlyBecauseEarlierValuesWereDropped()
         {
-            //  ❶  replicate exactly the original arrange
+            //  replicate exactly the original arrange
             var v = PositronicVariable<int>.GetOrCreate("probe", 0, _runtime);
             v.Assign(1);
             v.Assign(2);               // timeline intended to be [0,1,2]
 
-            //  ❷  sanity-check before calling Unify
+            //  sanity-check before calling Unify
             var before = v.ToValues().OrderBy(x => x).ToArray();
             Assert.That(before, Is.EquivalentTo(new[] { 0, 1, 2 }),
                 "Pre-condition failed: values already missing *before* Unify().");
 
-            //  ❸  call the API under test
+            //  call the API under test
             v.Unify(3);
 
-            //  ❹  it should still be the same set
+            //  it should still be the same set
             var after = v.ToValues().OrderBy(x => x).ToArray();
             Assert.That(after, Is.EquivalentTo(new[] { 0, 1, 2 }),
                 "Unify(count) must preserve the whole set.");

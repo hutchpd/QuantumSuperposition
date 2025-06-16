@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
 using System.Numerics;
 using System.Collections;
-using Microsoft.Win32;
 using Microsoft.Extensions.Hosting;
 using QuantumSuperposition.DependencyInjection;
 
@@ -116,8 +115,8 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         _registry[key] = v;
     }
 
-void IPositronicVariableRegistry.Clear()
-        => _registry.Clear();
+    void IPositronicVariableRegistry.Clear()
+            => _registry.Clear();
 
     public IEnumerator<IPositronicVariable> GetEnumerator()
         => _registry.Values.GetEnumerator();
@@ -442,19 +441,19 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
     public ReversibleModulusOp(PositronicVariable<T> variable, T divisor, IPositronicRuntime runtime)
     {
-        Variable  = variable;
-        _divisor  = divisor;
+        Variable = variable;
+        _divisor = divisor;
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
 
         // snapshot the value *before* the %
-        Original  = variable.GetCurrentQBit().ToCollapsedValues().First();
+        Original = variable.GetCurrentQBit().ToCollapsedValues().First();
         // user the arithmetic class rather than dynamic
         _quotient = Arithmetic.Divide(Original, divisor);
     }
 
     // Forward:   r  ⟶  q·d + r  (rebuild the original value)
     public T ApplyForward(T remainder)
-       => Arithmetic.Add( Arithmetic.Multiply(_quotient, _divisor), remainder);
+       => Arithmetic.Add(Arithmetic.Multiply(_quotient, _divisor), remainder);
 
     // Inverse:   x  ⟶  x % d   (rarely used by the engine but nice to have)
     public T ApplyInverse(T value)
@@ -552,10 +551,10 @@ public class DefaultVersioningService<T> : IVersioningService<T>
             _snapshots.Push((variable, copy));
 
             // append the new qubit
-            OperationLog.Record(new TimelineAppendOperation<T>(variable, copy));
+            OperationLog.Record(new TimelineAppendOperation<T>(variable, copy, newSlice));
 
             // tell the variable its bootstrap has definitely gone
-            variable.NotifyFirstAppend();  
+            variable.NotifyFirstAppend();
 
             // fire the hook so the convergence engine knows “something changed”
             variable.timeline.Add(newSlice);
@@ -739,7 +738,9 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
         bool skippedFirstForward = false;
         int iteration = 0;
 
-        while (!_runtime.Converged && iteration < _maxIters)
+        int hardLimit = unifyOnConvergence ? _maxIters : 2;
+
+        while (!_runtime.Converged && iteration < hardLimit)
         {
             // reset at the *start* of every half-cycle, not just forward ones
             _ops.HadForwardAppend = false; // Why? Guarantees HadForwardAppend is in a known state; without this the engine occasionally thought “nothing happened” and broke the snapshot-clearing logic.
@@ -787,11 +788,11 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             // trigger a self-assignment on every variable so that
             // ReverseReplayEngine can rebuild the original values
             if (_entropy.Entropy < 0)
-                {
-                    foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
+            {
+                foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
                     ((PositronicVariable<T>)v)
                                 .Assign(((PositronicVariable<T>)v).GetCurrentQBit());
-                }
+            }
 
             iteration++;
         }
@@ -821,12 +822,12 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
         {
             v.ResetDomainToCurrent();
 
-                /* If we bailed out because we hit _maxIters without detecting a
-               cycle, force a collapse to the most recent slice so the runtime
-               ends in a single, deterministic value (needed by
-               OperationLog_And_Domain_Are_Cleared_After_Convergence).        */
-            if (!_runtime.Converged && v.timeline.Count > 1)
-                        v.CollapseToLastSlice();
+            /*  Only create a deterministic singleton when the caller asked the
+     engine to unify on convergence.  When `unifyOnConvergence` is
+     false (timeline‑diagnostics scenarios) we must leave every
+     slice intact.                                                */
+            if (unifyOnConvergence && !_runtime.Converged && v.timeline.Count > 1)
+                v.CollapseToLastSlice();
 
         }
     }
@@ -1010,17 +1011,19 @@ public class TimelineAppendOperation<T> : IOperation
     private readonly PositronicVariable<T> _variable;
     private readonly List<QuBit<T>> _backupTimeline;
     public PositronicVariable<T> Variable => _variable;
-
+    public QuBit<T> AddedSlice { get; }
 
     public string OperationName => "TimelineAppend";
 
-    public TimelineAppendOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline)
+    public TimelineAppendOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline, QuBit<T> added)
     {
         _variable = variable;
         // Make a safe copy so we can fully restore:
         _backupTimeline = backupTimeline
             .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
             .ToList();
+        AddedSlice = added;
+
     }
 
     public void Undo()
@@ -1040,6 +1043,7 @@ public class TimelineReplaceOperation<T> : IOperation
     private readonly List<QuBit<T>> _backupTimeline;
 
     public PositronicVariable<T> Variable => _variable;
+    internal QuBit<T> ReplacedSlice => _backupTimeline[^1];
 
     public string OperationName => "TimelineReplace";
 
@@ -1106,9 +1110,7 @@ public class ReverseReplayEngine<T>
             switch (top)
             {
                 case TimelineAppendOperation<T> tap:
-                    forwardValues.UnionWith(tap.Variable
-                                                                    .GetCurrentQBit()
-                                                                    .ToCollapsedValues());
+                    forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
                     poppedSnapshots.Add(tap);
                     OperationLog.Pop();
                     continue;
@@ -1117,6 +1119,7 @@ public class ReverseReplayEngine<T>
                     forwardValues.UnionWith(trp.Variable
                                                                     .GetCurrentQBit()
                                                                     .ToCollapsedValues());
+                    forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
                     poppedSnapshots.Add(trp);
                     OperationLog.Pop();
                     continue;
@@ -1132,39 +1135,74 @@ public class ReverseReplayEngine<T>
             break;
         }
 
-        // Rewind the timeline back to the state that preceded
-        //    the whole forward half-cycle **only for operations that
-        //    actually captured a snapshot** (i.e. TimelineAppendOperation).
-        foreach (var op in poppedSnapshots.OfType<TimelineAppendOperation<T>>())
-            _versioningService.RestoreLastSnapshot();
+        // “rewind” step so that it undoes both appends and replaces:
+        foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
+            op.Undo();
 
-         /* -----------------------------------------------------------
-         *  Which “seeds” should we replay?
-         *
-         *  • Outside the convergence loop (no reversible ops at all)
-         *      – we want every scalar append that happened in the
-         *        forward half-cycle   ⇒ use _forwardValues_ ∪ incoming
-         *
-         *  • Inside the loop *with* reversible ops
-         *      – if the half-cycle ended in a *scalar* overwrite
-         *        (snapshots > reversibles) we should rebuild **only**
-         *        from the incoming slice so we don’t resurrect the
-         *        intermediate states (2, 3, …)
-         *      – otherwise (no scalar overwrite) keep the old rule
-         * --------------------------------------------------------- */
-        
+        /* -----------------------------------------------------------
+        *  Which “seeds” should we replay?
+        *
+        *  • Outside the convergence loop (no reversible ops at all)
+        *      – we want every scalar append that happened in the
+        *        forward half-cycle   ⇒ use _forwardValues_ ∪ incoming
+        *
+        *  • Inside the loop *with* reversible ops
+        *      – if the half-cycle ended in a *scalar* overwrite
+        *        (snapshots > reversibles) we should rebuild **only**
+        *        from the incoming slice so we don’t resurrect the
+        *        intermediate states (2, 3, …)
+        *      – otherwise (no scalar overwrite) keep the old rule
+        * --------------------------------------------------------- */
+
         bool scalarWriteDetected = poppedReversibles.Count > 0 &&
         poppedSnapshots.Count > poppedReversibles.Count;
-        
-        bool includeForward = poppedReversibles.Count == 0      // outside the loop
-                                      || !scalarWriteDetected;          // loop but no scalar
-        
-        IEnumerable < T > seeds = includeForward
-                    ? forwardValues
-                        .Union(incoming.ToCollapsedValues())
-                        .Except(variable.timeline[0].ToCollapsedValues())   // drop bootstrap
-                        .Distinct()
-                    : incoming.ToCollapsedValues();                           // seed-only mode
+
+        bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
+
+        IEnumerable<T> seeds;
+
+        if (!scalarWriteDetected)                           // previous logic
+        {
+            seeds = includeForward
+                                ? forwardValues
+                                   .Union(incoming.ToCollapsedValues())
+                                   .Except(variable.timeline[0].ToCollapsedValues())
+                                   .Distinct()
+                                : incoming.ToCollapsedValues();
+        }
+        else                                                // scalar overwrite
+        {
+            /*  Two possibilities:
+ *  a) the overwrite was done with ReplaceLastSlice ⟶ there
+ *     is a TimelineReplaceOperation we can consult;
+ *  b) it was a *scalar append* (replace == false) so
+ *     no Replace op exists – in that case we only want
+ *     the incoming value itself.
+ */
+
+            IEnumerable<T> baseValues = variable.timeline[0].ToCollapsedValues();
+
+            if (poppedSnapshots.OfType<TimelineReplaceOperation<T>>().Any())
+            {
+                var replacedSlice = poppedSnapshots
+                                                 .OfType<TimelineReplaceOperation<T>>()
+                                                 .First()
+                                                 .ReplacedSlice
+                                                 .ToCollapsedValues();
+                
+                seeds = incoming.ToCollapsedValues()
+                                    .Except(replacedSlice)                  // drop the value we just replaced
+                                    .Except(variable.timeline[0]            // …and never resurrect bootstrap
+                                                   .ToCollapsedValues())
+                                    .Distinct();
+            }
+            else
+            {
+                seeds = incoming.ToCollapsedValues()
+                                               .Except(baseValues)
+                                               .Distinct();
+            }
+        }
 
 
         var rebuiltSet = new HashSet<T>();
@@ -1187,6 +1225,20 @@ public class ReverseReplayEngine<T>
         // Package into one QuBit<T> and return
         var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
         rebuilt.Any();
+
+        /*  When a scalar overwrite closed the forward half‑cycle we
+ *  want that new scalar – and *only* that scalar – to survive.
+ *  The older slices (bootstrap + intermediate) are discarded.
+ */
+        if (scalarWriteDetected)
+        {
+            variable.timeline.Clear();
+            variable.timeline.Add(rebuilt);
+        }
+        else
+        {
+            variable.timeline.Add(rebuilt);
+        }
 
         return rebuilt;
     }
@@ -1408,9 +1460,9 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     private void Remember(IEnumerable<T> xs)
-     {
-         foreach (var x in xs) _domain.Add(x);
-     }
+    {
+        foreach (var x in xs) _domain.Add(x);
+    }
 
     internal static void ResetReverseReplayFlag()
     {
@@ -1641,22 +1693,68 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var runtime = _runtime;
 
+        /* -------------------------------------------------------------
+*  Inside a convergence‑loop, forward half‑cycles follow
+ *  different rules:
+ *      – scalar  writes  (replace == false) **append**
+ *      – qubit / union   (replace == true)  **overwrite**
+ *    …but never touch the bootstrap slice.
+ * ------------------------------------------------------------- */
+        if (runtime.Entropy > 0 && InConvergenceLoop)
+        {
+            if (timeline.Count == 1)                     // still on bootstrap
+            {
+                _versioningService.SnapshotAppend(this, qb);   // always append
+                _ops.HadForwardAppend = true;
+            }
+            else if (replace)                            // overwrite/merge
+            {
+                _versioningService.ReplaceLastSlice(this, qb);
+            }
+            else                                         // scalar – append
+            {
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
+            }
+            return;
+        }
+
+        // ensure every write in-loop is recorded:
+        if (runtime.Entropy < 0 && InConvergenceLoop)
+        {
+            /* the engine injects v.Assign(v.GetCurrentQBit()) when we first
+ * flip from +1 → –1; that write must be a NO‑OP.  Detect it by
+ * reference identity (same QuBit instance).                       */
+            if (ReferenceEquals(qb, timeline[^1]))
+                return;                     // ignore self‑assignment
+
+            _versioningService.SnapshotAppend(this, qb);   // user write → keep
+            _ops.HadForwardAppend = true;
+            return;
+        }
+
         // fast path for any forward write _outside_ the convergence loop
         if (runtime.Entropy > 0 && !InConvergenceLoop)
         {
-            // 1) ONLY merge if this is a scalar write (replace==false)
-            //    AND we still only have the one bootstrap slice:
-            if (!replace && timeline.Count == 1)
+            // ① first ever forward write OR first after Unify → APPEND
+            if (timeline.Count == 1)
             {
-                // merge old+new into the one slice
-                var merged = timeline[0]
-                    .ToCollapsedValues()
-                    .Union(qb.ToCollapsedValues())
-                    .Distinct()
-                    .ToArray();
-
-                var mergedQb = new QuBit<T>(merged);
-                mergedQb.Any();
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
+                replacedInitialSlice = true;
+                return;
+            }
+            if (!replace)
+            {
+                var lastStates = timeline[^1].ToCollapsedValues();
+                var merged = lastStates
+                       .Union(qb.ToCollapsedValues())
+                       // Only pull the bootstrap into the union when the last slice
+                       // still represents a single scalar   (guarantees _pure_ scalar sequence)
+                       .Union(lastStates.Count() == 1 ? timeline[0].ToCollapsedValues() : Array.Empty<T>())
+                       .Distinct()
+                       .ToArray();
+                var mergedQb = new QuBit<T>(merged); mergedQb.Any();
                 _versioningService.ReplaceLastSlice(this, mergedQb);
             }
             else
@@ -1676,7 +1774,7 @@ public class PositronicVariable<T> : IPositronicVariable
         Remember(qb.ToCollapsedValues());
 
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
-        if (runtime.Entropy < 0 &&  OperationLog.Peek() != null)
+        if (runtime.Entropy < 0 && OperationLog.Peek() != null)
         {
             // OK, this is a true reverse-replay pass
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
@@ -1691,7 +1789,9 @@ public class PositronicVariable<T> : IPositronicVariable
             // — overwrite bootstrap if that’s all we have
             if (replacedInitialSlice && timeline.Count == 1)
             {
-                _versioningService.OverwriteBootstrap(this, qb);
+                // ③ post‑Unify forward write should append, not overwrite
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
                 return;
             }
 
@@ -1704,22 +1804,32 @@ public class PositronicVariable<T> : IPositronicVariable
                 return;
             }
 
-            // — every subsequent forward write: scalar vs. merge
+            // — overwrite (merge) if this is the very first forward write
+            if (replace && !_ops.HadForwardAppend)
+            {
+                _versioningService.ReplaceLastSlice(this, qb);
+                return;
+            }
+            // — otherwise decide append vs. merge
             if (!replace || (!_ops.HadForwardAppend && !SameStates(qb, timeline[^1])))
             {
+                // snapshot-append the new slice
                 _versioningService.SnapshotAppend(this, qb);
                 _ops.HadForwardAppend = true;
             }
             else
             {
-                var merged = timeline[^1].ToCollapsedValues()
-                                                     .Union(qb.ToCollapsedValues())
-                                                     .Distinct()
-                                                     .ToArray();
+                // merge into the last slice if it’s a duplicate scalar write
+                var merged = timeline[^1]
+                                      .ToCollapsedValues()
+                                      .Union(qb.ToCollapsedValues())
+                                      .Distinct()
+                                      .ToArray();
                 var mergedQb = new QuBit<T>(merged);
                 mergedQb.Any();
                 _versioningService.ReplaceLastSlice(this, mergedQb);
             }
+
 
             // — detect any small cycle and unify
             for (int cycle = 2; cycle <= 20; cycle++)
