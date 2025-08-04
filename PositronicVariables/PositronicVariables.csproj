@@ -22,7 +22,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.4" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.4" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.4" />
-    <PackageReference Include="QuantumSuperposition" Version="1.7.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,5 +30,16 @@
 	<None Include="readme.md" Pack="true" PackagePath="" />
 	<None Include="LICENSE" Pack="true" PackagePath="" />  
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>PositronicTester</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
+
 
 </Project>

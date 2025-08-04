@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.VisualStudio.TestPlatform.TestHost;
 using NUnit.Framework;
 using QuantumSuperposition.Core;
 using QuantumSuperposition.DependencyInjection;
@@ -214,7 +215,8 @@ namespace PositronicVariables.Tests
             var v = PositronicVariable<int>.GetOrCreate("chk", 0, _runtime);
 
             // force a single‑slice timeline (simulate an in‑loop Unify)
-            PositronicVariable<int>.RunConvergenceLoop(_runtime, () => {
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
+            {
                 v.Assign(v + 1);
                 v.Unify(2);   // timeline length == 1 again
             }, runFinalIteration: false);
@@ -258,7 +260,7 @@ namespace PositronicVariables.Tests
         }
 
 
-            [Test]
+        [Test]
         public void ForwardHalfCycle_ShouldAppend_WhenReplaceTrue()
         {
             var v = PositronicVariable<int>.GetOrCreate("antivalProbe", 0, _runtime);
@@ -276,6 +278,56 @@ namespace PositronicVariables.Tests
 
             v.Assign(1);                                        // replace == false
             Assert.That(v.TimelineLength, Is.EqualTo(2), "Bootstrap slice must remain untouched");
+        }
+
+        [Test]
+        public void OutputRedirector_Restores_And_Flushes()
+        {
+            // arrange: create a fresh runtime & redirector
+            var rt = new DefaultPositronicRuntime(
+                new ScopedPositronicVariableFactory(
+                    new ServiceCollection().BuildServiceProvider()),
+                new ScopedPositronicVariableFactory(
+                    new ServiceCollection().BuildServiceProvider()));
+            var redirector = new DefaultOutputRedirector(rt);
+
+            // arrange: capture anything written to Console.Out
+            var output = new StringWriter();
+            Console.SetOut(output);
+
+            // act: redirect into the grid buffer, write, then restore
+            redirector.Redirect();
+            Console.WriteLine("hello");
+            redirector.Restore();
+
+            // assert: our StringWriter got the “hello” line
+            var text = output.ToString();
+            Assert.That(text, Does.Contain("hello"));
+        }
+
+
+
+        [Test]
+        public void Program_Main_Integration_CapturesAllAntivalStates()
+        {
+            PositronicAmbient.ResetAmbient();
+            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+
+            // ✅ ensure writes go to our buffer (NUnit resets Console.Out)
+            Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+
+            // Optionally guarantee a runtime, though AntiVal will create one anyway:
+            // var host = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime()).Build();
+            // PositronicAmbient.InitialiseWith(host);
+
+            TestPVProgram.Main();
+
+            var full = AethericRedirectionGrid.OutputBuffer
+                .ToString()
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+            Assert.That(full.ElementAt(0), Does.Contain("The antival is any(0, 1, 2)"));
+            Assert.That(full.ElementAt(1), Does.Contain("The value is any(1, 2, 0)"));
         }
 
 
@@ -600,8 +652,8 @@ namespace PositronicVariables.Tests
         {
             PositronicVariable<int>.SetEntropy(_runtime, +1);
             var v = PositronicVariable<int>.GetOrCreate("q", 0, _runtime);
-            v.Assign(1); 
-            v.Assign(2); 
+            v.Assign(1);
+            v.Assign(2);
 
             Assert.That(v.GetCurrentQBit().ToCollapsedValues(),
                         Is.EquivalentTo(new[] { 0, 1, 2 }));

@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PositronicVariables\PositronicVariables.csproj" />
     <ProjectReference Include="..\QuantumSuperposition\QuantumSuperposition.csproj" />
+    <ProjectReference Include="..\TestPV\TestPV.csproj" />
   </ItemGroup>
 
   <ItemGroup>

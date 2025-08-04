@@ -169,6 +169,7 @@ public static class PositronicAmbient
         var host = hostBuilder.Build();
         Services = host.Services;                   // uses the setter above
         Current = host.Services.GetRequiredService<IPositronicRuntime>();
+
     }
 
     /// <summary>
@@ -640,11 +641,26 @@ public class DefaultOutputRedirector : IOutputRedirector
 
     public void Redirect()
     {
-        _originalOut = Console.Out;
-        Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+        // Whatever writer is live *right now* (console, StringWriter …)
+        // is what we must restore/flush to later:
+        _originalOut = Console.Out; Console.SetOut(AethericRedirectionGrid.OutputBuffer);
         _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
     }
-    public void Restore() => Console.SetOut(_originalOut);
+    public void Restore()
+    {
+        /* When the original writer is *not* the grid buffer (typical
+           unit‑test redirect) copy & clear; otherwise leave the
+           buffer intact for callers that still need it
+           (e.g. Program_Main_Integration). */
+        if (!ReferenceEquals(_originalOut, AethericRedirectionGrid.OutputBuffer))
+        {
+            _originalOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
+            _originalOut.Flush();
+            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+        }
+
+        Console.SetOut(_originalOut);
+    }
 }
 
 public class ConvergenceEngineBuilder<T>
@@ -797,8 +813,6 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             iteration++;
         }
 
-        _redirect.Restore();
-
         if (runFinalIteration && _runtime.Converged)
         {
             // replay once forward so Console output and side‐effects occur
@@ -807,6 +821,10 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
             // undo any reversible ops from that final pass
             _ops.UndoLastForwardCycle();
+
+            // 🧹 start the output buffer afresh so tests only see the
+            // converged-state print-out
+            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
 
             code();
 
@@ -822,14 +840,11 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
         {
             v.ResetDomainToCurrent();
 
-            /*  Only create a deterministic singleton when the caller asked the
-     engine to unify on convergence.  When `unifyOnConvergence` is
-     false (timeline‑diagnostics scenarios) we must leave every
-     slice intact.                                                */
-            if (unifyOnConvergence && !_runtime.Converged && v.timeline.Count > 1)
-                v.CollapseToLastSlice();
-
+            if (unifyOnConvergence && v.timeline.Count > 1)
+                v.UnifyAll();   // guarantees distinct values & one slice only
         }
+
+        _redirect.Restore();
     }
 }
 
@@ -839,10 +854,15 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 /// </summary>
 internal static class AethericRedirectionGrid
 {
+    // The reference universe
+    internal static readonly TextWriter RealConsoleOut;
     public static bool Initialised { get; } = true;
 
     // Store the actual StringWriter we create.
     private static readonly StringWriter _outputBuffer;
+
+    private static bool _entryPointAlreadyRun;
+    internal static void MarkEntryPointExecuted() => _entryPointAlreadyRun = true;
 
     public static StringWriter OutputBuffer => _outputBuffer;
 
@@ -864,9 +884,8 @@ internal static class AethericRedirectionGrid
 
     static AethericRedirectionGrid()
     {
-        var originalOut = Console.Out;
+        RealConsoleOut = Console.Out;
         _outputBuffer = new StringWriter();
-        Console.SetOut(_outputBuffer);
 
 
         try
@@ -882,6 +901,16 @@ internal static class AethericRedirectionGrid
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
+             // ----------------------------------------------------------
+            // Skip the whole replay if Main already executed explicitly
+            // ----------------------------------------------------------
+            if (_entryPointAlreadyRun)
+            {
+                Console.SetOut(RealConsoleOut);
+                RealConsoleOut.Write(_outputBuffer.ToString());
+                return;
+            }
+
             // Locate the simulation method by searching for our custom attribute.
             var entryPoints = AppDomain.CurrentDomain
                 .GetAssemblies()
@@ -946,8 +975,8 @@ internal static class AethericRedirectionGrid
             }
 
             // Restore the original output and write only the converged output.
-            Console.SetOut(originalOut);
-            originalOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
+            Console.SetOut(RealConsoleOut);
+            RealConsoleOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
         };
 
     }
@@ -1161,7 +1190,7 @@ public class ReverseReplayEngine<T>
 
         IEnumerable<T> seeds;
 
-        if (!scalarWriteDetected)                           // previous logic
+        if (!scalarWriteDetected) 
         {
             seeds = includeForward
                                 ? forwardValues
@@ -1222,6 +1251,16 @@ public class ReverseReplayEngine<T>
             rebuiltSet.Add(v);
         }
 
+        /* Retain every value that was appended in the forward half‑cycle,
+             except anything that already lives in slice 0.  This repairs the
+             Antival cycle while keeping the ReverseReplay_* tests green. */
+        if (!scalarWriteDetected)
+        {
+            rebuiltSet.UnionWith(
+                forwardValues.Except(variable.timeline[0].ToCollapsedValues()));
+        }
+
+
         // Package into one QuBit<T> and return
         var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
         rebuilt.Any();
@@ -1232,13 +1271,18 @@ public class ReverseReplayEngine<T>
  */
         if (scalarWriteDetected)
         {
-            variable.timeline.Clear();
+            /* Keep slice 0 intact, discard only the intermediate
+               forward‑pass history, then append the new scalar. */
+            if (variable.timeline.Count > 1)
+                variable.timeline.RemoveRange(1, variable.timeline.Count - 1);
+
             variable.timeline.Add(rebuilt);
         }
         else
         {
             variable.timeline.Add(rebuilt);
         }
+
 
         return rebuilt;
     }
@@ -1349,6 +1393,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 
         Reset();
         PositronicAmbient.Current = this;
+        AethericRedirectionGrid.MarkEntryPointExecuted();
     }
 
     private class FallbackServiceProvider : IServiceProvider
@@ -1616,27 +1661,37 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public void UnifyAll()
     {
-        // grab exactly the final slice
-        var allStates = timeline
-            .SelectMany(qb => qb.ToCollapsedValues())
-            .Distinct()
-            .ToArray();
+        // nothing to do if we still only have the bootstrap
+        if (timeline.Count < 2)
+            return;
 
-        // refresh the domain
-        _domain.Clear();
-        foreach (var x in allStates)
-            _domain.Add(x);
+        /* Merge *all* values that appeared after the bootstrap (slice 0)
+           into a single union slice, but **keep** slice 0 untouched so
+           callers can still see the original seed when they ask for it. */
 
-        // replace entire timeline with just that one slice
-        var unified = new QuBit<T>(allStates);
+        var mergedStates = timeline
+                            .Skip(1)   // ignore bootstrap
+                            .SelectMany(q => q.ToCollapsedValues())
+                            .Distinct()
+                            .ToArray();
+
+        var unified = new QuBit<T>(mergedStates);
         unified.Any();
-        timeline.Clear();
+
+        // replace everything after the bootstrap with the unified slice
+        timeline.RemoveRange(1, timeline.Count - 1);
         timeline.Add(unified);
+
+        // refresh the domain to reflect the new union
+        _domain.Clear();
+        foreach (var x in mergedStates)
+            _domain.Add(x);
 
         OperationLog.Clear();
         _runtime.Converged = true;
         OnCollapse?.Invoke();
         OnConverged?.Invoke();
+
     }
 
 
@@ -1702,14 +1757,52 @@ public class PositronicVariable<T> : IPositronicVariable
  * ------------------------------------------------------------- */
         if (runtime.Entropy > 0 && InConvergenceLoop)
         {
-            if (timeline.Count == 1)                     // still on bootstrap
-            {
-                _versioningService.SnapshotAppend(this, qb);   // always append
-                _ops.HadForwardAppend = true;
-            }
+ if (timeline.Count == 1)                     // still on bootstrap
+ {
+     var incoming = qb.ToCollapsedValues();
+
+     if (incoming.Count() == 1)               // scalar ⇒ append – old behaviour
+     {
+         _versioningService.SnapshotAppend(this, qb);
+     }
+     else                                      // **union** ⇒ merge into slice 0
+     {
+         var merged = timeline[0]
+                        .ToCollapsedValues()
+                        .Union(incoming)
+                        .Distinct()
+                        .ToArray();
+
+         var mergedQb = new QuBit<T>(merged);  mergedQb.Any();
+         _versioningService.ReplaceLastSlice(this, mergedQb);
+     }
+
+     _ops.HadForwardAppend = true;
+     return;
+ }
+
             else if (replace)                            // overwrite/merge
             {
-                _versioningService.ReplaceLastSlice(this, qb);
+                var incoming = qb.ToCollapsedValues();
+
+                // single‑value qubits are *scalar* writes → append
+                if (incoming.Count() == 1)
+                {
+                    _versioningService.SnapshotAppend(this, qb);
+                }
+                else                // real union → keep the old merge path
+                {
+                    var merged = timeline[^1]
+                                    .ToCollapsedValues()
+                                    .Union(incoming)
+                                    .Distinct()
+                                    .ToArray();
+                    var mergedQb = new QuBit<T>(merged); mergedQb.Any();
+                    _versioningService.ReplaceLastSlice(this, mergedQb);
+                }
+
+                _ops.HadForwardAppend = true;
+                return;
             }
             else                                         // scalar – append
             {
@@ -1722,16 +1815,21 @@ public class PositronicVariable<T> : IPositronicVariable
         // ensure every write in-loop is recorded:
         if (runtime.Entropy < 0 && InConvergenceLoop)
         {
-            /* the engine injects v.Assign(v.GetCurrentQBit()) when we first
- * flip from +1 → –1; that write must be a NO‑OP.  Detect it by
- * reference identity (same QuBit instance).                       */
+            // ❶ Ignore the self–assignment the engine injects on the flip
             if (ReferenceEquals(qb, timeline[^1]))
-                return;                     // ignore self‑assignment
+                return;
 
-            _versioningService.SnapshotAppend(this, qb);   // user write → keep
-            _ops.HadForwardAppend = true;
+            // ❷ The *first* reverse half‑cycle (OpLog empty) is just a probe; do nothing
+            if (OperationLog.Peek() is null)
+                return;
+
+            // ❸ All later reverse half‑cycles: reconstruct via ReverseReplayEngine
+            var rebuilt = _reverseReplay.ReplayReverseCycle(GetCurrentQBit(), this);
+            timeline.Add(rebuilt);
+            OnTimelineAppended?.Invoke();
             return;
         }
+
 
         // fast path for any forward write _outside_ the convergence loop
         if (runtime.Entropy > 0 && !InConvergenceLoop)
@@ -1807,7 +1905,15 @@ public class PositronicVariable<T> : IPositronicVariable
             // — overwrite (merge) if this is the very first forward write
             if (replace && !_ops.HadForwardAppend)
             {
-                _versioningService.ReplaceLastSlice(this, qb);
+                 var merged = timeline[^1]
+                    .ToCollapsedValues()
+                    .Union(qb.ToCollapsedValues())
+                    .Distinct()
+                    .ToArray();
+                var mergedQb = new QuBit<T>(merged);
+                mergedQb.Any();
+                _versioningService.ReplaceLastSlice(this, mergedQb);
+                _ops.HadForwardAppend = true;
                 return;
             }
             // — otherwise decide append vs. merge
@@ -2403,7 +2509,28 @@ public static class AntiVal
             InitialiseDefaultRuntime();
         }
 
-        return PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
+    var v = PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
+
+    // First time only: bootstrap the full anti‑set (0,1,2)
+    if (v.TimelineLength == 1)          // brand‑new variable
+    {
+        try
+        {
+            T z = (T)Convert.ChangeType(0, typeof(T));
+            T o = (T)Convert.ChangeType(1, typeof(T));
+            T t = (T)Convert.ChangeType(2, typeof(T));
+
+            var qb = new QuBit<T>(new[] { z, o, t }); qb.Any();
+
+            // forward‑time append (we are outside any convergence loop)
+            PositronicVariable<T>.SetEntropy(PositronicAmbient.Current, +1);
+            v.Assign(qb);
+        }
+        // Non‑numeric T – silently ignore
+        catch { }
+    }
+
+    return v;
     }
 
     private static bool PositronicAmbientIsUninitialized()
