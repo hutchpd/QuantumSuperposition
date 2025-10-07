@@ -109,7 +109,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
 
     void IPositronicVariableRegistry.Add(IPositronicVariable v)
     {
-        // avoid dynamic – grab the T from the concrete PositronicVariable<T>
+        // pry T out of PositronicVariable<T> with reflection—a technique so eldritch even your toaster fears it
         var t = v.GetType().GetGenericArguments()[0];
         var key = (t, Guid.NewGuid().ToString());
         _registry[key] = v;
@@ -127,7 +127,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
 
 
 /// <summary>
-/// Swappable holder for the “current” runtime.</c>
+/// In an episode of slider's - this is the current version of the universe that we happen to have fallen into. A container for the runtime and services that are available to the positronic variables.
 /// </summary>
 public static class PositronicAmbient
 {
@@ -146,7 +146,7 @@ public static class PositronicAmbient
         set
         {
             _ambient.Value = value;
-            _global = value;           // keep a process-wide copy
+            _global = value;
         }
     }
 
@@ -157,7 +157,7 @@ public static class PositronicAmbient
         private set
         {
             _servicesAmbient.Value = value;
-            _servicesGlobal = value;   // keep a process-wide copy
+            _servicesGlobal = value;
         }
     }
 
@@ -167,13 +167,13 @@ public static class PositronicAmbient
             throw new InvalidOperationException("Positronic runtime already initialised.");
 
         var host = hostBuilder.Build();
-        Services = host.Services;                   // uses the setter above
+        Services = host.Services;                   // jam the services into the ambient pocket universe so everything stops throwing tantrums
         Current = host.Services.GetRequiredService<IPositronicRuntime>();
 
     }
 
     /// <summary>
-    /// Clears out both the ambient and the global runtime+services.
+    /// Unhooks all known realities from the runtime matrix and chucks them into the bin marked “Let's Pretend That Didn’t Happen.”
     /// </summary>
     public static void ResetAmbient()
     {
@@ -206,8 +206,8 @@ public sealed class PositronicEntryAttribute : Attribute
 public interface IReversibleOperation<T> : IOperation
 {
     /// <summary>
-    /// Given the result of a forward operation, computes the inverse value.
-    /// For example, if the forward op was division by 9 then the inverse is multiplication by 9.
+    /// When time insists on moving forward, this little chap figures out how to make it march in reverse.
+    /// (E.g. if you’ve divided by 9 in one universe, we smuggle you back with a ×9 in another.)
     /// </summary>
     T ApplyInverse(T result);
     /// <summary>
@@ -227,7 +227,7 @@ public interface IReversibleSnapshotOperation<T> : IReversibleOperation<T>
     {
         var qb = new QuBit<T>(new[] { Original });
         qb.Any();
-        // overwrite the slice produced by the forward op
+        // Magically swap out the latest cosmic crumb for something more fitting of this reality
         Variable.timeline[Variable.timeline.Count - 1] = qb;
     }
 }
@@ -462,7 +462,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
     void IOperation.Undo()
     {
-        // 1. restore the original slice
+        // jam the original quantum sandwich back into the timeline like nothing ever happened
         var qb = new QuBit<T>(new[] { Original });
         qb.Any();
         Variable.timeline[^1] = qb;
@@ -532,6 +532,10 @@ public class DefaultVersioningService<T> : IVersioningService<T>
     private readonly Stack<(PositronicVariable<T> Variable, List<QuBit<T>> Timeline)> _snapshots = new();
     private readonly object _syncRoot = new object();
     private Action _onAppend;
+
+    /// <summary>
+    /// Obliterates the multiverse history like a particularly careless time janitor.
+    /// </summary>
     public void ClearSnapshots() => _snapshots.Clear();
 
     public void RegisterTimelineAppendedHook(Action hook)
@@ -545,7 +549,7 @@ public class DefaultVersioningService<T> : IVersioningService<T>
     {
         lock (_syncRoot)
         {
-            // snapshot current state
+            // snapshot the current incarnation of the variable, before we accidentally turn it into a lizard or a toaster
             var copy = variable.timeline
                                .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
                                .ToList();
@@ -568,7 +572,7 @@ public class DefaultVersioningService<T> : IVersioningService<T>
     {
         lock (_syncRoot)
         {
-            // pop both the variable *and* its saved timeline
+            // summon the ghost of timelines past and cram it rudely back into existence
             var (variable, oldTimeline) = _snapshots.Pop();
             variable.timeline.Clear();
             variable.timeline.AddRange(oldTimeline);
@@ -617,7 +621,7 @@ public class DefaultEntropyController : IEntropyController
 
     public int Entropy => _runtime.Entropy;
     /// <summary>
-    /// Start every convergence run in **reverse** time.
+    /// Winds the temporal crank backwards to appease the spiteful spirits of past simulations.
     /// </summary>
     public void Initialise() => _runtime.Entropy = -1;
     public void Flip() => _runtime.Entropy = -_runtime.Entropy;
@@ -641,17 +645,14 @@ public class DefaultOutputRedirector : IOutputRedirector
 
     public void Redirect()
     {
-        // Whatever writer is live *right now* (console, StringWriter …)
-        // is what we must restore/flush to later:
+        // Hijack the console output like a space-time parasite. Later, we’ll spit it back out and pretend it was all voluntary.
         _originalOut = Console.Out; Console.SetOut(AethericRedirectionGrid.OutputBuffer);
         _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
     }
     public void Restore()
     {
-        /* When the original writer is *not* the grid buffer (typical
-           unit‑test redirect) copy & clear; otherwise leave the
-           buffer intact for callers that still need it
-           (e.g. Program_Main_Integration). */
+        /* If we're not using the mystical scribble pad, regurgitate everything we buffered.
+           Otherwise, sit quietly and pretend nothing happened. */
         if (!ReferenceEquals(_originalOut, AethericRedirectionGrid.OutputBuffer))
         {
             _originalOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
@@ -669,7 +670,7 @@ public class ConvergenceEngineBuilder<T>
     private readonly List<Func<IConvergenceEngine<T>, IConvergenceEngine<T>>> _middlewares = new();
 
     /// <summary>
-    /// Adds a middleware/decorator to the convergence engine chain.
+    /// Bolts a new questionable device onto the engine. Nobody asked what it does, and it’s too late to stop now.
     /// </summary>
     public ConvergenceEngineBuilder<T> Use(Func<IConvergenceEngine<T>, IConvergenceEngine<T>> middleware)
     {
@@ -678,7 +679,7 @@ public class ConvergenceEngineBuilder<T>
     }
 
     /// <summary>
-    /// Builds the final composed convergence engine.
+    /// Summons the convergence abomination from its component horrors. Add enough decorators and it starts resembling sentience.
     /// </summary>
     public IConvergenceEngine<T> Build(IConvergenceEngine<T> core)
     {
@@ -815,7 +816,7 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
         if (runFinalIteration && _runtime.Converged)
         {
-            // replay once forward so Console output and side‐effects occur
+            // do one final forward march so all your `Console.WriteLine`s feel heard and validated
             _runtime.Entropy = 1;
             _runtime.Converged = false;
 
@@ -849,8 +850,7 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 }
 
 /// <summary>
-/// Initialises the metaphysical I/O trap, redirecting stdout into a memory buffer
-/// so we can toy with reality without the console knowing.
+/// Close your eyes sweet one, momma is going to do some nasty things to the universe.
 /// </summary>
 internal static class AethericRedirectionGrid
 {
@@ -990,13 +990,13 @@ public interface IOperation
     void Undo();
 
     /// <summary>
-    /// Optional name for debugging/logging.
+    /// A polite label slapped on your operation so future archeologists of this code can blame someone else.
     /// </summary>
     string OperationName { get; }
 }
 
 /// <summary>
-/// A stack-based operation log for recording and undoing operations.
+/// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn’t.
 /// </summary>
 public static class OperationLog
 {
@@ -1021,7 +1021,7 @@ public static class OperationLog
         }
     }
 
-    // pop
+    // violently yeet the last recorded mistake into the entropy void
     public static void Pop()
     {
         if (_log.Count > 0)
@@ -1032,7 +1032,7 @@ public static class OperationLog
 }
 
 /// <summary>
-/// Operation that reverts the timeline to a previous snapshot after an Append.
+/// Yanks the timeline back to a simpler time, before it made any questionable life choices.
 /// </summary>
 public class TimelineAppendOperation<T> : IOperation
     where T : IComparable<T>
@@ -1190,19 +1190,24 @@ public class ReverseReplayEngine<T>
 
         IEnumerable<T> seeds;
 
-        if (!scalarWriteDetected) 
+        if (!scalarWriteDetected)
         {
+            // For AntiVal-like variables (multi-valued bootstrap), keep bootstrap values.
+            // For ordinary variables (single-valued bootstrap), exclude it to avoid resurrecting the seed.
+            var bootstrap = variable.timeline[0].ToCollapsedValues();
+            var excludeBootstrap = bootstrap.Count() == 1;
+
             seeds = includeForward
-                                ? forwardValues
-                                   .Union(incoming.ToCollapsedValues())
-                                   .Except(variable.timeline[0].ToCollapsedValues())
-                                   .Distinct()
-                                : incoming.ToCollapsedValues();
+                ? forwardValues
+                    .Union(incoming.ToCollapsedValues())
+                    .Except(excludeBootstrap ? bootstrap : Array.Empty<T>())
+                    .Distinct()
+                : incoming.ToCollapsedValues();
         }
         else                                                // scalar overwrite
         {
             /*  Two possibilities:
- *  a) the overwrite was done with ReplaceLastSlice ⟶ there
+ *  a) the overwrite was done with ReplaceLastSlice -> there
  *     is a TimelineReplaceOperation we can consult;
  *  b) it was a *scalar append* (replace == false) so
  *     no Replace op exists – in that case we only want
@@ -1233,6 +1238,11 @@ public class ReverseReplayEngine<T>
             }
         }
 
+        if (!seeds.Any())
+        {
+            // Keep at least what the caller just assigned.
+            seeds = incoming.ToCollapsedValues();
+        }
 
         var rebuiltSet = new HashSet<T>();
 
@@ -1251,17 +1261,15 @@ public class ReverseReplayEngine<T>
             rebuiltSet.Add(v);
         }
 
-        /* Retain every value that was appended in the forward half‑cycle,
-             except anything that already lives in slice 0.  This repairs the
-             Antival cycle while keeping the ReverseReplay_* tests green. */
         if (!scalarWriteDetected)
         {
-            rebuiltSet.UnionWith(
-                forwardValues.Except(variable.timeline[0].ToCollapsedValues()));
+            var bootstrap = variable.timeline[0].ToCollapsedValues();
+            var excludeBootstrap = bootstrap.Count() == 1;
+            rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
         }
 
 
-        // Package into one QuBit<T> and return
+        // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
         var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
         rebuilt.Any();
 
@@ -1280,7 +1288,18 @@ public class ReverseReplayEngine<T>
         }
         else
         {
-            variable.timeline.Add(rebuilt);
+            // If the forward half-cycle performed only in-place merges (no appends),
+            // do not grow the timeline during reverse replay; replace the last slice.
+            // This preserves "may merge" behaviour and avoids
+            // spurious slice growth on pure-merge passes.
+            if (!poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any() && variable.timeline.Count > 0)
+            {
+                variable.timeline[^1] = rebuilt;
+            }
+            else
+            {
+                variable.timeline.Add(rebuilt);
+            }
         }
 
 
@@ -1304,7 +1323,7 @@ public interface IPositronicVariable
     int Converged();
 
     /// <summary>
-    /// Unifies all timeline slices into a single disjunctive state.
+    /// Melds every branching future into one reluctant consensus, like a committee that’s given up.
     /// </summary>
     void UnifyAll();
 }
@@ -1461,6 +1480,15 @@ public class PositronicVariable<T> : IPositronicVariable
 
     private readonly IVersioningService<T> _versioningService;
 
+    public void SeedBootstrap(params T[] values)
+    {
+        var qb = new QuBit<T>(values);
+        qb.Any();
+        _versioningService.OverwriteBootstrap(this, qb); // A small sacrifice to the versioning gods
+
+        replacedInitialSlice = false;
+    }
+
 
     public PositronicVariable(
         T initialValue,
@@ -1515,7 +1543,7 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
-    /// Internal hook called on *any* forward append
+    /// Secret lever that fires whenever a new timeline twig is grafted on
     /// </summary>
     internal static Action TimelineAppendedHook;
 
@@ -1555,7 +1583,7 @@ public class PositronicVariable<T> : IPositronicVariable
     public event Action OnTimelineAppended;
 
     /// <summary>
-    /// The number of timeline slices currently stored.
+    /// How many alternate realities we’ve stacked on this poor variable’s timeline. More is usually bad.
     /// </summary>
     public int TimelineLength => timeline.Count;
 
@@ -1629,7 +1657,7 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
-    /// Checks for convergence by comparing timeline slices.
+    /// Audits the quantum history to see if all timelines are finally tired of arguing and want to go home.
     /// </summary>
     public int Converged()
     {
@@ -1812,18 +1840,15 @@ public class PositronicVariable<T> : IPositronicVariable
             return;
         }
 
-        // ensure every write in-loop is recorded:
+        // We're going backwards in time, which means we can only see what will have going to have happened.
         if (runtime.Entropy < 0 && InConvergenceLoop)
         {
-            // ❶ Ignore the self–assignment the engine injects on the flip
             if (ReferenceEquals(qb, timeline[^1]))
                 return;
 
-            // ❷ The *first* reverse half‑cycle (OpLog empty) is just a probe; do nothing
             if (OperationLog.Peek() is null)
                 return;
 
-            // ❸ All later reverse half‑cycles: reconstruct via ReverseReplayEngine
             var rebuilt = _reverseReplay.ReplayReverseCycle(GetCurrentQBit(), this);
             timeline.Add(rebuilt);
             OnTimelineAppended?.Invoke();
@@ -1831,10 +1856,10 @@ public class PositronicVariable<T> : IPositronicVariable
         }
 
 
-        // fast path for any forward write _outside_ the convergence loop
+        // Emergency override for when we’re flailing outside the loop like a time-traveling otter
         if (runtime.Entropy > 0 && !InConvergenceLoop)
         {
-            // ① first ever forward write OR first after Unify → APPEND
+            // First ever forward write OR first after Unify → APPEND
             if (timeline.Count == 1)
             {
                 _versioningService.SnapshotAppend(this, qb);
@@ -1857,7 +1882,7 @@ public class PositronicVariable<T> : IPositronicVariable
             }
             else
             {
-                // 2) otherwise, do a normal append so we preserve history:
+                // Otherwise we need to preserve causality - else Marty McFly's hand will disappear again.
                 _versioningService.SnapshotAppend(this, qb);
                 _ops.HadForwardAppend = true;
             }
@@ -2238,7 +2263,7 @@ public class PositronicVariable<T> : IPositronicVariable
     public IEnumerable<QuBit<T>> GetTimeline() => timeline;
 
     /// <summary>
-    /// Collapses the timeline to the value from the most recent slice.
+    /// Folds the last known state into a reality burrito and pretends none of the branching ever happened.
     /// </summary>
     public void CollapseToLastSlice()
     {
@@ -2308,7 +2333,7 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
-    /// Returns a pretty-printed version of the timeline.
+    /// Outputs the history of this variable’s midlife crises in a human-readable format.
     /// </summary>
     public string ToTimelineString()
     {
@@ -2343,7 +2368,7 @@ public class PositronicVariable<T> : IPositronicVariable
     public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
 
     /// <summary>
-    /// Returns the most recent quantum slice.
+    /// Retrieves the freshest slice of existence, still warm from the cosmic oven.
     /// </summary>
     public QuBit<T> GetCurrentQBit() => timeline[^1];
 
@@ -2397,7 +2422,7 @@ public class NeuralNodule<T> where T : struct, IComparable<T>
     public Func<IEnumerable<T>, QuBit<T>> ActivationFunction { get; set; }
 
     /// <summary>
-    /// Creates a neural nodule with a specified activation function.
+    /// Constructs a highly opinionated quantum neuron that fires based on arbitrary math and existential dread.
     /// </summary>
     /// <param name="activation"></param>
     public NeuralNodule(Func<IEnumerable<T>, QuBit<T>> activation, IPositronicRuntime runtime)
@@ -2511,31 +2536,13 @@ public static class AntiVal
 
     var v = PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
 
-    // First time only: bootstrap the full anti‑set (0,1,2)
-    if (v.TimelineLength == 1)          // brand‑new variable
-    {
-        try
-        {
-            T z = (T)Convert.ChangeType(0, typeof(T));
-            T o = (T)Convert.ChangeType(1, typeof(T));
-            T t = (T)Convert.ChangeType(2, typeof(T));
-
-            var qb = new QuBit<T>(new[] { z, o, t }); qb.Any();
-
-            // forward‑time append (we are outside any convergence loop)
-            PositronicVariable<T>.SetEntropy(PositronicAmbient.Current, +1);
-            v.Assign(qb);
-        }
-        // Non‑numeric T – silently ignore
-        catch { }
-    }
-
     return v;
     }
 
     private static bool PositronicAmbientIsUninitialized()
         => PositronicAmbient.Current == null;
 
+    // If the runtime hasn’t been initialized, we gently whisper it into existence like a haunted lullaby.
     private static void InitialiseDefaultRuntime()
     {
         var hostBuilder = Host.CreateDefaultBuilder()

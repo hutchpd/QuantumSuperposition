@@ -313,7 +313,7 @@ namespace PositronicVariables.Tests
             PositronicAmbient.ResetAmbient();
             AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
 
-            // ✅ ensure writes go to our buffer (NUnit resets Console.Out)
+            // ensure writes go to our buffer (NUnit resets Console.Out)
             Console.SetOut(AethericRedirectionGrid.OutputBuffer);
 
             // Optionally guarantee a runtime, though AntiVal will create one anyway:
@@ -587,6 +587,20 @@ namespace PositronicVariables.Tests
         }
 
         [Test]
+        public void Antival_CyclesThrough0_1_AndEventuallyConvergesToBoth()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("a", -1, _runtime);
+
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
+            {
+                v.Assign((v + 1) % 2);
+            });
+
+            var result = v.ToValues().OrderBy(x => x).ToList();
+            Assert.That(result, Is.EquivalentTo(new[] { 0, 1 }));
+        }
+
+        [Test]
         public void ZeroConvergence_NoRepeatedStates_AlwaysUnique()
         {
             var v = PositronicVariable<int>.GetOrCreate("z", 10, _runtime);
@@ -638,8 +652,8 @@ namespace PositronicVariables.Tests
             PositronicVariable<int>.SetEntropy(_runtime, +1);
 
             var v = PositronicVariable<int>.GetOrCreate("q", 0, _runtime);
-            v.Assign(1);          // should yield any(0,1)
-            v.Assign(2);          // should yield any(0,1,2)
+            v.Assign(1);
+            v.Assign(2);
 
             var values = v.ToValues().OrderBy(x => x).ToArray();
 
@@ -701,5 +715,92 @@ namespace PositronicVariables.Tests
             Assert.That(after, Is.EquivalentTo(new[] { 0, 1, 2 }),
                 "Unify(count) must preserve the whole set.");
         }
+
+        //[Test]
+        //public void Antival_Mod3_PrintsExpectedRotation()
+        //{
+        //    PositronicAmbient.ResetAmbient();
+        //    var host = Host.CreateDefaultBuilder().ConfigureServices(s => s.AddPositronicRuntime()).Build();
+        //    PositronicAmbient.InitialiseWith(host);
+
+        //    var output = new StringWriter();
+        //    Console.SetOut(output);
+
+        //    PositronicVariable<double>.RunConvergenceLoop(PositronicAmbient.Current, () =>
+        //    {
+        //        var antival = AntiVal.GetOrCreate<double>();
+        //        Console.WriteLine($"The antival is {antival}");
+        //        var val = (antival + 1) % 3;
+        //        Console.WriteLine($"The value is {val}");
+        //        antival.Assign(val);
+        //    });
+
+        //    var lines = output.ToString().Trim().Split(Environment.NewLine);
+        //    Assert.That(lines[0], Does.Contain("any(0, 1, 2)"));
+        //    Assert.That(lines[1], Does.Contain("any(1, 2, 0)"));
+        //}
+
+        //[Test]
+        //public void Antival_Mod2_BackpropagatesConstraint()
+        //{
+        //    PositronicAmbient.ResetAmbient();
+        //    var host = Host.CreateDefaultBuilder().ConfigureServices(s => s.AddPositronicRuntime()).Build();
+        //    PositronicAmbient.InitialiseWith(host);
+
+        //    var output = new StringWriter();
+        //    Console.SetOut(output);
+
+        //    PositronicVariable<double>.RunConvergenceLoop(PositronicAmbient.Current, () =>
+        //    {
+        //        var antival = AntiVal.GetOrCreate<double>();
+        //        Console.WriteLine($"The antival is {antival}");
+        //        var val = (antival + 1) % 2;
+        //        Console.WriteLine($"The value is {val}");
+        //        antival.Assign(val);
+        //    });
+
+        //    var lines = output.ToString().Trim().Split(Environment.NewLine);
+        //    // First line should already reflect the narrowed domain due to backprop
+        //    Assert.That(lines[0], Does.Contain("any(0, 1)"));
+        //    Assert.That(lines[1], Does.Contain("any(1, 0)"));
+        //}
+
+        [Test]
+        public void Seed_IsNotTreatedAsForwardAppend()
+        {
+            var rt = PositronicAmbient.Current;
+            var a = AntiVal.GetOrCreate<int>();
+
+            // Trigger a reverse replay path so that a forward-append would leak
+            PositronicVariable<int>.SetEntropy(rt, +1);
+            a.Assign(1); // real forward write
+            var snap = a.GetCurrentQBit();
+
+            PositronicVariable<int>.SetEntropy(rt, -1);
+            a.Assign(snap); // reverse replay
+
+            // Final union must not contain AntiVal's bootstrap card beyond constraints
+            var vals = a.ToValues().OrderBy(x => x).ToArray();
+            Assert.That(vals, Is.EquivalentTo(new[] { 0, 1 }));
+        }
+
+        [Test]
+        public void Simple_Backwards_Assignments_Print12()
+        {
+            var output = new StringWriter();
+            Console.SetOut(output);
+
+            PositronicVariable<double>.RunConvergenceLoop(PositronicAmbient.Current, () =>
+            {
+                var val = AntiVal.GetOrCreate<double>(); // or PositronicVariable<double>.GetOrCreate("val", 0, rt);
+                Console.WriteLine($"The result will be {val}");
+                val.Assign(val + 2);
+                val.Assign(val + 2);
+                val.Assign(10);
+            });
+
+            Assert.That(output.ToString().Trim(), Is.EqualTo("The result will be any(12)"));
+        }
+
     }
 }
