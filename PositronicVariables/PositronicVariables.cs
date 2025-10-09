@@ -645,22 +645,35 @@ public class DefaultOutputRedirector : IOutputRedirector
 
     public void Redirect()
     {
-        // Hijack the console output like a space-time parasite. Later, we’ll spit it back out and pretend it was all voluntary.
-        _originalOut = Console.Out; Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+       // If we're already writing into the grid buffer, remember the *real* console instead.
+       _originalOut = ReferenceEquals(Console.Out, AethericRedirectionGrid.OutputBuffer)
+           ? AethericRedirectionGrid.RealConsoleOut
+           : Console.Out;
+       // Hijack the console output like a space-time parasite.
+       Console.SetOut(AethericRedirectionGrid.OutputBuffer);
         _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
     }
     public void Restore()
     {
-        /* If we're not using the mystical scribble pad, regurgitate everything we buffered.
-           Otherwise, sit quietly and pretend nothing happened. */
-        if (!ReferenceEquals(_originalOut, AethericRedirectionGrid.OutputBuffer))
+
+        var bufferText = AethericRedirectionGrid.OutputBuffer.ToString();
+        if (!AethericRedirectionGrid.InProcessExitRunner)
         {
-            _originalOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
+            _originalOut.Write(bufferText);
             _originalOut.Flush();
-            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+
+            // Only suppress the exit flush if we already wrote to the *real* console.
+            AethericRedirectionGrid.SuppressProcessExitEmission =
+                ReferenceEquals(_originalOut, AethericRedirectionGrid.RealConsoleOut);
+        }
+        else
+        {
+            // Ensure the exit hook will emit once.
+            AethericRedirectionGrid.SuppressProcessExitEmission = false;
         }
 
         Console.SetOut(_originalOut);
+
     }
 }
 
@@ -801,14 +814,18 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             }
 
             _entropy.Flip();
-            // if we just switched into reverse time,
-            // trigger a self-assignment on every variable so that
-            // ReverseReplayEngine can rebuild the original values
+            // When switching into reverse, assign a **clone** of the last slice.
+            // Passing the same instance short-circuits reverse replay.
             if (_entropy.Entropy < 0)
             {
                 foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
-                    ((PositronicVariable<T>)v)
-                                .Assign(((PositronicVariable<T>)v).GetCurrentQBit());
+                {
+                    var pv   = (PositronicVariable<T>)v;
+                    var last = pv.GetCurrentQBit();
+                    var copy = new QuBit<T>(last.ToCollapsedValues().ToArray());
+                    copy.Any();
+                    pv.Assign(copy);
+                }
             }
 
             iteration++;
@@ -816,6 +833,13 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
         if (runFinalIteration && _runtime.Converged)
         {
+            // Ensure variables expose their converged union during the final print-only pass.
+            if (unifyOnConvergence)
+            {
+                _versioningService.ClearSnapshots();
+                foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime).OfType<PositronicVariable<T>>())
+                    ((PositronicVariable<T>)v).UnifyAll();
+            }
             // do one final forward march so all your `Console.WriteLine`s feel heard and validated
             _runtime.Entropy = 1;
             _runtime.Converged = false;
@@ -860,14 +884,16 @@ internal static class AethericRedirectionGrid
 
     // Store the actual StringWriter we create.
     private static readonly StringWriter _outputBuffer;
-
-    private static bool _entryPointAlreadyRun;
-    internal static void MarkEntryPointExecuted() => _entryPointAlreadyRun = true;
+    private static int _hasRun;
+    private static bool TryBeginRunOnce() => Interlocked.Exchange(ref _hasRun, 1) == 0;
 
     public static StringWriter OutputBuffer => _outputBuffer;
 
     private static bool PositronicAmbientIsUnInitialised()
-        => PositronicAmbient.Current == null;
+        => !PositronicAmbient.IsInitialized;
+
+    internal static volatile bool SuppressProcessExitEmission;
+    internal static volatile bool InProcessExitRunner;
 
     private static void InitialiseDefaultRuntime()
     {
@@ -887,6 +913,11 @@ internal static class AethericRedirectionGrid
         RealConsoleOut = Console.Out;
         _outputBuffer = new StringWriter();
 
+        // Capture everything from the very beginning so non-converged
+        // writes never reach the real console. The engine clears this
+        // buffer just before the final print-only pass.
+        if (!ReferenceEquals(Console.Out, _outputBuffer))
+            Console.SetOut(_outputBuffer);
 
         try
         {
@@ -901,85 +932,127 @@ internal static class AethericRedirectionGrid
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-             // ----------------------------------------------------------
-            // Skip the whole replay if Main already executed explicitly
-            // ----------------------------------------------------------
-            if (_entryPointAlreadyRun)
+            InProcessExitRunner = true;
+            try
+            {
+                // Run once; idempotent gate stays the same.
+                RunAttributedEntryPointForTests();
+            }
+            finally
+            {
+                InProcessExitRunner = false;
+            }
+
+            // If we didn't already emit to the real console, do it now.
+            if (!SuppressProcessExitEmission)
             {
                 Console.SetOut(RealConsoleOut);
-                RealConsoleOut.Write(_outputBuffer.ToString());
-                return;
+                RealConsoleOut.Write(OutputBuffer.ToString());
+                RealConsoleOut.Flush();
             }
-
-            // Locate the simulation method by searching for our custom attribute.
-            var entryPoints = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .SelectMany(asm =>
-                {
-                    try { return asm.GetTypes(); }
-                    catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null); }
-                })
-                .SelectMany(t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
-                .Where(m => m.GetCustomAttribute<PositronicEntryAttribute>() != null)
-                .ToList();
-
-            if (entryPoints.Count == 0)
-            {
-                throw new InvalidOperationException("No method marked with [PositronicEntry] was found. Please annotate a static method to use as the convergence entry point.");
-            }
-
-            if (entryPoints.Count > 1)
-            {
-                var methodNames = string.Join(Environment.NewLine, entryPoints.Select(m => $" - {m.DeclaringType.FullName}.{m.Name}"));
-                throw new InvalidOperationException($"Multiple methods marked with [PositronicEntry] were found:{Environment.NewLine}{methodNames}{Environment.NewLine}Please mark only one method with [PositronicEntry].");
-            }
-
-            var entryPoint = entryPoints[0];
-
-            // Determine the generic type to use for the convergence loop.
-            // Here we assume at least one PositronicVariable exists in the runtime.
-            if (PositronicAmbient.Current.Registry.Any())
-            {
-                // Get the runtime type of the last variable, e.g. PositronicVariable<double>
-                var lastVariable = PositronicAmbient.Current.Registry.Last();
-                // Extract the generic type argument (e.g. double)
-                var genericArg = lastVariable.GetType().GetGenericArguments()[0];
-
-                // Get the generic method RunConvergenceLoop on PositronicVariable<>
-                var methodInfo = typeof(PositronicVariable<>)
-                    .MakeGenericType(genericArg)
-                    .GetMethod("RunConvergenceLoop", BindingFlags.Public | BindingFlags.Static);
-
-                // Invoke the convergence loop by passing the code (which calls the entry point)
-                var rt = PositronicAmbient.Current;
-
-                methodInfo.Invoke(
-                    null,
-                    new object[]
-                    {
-                        rt,                                   // ❶ IPositronicRuntime
-                        (Action)(() =>                       // ❷ Action code
-                        {
-                            var p = entryPoint.GetParameters();
-                            object[] epArgs = p.Length == 0 ? null : new object[] { Array.Empty<string>() };
-                            entryPoint.Invoke(null, epArgs);
-                        }),
-                        true,                                // ❸ runFinalIteration (keep default)
-                        true,                                // ❹ unifyOnConvergence (keep default)
-                        false                                // ❺ bailOnFirstReverseWhenIdle (keep default)
-                    });
-            }
-            else
-            {
-                throw new InvalidOperationException("No PositronicVariable was registered. Cannot determine a generic type for convergence.");
-            }
-
-            // Restore the original output and write only the converged output.
-            Console.SetOut(RealConsoleOut);
-            RealConsoleOut.Write(AethericRedirectionGrid.OutputBuffer.ToString());
         };
 
+
     }
+
+    /// <summary>
+    /// Public test hook: run the single [PositronicEntry] method
+    /// inside the convergence loop and capture the converged output
+    /// into <see cref="OutputBuffer"/>.
+    /// </summary>
+    public static void RunAttributedEntryPointForTests()
+    {
+        if (!TryBeginRunOnce())
+            return;
+
+        // Ensure a runtime exists
+        if (!PositronicAmbient.IsInitialized)
+            InitialiseDefaultRuntime();
+
+        // Find exactly one [PositronicEntry]
+        var entryPoints = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .SelectMany(asm =>
+            {
+                try { return asm.GetTypes(); }
+                catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null); }
+            })
+                .SelectMany(t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+                .Where(m =>
+                {
+                    try { return m.GetCustomAttribute<PositronicEntryAttribute>() != null; }
+                    catch (TypeLoadException) { return false; }
+                    catch (ReflectionTypeLoadException) { return false; }
+                    catch (FileNotFoundException) { return false; }
+                })
+            .ToList();
+
+        if (entryPoints.Count == 0)
+            throw new InvalidOperationException("No method marked with [PositronicEntry] was found. Please annotate a static method to use as the convergence entry point.");
+
+        if (entryPoints.Count > 1)
+        {
+            var methodNames = string.Join(Environment.NewLine, entryPoints.Select(m => $" - {m.DeclaringType.FullName}.{m.Name}"));
+            throw new InvalidOperationException($"Multiple methods marked with [PositronicEntry] were found:{Environment.NewLine}{methodNames}{Environment.NewLine}Please mark only one method with [PositronicEntry].");
+        }
+
+        var entryPoint = entryPoints[0];
+        var rt = PositronicAmbient.Current;
+
+        // If no variables exist yet, do a minimal “probe run” at reverse time
+        // to allow the entry point to register its first PositronicVariable<T>.
+        if (!rt.Registry.Any())
+        {
+            var savedEntropy = rt.Entropy;
+            rt.Entropy = -1;
+
+            // Suppress *probe* output so only converged prints are surfaced.
+            var prevOut = Console.Out;
+            try
+            {
+                Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+                var pProbe = entryPoint.GetParameters();
+                object[] probeArgs = pProbe.Length == 0 ? null : new object[] { Array.Empty<string>() };
+                entryPoint.Invoke(null, probeArgs);
+            }
+            finally
+            {
+                // Discard anything the probe wrote and restore console.
+                AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+                Console.SetOut(prevOut);
+                rt.Entropy = savedEntropy;
+            }
+        }
+
+        if (!rt.Registry.Any())
+            throw new InvalidOperationException("No PositronicVariable was registered. Cannot determine a generic type for convergence.");
+
+        // Determine generic T from the last registered positronic variable
+        var lastVariable = rt.Registry.Last();
+        var genericArg = lastVariable.GetType().GetGenericArguments()[0];
+
+        // Call PositronicVariable<T>.RunConvergenceLoop(rt, () => entryPoint(), …)
+        var runMethod = typeof(PositronicVariable<>)
+            .MakeGenericType(genericArg)
+            .GetMethod("RunConvergenceLoop", BindingFlags.Public | BindingFlags.Static);
+
+        runMethod.Invoke(
+            null,
+            new object[]
+            {
+                rt,
+                (Action)(() =>
+                {
+                    var p = entryPoint.GetParameters();
+                    object[] epArgs = p.Length == 0 ? null : new object[] { Array.Empty<string>() };
+                    entryPoint.Invoke(null, epArgs);
+                }),
+                true,   // runFinalIteration
+                true,   // unifyOnConvergence
+                false   // bailOnFirstReverseWhenIdle
+            });
+    }
+
 }
 
 public interface IOperation
@@ -1168,20 +1241,6 @@ public class ReverseReplayEngine<T>
         foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
             op.Undo();
 
-        /* -----------------------------------------------------------
-        *  Which “seeds” should we replay?
-        *
-        *  • Outside the convergence loop (no reversible ops at all)
-        *      – we want every scalar append that happened in the
-        *        forward half-cycle   ⇒ use _forwardValues_ ∪ incoming
-        *
-        *  • Inside the loop *with* reversible ops
-        *      – if the half-cycle ended in a *scalar* overwrite
-        *        (snapshots > reversibles) we should rebuild **only**
-        *        from the incoming slice so we don’t resurrect the
-        *        intermediate states (2, 3, …)
-        *      – otherwise (no scalar overwrite) keep the old rule
-        * --------------------------------------------------------- */
 
         bool scalarWriteDetected = poppedReversibles.Count > 0 &&
         poppedSnapshots.Count > poppedReversibles.Count;
@@ -1190,58 +1249,37 @@ public class ReverseReplayEngine<T>
 
         IEnumerable<T> seeds;
 
+        var incomingVals = incoming.ToCollapsedValues();
         if (!scalarWriteDetected)
         {
-            // For AntiVal-like variables (multi-valued bootstrap), keep bootstrap values.
-            // For ordinary variables (single-valued bootstrap), exclude it to avoid resurrecting the seed.
+            // For single-valued bootstrap, strip it from BOTH the forward side
+            // and the combined seed set so it doesn’t leak back into results.
             var bootstrap = variable.timeline[0].ToCollapsedValues();
             var excludeBootstrap = bootstrap.Count() == 1;
 
-            seeds = includeForward
-                ? forwardValues
-                    .Union(incoming.ToCollapsedValues())
-                    .Except(excludeBootstrap ? bootstrap : Array.Empty<T>())
-                    .Distinct()
-                : incoming.ToCollapsedValues();
+            var fwd = excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues;
+            var inc = excludeBootstrap ? incomingVals.Except(bootstrap) : incomingVals;
+
+            seeds = includeForward ? fwd.Union(inc).Distinct() : inc;
         }
-        else                                                // scalar overwrite
+        else
         {
-            /*  Two possibilities:
- *  a) the overwrite was done with ReplaceLastSlice -> there
- *     is a TimelineReplaceOperation we can consult;
- *  b) it was a *scalar append* (replace == false) so
- *     no Replace op exists – in that case we only want
- *     the incoming value itself.
- */
+            // Scalar overwrite close: rebuild from the new scalar(s) only,
+            // but exclude the replaced slice (if any) and the bootstrap.
+            var bootstrap = variable.timeline[0].ToCollapsedValues();
+            var baseTrim  = incomingVals.Except(bootstrap);
 
-            IEnumerable<T> baseValues = variable.timeline[0].ToCollapsedValues();
+            var replaced = poppedSnapshots
+                .OfType<TimelineReplaceOperation<T>>()
+                .SelectMany(op => op.ReplacedSlice.ToCollapsedValues());
 
-            if (poppedSnapshots.OfType<TimelineReplaceOperation<T>>().Any())
-            {
-                var replacedSlice = poppedSnapshots
-                                                 .OfType<TimelineReplaceOperation<T>>()
-                                                 .First()
-                                                 .ReplacedSlice
-                                                 .ToCollapsedValues();
-                
-                seeds = incoming.ToCollapsedValues()
-                                    .Except(replacedSlice)                  // drop the value we just replaced
-                                    .Except(variable.timeline[0]            // …and never resurrect bootstrap
-                                                   .ToCollapsedValues())
-                                    .Distinct();
-            }
-            else
-            {
-                seeds = incoming.ToCollapsedValues()
-                                               .Except(baseValues)
-                                               .Distinct();
-            }
+            seeds = baseTrim.Except(replaced).Distinct();
         }
 
         if (!seeds.Any())
         {
             // Keep at least what the caller just assigned.
-            seeds = incoming.ToCollapsedValues();
+            seeds = incomingVals;
         }
 
         var rebuiltSet = new HashSet<T>();
@@ -1249,12 +1287,13 @@ public class ReverseReplayEngine<T>
         // **only** if there was literally _no_ popped operation at all
         // do we reuse incoming here
         if (!poppedSnapshots.Any() && !poppedReversibles.Any())
-            rebuiltSet.UnionWith(incoming.ToCollapsedValues());
+            rebuiltSet.UnionWith(incomingVals);
 
         foreach (var seed in seeds)
         {
             var v = seed;
-            // walk backwards through every reversible op
+            // Always replay recorded reversible ops in chronological order
+            // (invert the forward recording order on the stack).
             for (int i = poppedReversibles.Count - 1; i >= 0; i--)
                 v = poppedReversibles[i].ApplyForward(v);
 
@@ -1412,7 +1451,6 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 
         Reset();
         PositronicAmbient.Current = this;
-        AethericRedirectionGrid.MarkEntryPointExecuted();
     }
 
     private class FallbackServiceProvider : IServiceProvider
@@ -1843,18 +1881,21 @@ public class PositronicVariable<T> : IPositronicVariable
         // We're going backwards in time, which means we can only see what will have going to have happened.
         if (runtime.Entropy < 0 && InConvergenceLoop)
         {
+            // Always drive reverse replay; if caller passed the same instance, clone it.
             if (ReferenceEquals(qb, timeline[^1]))
-                return;
+            {
+                qb = new QuBit<T>(qb.ToCollapsedValues().ToArray());
+                qb.Any();
+            }
 
             if (OperationLog.Peek() is null)
                 return;
 
-            var rebuilt = _reverseReplay.ReplayReverseCycle(GetCurrentQBit(), this);
+            var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
             timeline.Add(rebuilt);
             OnTimelineAppended?.Invoke();
             return;
         }
-
 
         // Emergency override for when we’re flailing outside the loop like a time-traveling otter
         if (runtime.Entropy > 0 && !InConvergenceLoop)
