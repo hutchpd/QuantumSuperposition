@@ -662,9 +662,8 @@ public class DefaultOutputRedirector : IOutputRedirector
             _originalOut.Write(bufferText);
             _originalOut.Flush();
 
-            // Only suppress the exit flush if we already wrote to the *real* console.
-            AethericRedirectionGrid.SuppressProcessExitEmission =
-                ReferenceEquals(_originalOut, AethericRedirectionGrid.RealConsoleOut);
+            // Prevent the ProcessExit hook (or EmitOnceIfNeeded) from running it again.
+            AethericRedirectionGrid.SuppressProcessExitEmission = true;
         }
         else
         {
@@ -1196,8 +1195,17 @@ public class ReverseReplayEngine<T>
     }
 
     /// <summary>
-    /// Peel off the last forward half‐cycle, rebuild every possible state,
-    /// and return a single QuBit<T> that contains the union.
+    /// Peel off the last forward half‑cycle, and rebuild every possible earlier state
+    /// that would make the *later* writes self‑consistent.
+    ///
+    /// Semantics: we move *backwards in execution order*, but for each operation
+    ///    we apply its **forward** mapping. Example:
+    ///       x = 10;            // last write
+    ///       x = x + 1;         // earlier in code
+    ///    The earlier read must be 11 (addition still “adds” as we walk back).
+    ///
+    /// The only special case is modulus: the forward mapping we apply is the
+    /// “rebuild” q·d + r using the quotient captured at record‑time.
     /// </summary>
     public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
     {
@@ -1242,8 +1250,9 @@ public class ReverseReplayEngine<T>
             op.Undo();
 
 
-        bool scalarWriteDetected = poppedReversibles.Count > 0 &&
-        poppedSnapshots.Count > poppedReversibles.Count;
+        // Was the forward half-cycle closed by a scalar overwrite?
+        var hasArithmetic = poppedReversibles.Count > 0;
+        bool scalarWriteDetected = hasArithmetic && poppedSnapshots.Count > poppedReversibles.Count;
 
         bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
@@ -1252,10 +1261,11 @@ public class ReverseReplayEngine<T>
         var incomingVals = incoming.ToCollapsedValues();
         if (!scalarWriteDetected)
         {
-            // For single-valued bootstrap, strip it from BOTH the forward side
-            // and the combined seed set so it doesn’t leak back into results.
+            // Trim bootstrap *only* in the degenerate case where no arithmetic happened.
+            // If arithmetic did occur (e.g., +1 or %3), a real result may equal the bootstrap
+            // (e.g., 0), and we must keep it.
             var bootstrap = variable.timeline[0].ToCollapsedValues();
-            var excludeBootstrap = bootstrap.Count() == 1;
+            var excludeBootstrap = !hasArithmetic && bootstrap.Count() == 1;
 
             var fwd = excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues;
             var inc = excludeBootstrap ? incomingVals.Except(bootstrap) : incomingVals;
@@ -1292,20 +1302,26 @@ public class ReverseReplayEngine<T>
         foreach (var seed in seeds)
         {
             var v = seed;
-            // Always replay recorded reversible ops in chronological order
-            // (invert the forward recording order on the stack).
+            // Positronic semantics:
+            //   We move *backwards in execution order*, but each op applies its **forward** mapping.
+            //   Example: last value 10; earlier op was “+1” ⇒ earlier read is 11 (not 9).
+            //   For modulus we also use the forward mapping (q·d + r) to rebuild the pre‑mod value.
+            //
+            // Operations were popped newest→oldest; to re-play chronologically we walk oldest→newest.
             for (int i = poppedReversibles.Count - 1; i >= 0; i--)
                 v = poppedReversibles[i].ApplyForward(v);
 
             rebuiltSet.Add(v);
         }
 
+
         if (!scalarWriteDetected)
         {
             var bootstrap = variable.timeline[0].ToCollapsedValues();
-            var excludeBootstrap = bootstrap.Count() == 1;
+            var excludeBootstrap = !hasArithmetic && bootstrap.Count() == 1;
             rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
         }
+
 
 
         // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
@@ -1823,29 +1839,15 @@ public class PositronicVariable<T> : IPositronicVariable
  * ------------------------------------------------------------- */
         if (runtime.Entropy > 0 && InConvergenceLoop)
         {
- if (timeline.Count == 1)                     // still on bootstrap
- {
-     var incoming = qb.ToCollapsedValues();
-
-     if (incoming.Count() == 1)               // scalar ⇒ append – old behaviour
-     {
-         _versioningService.SnapshotAppend(this, qb);
-     }
-     else                                      // **union** ⇒ merge into slice 0
-     {
-         var merged = timeline[0]
-                        .ToCollapsedValues()
-                        .Union(incoming)
-                        .Distinct()
-                        .ToArray();
-
-         var mergedQb = new QuBit<T>(merged);  mergedQb.Any();
-         _versioningService.ReplaceLastSlice(this, mergedQb);
-     }
-
-     _ops.HadForwardAppend = true;
-     return;
- }
+            if (timeline.Count == 1) // still on bootstrap
+            {
+                // Positronic rule: during the loop, never mutate slice 0.
+                // First in‑loop write (scalar *or* union) must APPEND so
+                // the bootstrap remains an immutable reference state.
+                _versioningService.SnapshotAppend(this, qb);
+                _ops.HadForwardAppend = true;
+                return;
+            }
 
             else if (replace)                            // overwrite/merge
             {
@@ -2586,9 +2588,13 @@ public static class AntiVal
     // If the runtime hasn’t been initialized, we gently whisper it into existence like a haunted lullaby.
     private static void InitialiseDefaultRuntime()
     {
+        if (PositronicAmbient.IsInitialized)
+            return; // Someone already called InitialiseWith()
+
+        // Build the host using the DI path that wires up BOTH Current and Services.
         var hostBuilder = Host.CreateDefaultBuilder()
             .ConfigureServices(services => services.AddPositronicRuntime());
-
         PositronicAmbient.InitialiseWith(hostBuilder);
     }
+
 }

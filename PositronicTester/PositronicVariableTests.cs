@@ -152,9 +152,12 @@ namespace PositronicVariables.Tests
             try
             {
                 var name = asm.GetName().Name ?? string.Empty;
-                // limit scan to our code to dodge TestPlatform attribute resolution
-                return name.StartsWith("QuantumSuperposition", StringComparison.OrdinalIgnoreCase)
-                    || name.StartsWith("Positronic", StringComparison.OrdinalIgnoreCase);
+                // Limit scan to product assemblies; skip test containers & test hosts.
+                return (name.StartsWith("QuantumSuperposition", StringComparison.OrdinalIgnoreCase)
+                        || name.StartsWith("Positronic", StringComparison.OrdinalIgnoreCase))
+                       && !name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)
+                       && !name.Contains("TestPlatform", StringComparison.OrdinalIgnoreCase)
+                       && !name.Contains("TestHost", StringComparison.OrdinalIgnoreCase);
             }
             catch { return false; }
         }
@@ -516,7 +519,7 @@ namespace PositronicVariables.Tests
             Console.SetOut(AethericRedirectionGrid.OutputBuffer);
 
             // run the attributed entry once (test-only, opt-in)
-            PositronicAttributedEntryRunner.RunOnce();
+            AethericRedirectionGrid.RunAttributedEntryPointForTests();
 
             var full = AethericRedirectionGrid.OutputBuffer
                 .ToString()
