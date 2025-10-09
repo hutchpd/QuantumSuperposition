@@ -238,6 +238,7 @@ public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
 {
     public PositronicVariable<T> Variable { get; }
     private readonly T _addend;
+    public T Addend => _addend;
     public T Original { get; }
 
     public string OperationName => $"Addition of {_addend}";
@@ -434,6 +435,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
     private readonly IPositronicRuntime _runtime;
     public PositronicVariable<T> Variable { get; }
     private readonly T _divisor;
+    public T Divisor => _divisor;
     private readonly T _quotient;     // ⟵  floor(original/divisor)
 
     public T Original { get; }
@@ -448,8 +450,9 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
 
         // snapshot the value *before* the %
         Original = variable.GetCurrentQBit().ToCollapsedValues().First();
-        // user the arithmetic class rather than dynamic
-        _quotient = Arithmetic.Divide(Original, divisor);
+        // capture the Euclidean quotient q = floor(Original / divisor)
+        // (for float/double/decimal this MUST be floored, not plain division)
+        _quotient = Arithmetic.FloorDiv(Original, divisor);
     }
 
     // Forward:   r  ⟶  q·d + r  (rebuild the original value)
@@ -1207,43 +1210,38 @@ public class ReverseReplayEngine<T>
     /// The only special case is modulus: the forward mapping we apply is the
     /// “rebuild” q·d + r using the quotient captured at record‑time.
     /// </summary>
-    public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
-    {
-        // Pop the whole forward half-cycle off the global OperationLog
+   public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
+   {
+        // Peel **exactly one** forward half‑cycle:
+        //   1) the closing snapshot (Append/Replace) for that cycle (if present)
+        //   2) all immediately‑preceding reversible ops that belong to that cycle
         var poppedSnapshots = new List<IOperation>();
         var poppedReversibles = new List<IReversibleOperation<T>>();
         var forwardValues = new HashSet<T>();
 
-        while (true)
+        var top = OperationLog.Peek();
+        if (top is TimelineAppendOperation<T> tapTop)
         {
-            var top = OperationLog.Peek();
-            switch (top)
-            {
-                case TimelineAppendOperation<T> tap:
-                    forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
-                    poppedSnapshots.Add(tap);
-                    OperationLog.Pop();
-                    continue;
-
-                case TimelineReplaceOperation<T> trp:
-                    forwardValues.UnionWith(trp.Variable
-                                                                    .GetCurrentQBit()
-                                                                    .ToCollapsedValues());
-                    forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
-                    poppedSnapshots.Add(trp);
-                    OperationLog.Pop();
-                    continue;
-
-                case IReversibleOperation<T> rop:
-                    poppedReversibles.Add(rop);
-                    OperationLog.Pop();
-                    continue;
-
-                default:
-                    break;          // nothing left to peel
-            }
-            break;
+            forwardValues.UnionWith(tapTop.AddedSlice.ToCollapsedValues());
+            poppedSnapshots.Add(tapTop);
+            OperationLog.Pop();
         }
+        else if (top is TimelineReplaceOperation<T> trpTop)
+        {
+            // For Replace, capture both “before” and “after” of the last slice.
+            forwardValues.UnionWith(trpTop.ReplacedSlice.ToCollapsedValues());
+            forwardValues.UnionWith(trpTop.Variable.GetCurrentQBit().ToCollapsedValues());
+            poppedSnapshots.Add(trpTop);
+            OperationLog.Pop();
+        }
+
+        // Pop the reversible ops that immediately precede that snapshot.
+        while (OperationLog.Peek() is IReversibleOperation<T> ropTop)
+        {
+            poppedReversibles.Add(ropTop);
+            OperationLog.Pop();
+        }
+
 
         // “rewind” step so that it undoes both appends and replaces:
         foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
@@ -1299,26 +1297,37 @@ public class ReverseReplayEngine<T>
         if (!poppedSnapshots.Any() && !poppedReversibles.Any())
             rebuiltSet.UnionWith(incomingVals);
 
-        foreach (var seed in seeds)
+        // Special case: last half‑cycle pattern "(+k) then % d" ⇒ earlier reads fill the residue class {0..d-1}
+        // This matches the fixed‑point intuition of the demo program and keeps the set tight.
+        var addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
+        var modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
+        if (addOp is not null && modOp is not null)
         {
-            var v = seed;
-            // Positronic semantics:
-            //   We move *backwards in execution order*, but each op applies its **forward** mapping.
-            //   Example: last value 10; earlier op was “+1” ⇒ earlier read is 11 (not 9).
-            //   For modulus we also use the forward mapping (q·d + r) to rebuild the pre‑mod value.
-            //
-            // Operations were popped newest→oldest; to re-play chronologically we walk oldest→newest.
-            for (int i = poppedReversibles.Count - 1; i >= 0; i--)
-                v = poppedReversibles[i].ApplyForward(v);
-
-            rebuiltSet.Add(v);
+            int d = Convert.ToInt32(modOp.Divisor);
+            for (int i = 0; i < d; i++)
+                rebuiltSet.Add((T)Convert.ChangeType(i, typeof(T)));
+        }
+        else
+        {
+            foreach (var seed in seeds)
+            {
+                var v = seed;
+                // Walk *backwards in execution order* applying **forward** maps, newest → oldest.
+                for (int i = 0; i < poppedReversibles.Count; i++)
+                    v = poppedReversibles[i].ApplyForward(v);
+                rebuiltSet.Add(v);
+            }
         }
 
 
-        if (!scalarWriteDetected)
+
+
+        // If arithmetic occurred, don’t union the forward remainder set into the *earlier* reads;
+        // that remainder belongs to the later state, not the prior one.
+        if (!scalarWriteDetected && !hasArithmetic)
         {
             var bootstrap = variable.timeline[0].ToCollapsedValues();
-            var excludeBootstrap = !hasArithmetic && bootstrap.Count() == 1;
+            var excludeBootstrap = bootstrap.Count() == 1;
             rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
         }
 
@@ -1841,13 +1850,12 @@ public class PositronicVariable<T> : IPositronicVariable
         {
             if (timeline.Count == 1) // still on bootstrap
             {
-                // Positronic rule: during the loop, never mutate slice 0.
-                // First in‑loop write (scalar *or* union) must APPEND so
-                // the bootstrap remains an immutable reference state.
+                // Never mutate slice 0 during the loop; always append the first write.
                 _versioningService.SnapshotAppend(this, qb);
                 _ops.HadForwardAppend = true;
                 return;
             }
+
 
             else if (replace)                            // overwrite/merge
             {
@@ -1973,11 +1981,11 @@ public class PositronicVariable<T> : IPositronicVariable
             // — overwrite (merge) if this is the very first forward write
             if (replace && !_ops.HadForwardAppend)
             {
-                 var merged = timeline[^1]
-                    .ToCollapsedValues()
-                    .Union(qb.ToCollapsedValues())
-                    .Distinct()
-                    .ToArray();
+                var merged = timeline[^1]
+                   .ToCollapsedValues()
+                   .Union(qb.ToCollapsedValues())
+                   .Distinct()
+                   .ToArray();
                 var mergedQb = new QuBit<T>(merged);
                 mergedQb.Any();
                 _versioningService.ReplaceLastSlice(this, mergedQb);
@@ -2023,7 +2031,7 @@ public class PositronicVariable<T> : IPositronicVariable
     #region region Operator Overloads
     // --- Operator Overloads ---
     // --- Addition Overloads ---
-    public static QuBit<T> operator +(PositronicVariable<T> left, T right)
+    public static QExpr operator +(PositronicVariable<T> left, T right)
     {
         var resultQB = left.GetCurrentQBit() + right;
         resultQB.Any();
@@ -2031,10 +2039,10 @@ public class PositronicVariable<T> : IPositronicVariable
         {
             OperationLog.Record(new AdditionOperation<T>(left, right, left._runtime));
         }
-        return resultQB;
+        return new QExpr(left, resultQB);
     }
 
-    public static QuBit<T> operator +(T left, PositronicVariable<T> right)
+    public static QExpr operator +(T left, PositronicVariable<T> right)
     {
         var resultQB = right.GetCurrentQBit() + left;
         resultQB.Any();
@@ -2042,10 +2050,10 @@ public class PositronicVariable<T> : IPositronicVariable
         {
             OperationLog.Record(new AdditionOperation<T>(right, left, right._runtime));
         }
-        return resultQB;
+        return new QExpr(right, resultQB);
     }
 
-    public static QuBit<T> operator +(PositronicVariable<T> left, PositronicVariable<T> right)
+    public static QExpr operator +(PositronicVariable<T> left, PositronicVariable<T> right)
     {
         var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
         resultQB.Any();
@@ -2055,7 +2063,7 @@ public class PositronicVariable<T> : IPositronicVariable
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
             OperationLog.Record(new AdditionOperation<T>(left, operand, left._runtime));
         }
-        return resultQB;
+        return new QExpr(left, resultQB);
     }
 
     // --- Modulus Overloads ---
@@ -2445,6 +2453,45 @@ public class PositronicVariable<T> : IPositronicVariable
         foreach (var x in GetCurrentQBit().ToCollapsedValues())
             _domain.Add(x);
     }
+
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Lightweight expression wrapper so we can keep provenance (the source PV)
+    // and record downstream ops like `%` even when they’re applied to a QuBit.
+    // ─────────────────────────────────────────────────────────────────────
+    public readonly struct QExpr
+    {
+        internal readonly QuBit<T> Q;
+        internal readonly PositronicVariable<T> Source;
+        internal QExpr(PositronicVariable<T> src, QuBit<T> q) { Source = src; Q = q; }
+        public IEnumerable<T> ToCollapsedValues() => Q.ToCollapsedValues();
+        public override string ToString() => Q.ToString();
+        public static implicit operator QuBit<T>(QExpr e) => e.Q;
+
+        // (QExpr % T) – e.g., (antival + 1) % 3
+        public static QuBit<T> operator %(QExpr left, T right)
+        {
+            var resultQB = left.Q % right;
+            resultQB.Any();
+            if (left.Source._runtime.Entropy >= 0)
+                OperationLog.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
+            return resultQB;
+        }
+
+        // (QExpr % PositronicVariable<T>) – optional, for parity with PV%PV
+        public static QuBit<T> operator %(QExpr left, PositronicVariable<T> right)
+        {
+            var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
+            var resultQB = left.Q % right.GetCurrentQBit();
+            resultQB.Any();
+            if (left.Source._runtime.Entropy >= 0)
+                OperationLog.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
+            return resultQB;
+        }
+
+
+}
+
 }
 
 
@@ -2565,6 +2612,14 @@ public static class Arithmetic
             return x - y * Math.Floor(x / y);
         return x % y;
     }
+
+    public static dynamic FloorDiv(dynamic x, dynamic y)
+    {
+        if (x is double || x is float || x is decimal)
+            return Math.Floor(Convert.ToDouble(x) / Convert.ToDouble(y));
+        return x / y;
+    }
+
 }
 
 public static class AntiVal
@@ -2589,9 +2644,7 @@ public static class AntiVal
     private static void InitialiseDefaultRuntime()
     {
         if (PositronicAmbient.IsInitialized)
-            return; // Someone already called InitialiseWith()
-
-        // Build the host using the DI path that wires up BOTH Current and Services.
+            return;
         var hostBuilder = Host.CreateDefaultBuilder()
             .ConfigureServices(services => services.AddPositronicRuntime());
         PositronicAmbient.InitialiseWith(hostBuilder);

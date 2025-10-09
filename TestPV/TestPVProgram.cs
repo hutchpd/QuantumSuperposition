@@ -1,5 +1,5 @@
 ﻿using QuantumSuperposition;
-//This program introduces the idea of positronic variables — variables that propagate their assigned values backwards through time.
+//This program introduces the idea of positronic variables, variables that propagate their assigned values backwards through time.
 // To the programmer, they behave like ordinary variables, but their final assignments retroactively determine their earlier reads, ensuring temporal consistency.
 // In this example, an AntiVal is read before it is assigned. Yet when the program completes, the assignment travels back through execution, shaping its own past. The result is a self-consistent — or, when impossible, superposed - outcome that “just works,” even when cause and effect seem reversed.
 // the output is expected to be:
@@ -31,7 +31,8 @@ internal static class TestPVProgram
 //        var mysteryNumber = AntiVal.GetOrCreate<int>();
 
 //        // We declare that the result of doubling this mystery number must equal 10.
-//        var doubled = mysteryNumber * 2;
+//        var doubled = AntiVal.GetOrCreate<Double>();
+//        doubled.Assign(mysteryNumber * 2);
 
 //        Console.WriteLine($"The mystery number is: {mysteryNumber}");
 //        Console.WriteLine($"When doubled, it becomes: {doubled}");

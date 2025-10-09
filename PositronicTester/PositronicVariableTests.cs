@@ -154,8 +154,8 @@ namespace PositronicVariables.Tests
                 var name = asm.GetName().Name ?? string.Empty;
                 // Limit scan to product assemblies; skip test containers & test hosts.
                 return (name.StartsWith("QuantumSuperposition", StringComparison.OrdinalIgnoreCase)
-                        || name.StartsWith("Positronic", StringComparison.OrdinalIgnoreCase))
-                       && !name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)
+                        || name.StartsWith("Positronic", StringComparison.OrdinalIgnoreCase)
+                        || name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase))
                        && !name.Contains("TestPlatform", StringComparison.OrdinalIgnoreCase)
                        && !name.Contains("TestHost", StringComparison.OrdinalIgnoreCase);
             }
@@ -504,10 +504,6 @@ namespace PositronicVariables.Tests
         }
 
 
-        // Fails with
-        //       Assert.That(full.ElementAtOrDefault(0), Does.Contain("The antival is any(0, 1, 2)"))
-        // Expected: String containing "The antival is any(0, 1, 2)"
-        // But was:  "The antival is any(1, 2)"
         [Test]
         public void Program_Main_Integration_CapturesAllAntivalStates()
         {
@@ -519,7 +515,7 @@ namespace PositronicVariables.Tests
             Console.SetOut(AethericRedirectionGrid.OutputBuffer);
 
             // run the attributed entry once (test-only, opt-in)
-            AethericRedirectionGrid.RunAttributedEntryPointForTests();
+            PositronicAttributedEntryRunner.RunOnce();
 
             var full = AethericRedirectionGrid.OutputBuffer
                 .ToString()
