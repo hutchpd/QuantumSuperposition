@@ -735,6 +735,16 @@ namespace QuantumSuperposition.QuantumSoup
 
         #endregion
 
+        #region Implicit Conversions
+        public static implicit operator QuBit<T>(T scalar)
+        {
+            // Create a single-value local qubit; mark it as a non-collapsed "any" state
+            var qb = new QuBit<T>(new[] { scalar });
+            qb.Any();
+            return qb;
+        }
+        #endregion
+
         #region Introspection
 
         /// <summary>

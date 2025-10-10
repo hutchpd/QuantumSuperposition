@@ -9,9 +9,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestPlatform.TestHost;
 using NUnit.Framework;
+using PositronicVariables.Attributes;
 using QuantumSuperposition.Core;
-using QuantumSuperposition.DependencyInjection;
+using PositronicVariables.DependencyInjection;
 using QuantumSuperposition.QuantumSoup;
+using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Transponder;
+using PositronicVariables.Runtime;
+using PositronicVariables.Variables.Factory;
+using PositronicVariables.Variables;
 
 namespace PositronicVariables.Tests
 {
@@ -622,7 +628,7 @@ namespace PositronicVariables.Tests
                 Console.WriteLine($"The temperature in c is {temp}");
                 temp.Assign(temp + 1);
                 temp.Assign(temp + 1);
-                temp.Assign(10);
+                temp.State = 10;
             });
 
             // Assert
@@ -872,10 +878,45 @@ namespace PositronicVariables.Tests
                 Console.WriteLine($"The result will be {val}");
                 val.Assign(val + 2);
                 val.Assign(val + 2);
-                val.Assign(10);
+                val.State = 10;
             });
 
             Assert.That(output.ToString().Trim(), Is.EqualTo("The result will be any(14)"));
+        }
+
+        [Test]
+        public void StringCycleAndUnifyTest()
+        {
+            // Create a PositronicVariableRef with an initial greeting.
+            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
+
+            // Cycle through greetings.
+            greeting.Assign("Hi");
+            greeting.Assign("Hey");
+            greeting.Assign("Hello");
+
+            // Unify the timeline so that the union is calculated.
+            greeting.UnifyAll();
+
+            // Expect the union to contain all three distinct greetings.
+            var finalStates = greeting.ToValues().Distinct().OrderBy(s => s).ToList();
+            Assert.That(finalStates, Is.EquivalentTo(new[] { "Hello", "Hey", "Hi" }));
+            Assert.That(greeting.ToString(), Does.Contain("any("));
+        }
+
+        [Test]
+        public void StringMultipleAssignmentsTimelineTest()
+        {
+            var greeting = PositronicVariable<string>.GetOrCreate("greeting", "Hello");
+
+            // Make several assignments. Depending on the ReplaceOrAppendOrUnify logic,
+            // the first assignment might replace the initial slice, and later ones append.
+            greeting.Assign("Hello");  // may replace the seed if it's different
+            greeting.Assign("Hi");
+            greeting.Assign("Hey");
+
+            // We expect the timeline to have at least two slices now.
+            Assert.That(greeting.timeline.Count, Is.GreaterThanOrEqualTo(2));
         }
 
     }

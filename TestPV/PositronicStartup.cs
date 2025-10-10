@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using QuantumSuperposition.DependencyInjection;
+using PositronicVariables.DependencyInjection;
+using PositronicVariables.Runtime;
 
 public static class PositronicStartup
 {

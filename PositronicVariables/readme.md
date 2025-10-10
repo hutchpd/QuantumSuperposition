@@ -4,7 +4,7 @@ A time-looping variable container for quantum misfits and deterministic dreamers
 
 ---
 
-`PositronicVariable<T>` lets your code simulate values that evolve over iterative timelines. Think of it as Schrödinger’s variable: simultaneously filled with regret and potential. Now enhanced with automatic convergence, timeline journaling, and existential debugging capabilities.
+`PositronicVariable<T>` lets your code simulate values that evolve over iterative timelines. Think of it as Schrödinger's variable: simultaneously filled with regret and potential. Now enhanced with automatic convergence, timeline journaling, and existential debugging capabilities.
 
 > Not exactly time travel, but close enough to confuse your boss.
 
@@ -40,14 +40,14 @@ What happens if you create a logical loop with no stable resolution?
 ```csharp
 internal static class Program
 {
-    [PositronicEntry]
+    [DontPanic]
     private static void Main()
     {
         var antival = PositronicVariable<int>.GetOrCreate("antival", -1);
         Console.WriteLine($"The antival is {antival}");
         var val = -1 * antival;
         Console.WriteLine($"The value is {val}");
-        antival.Assign(val);
+        antival.State = val;
     }
 }
 ```
@@ -58,33 +58,32 @@ The antival is any(-1, 1)
 The value is any(1, -1)
 ```
 
-You're trapped in a two-state paradox. Like a light switch held halfway by Schrödinger’s indecision. This is why convergence matters — without it, you're just running in timeline circles until the compiler cries.
+You're trapped in a two-state paradox. Like a light switch held halfway by Schrödinger's indecision. This is why convergence matters - without it, you're just running in timeline circles until the compiler cries.
 
 ---
 
 ## Feynman Diagrams for Programmers
-Let’s visualize what just happened:
+Let's visualize what just happened:
 
 ```
 Time →
-[initial guess] — val = -1 * antival —→ antival = val —→ [back in time]
+[initial guess] - val = -1 * antival -→ antival = val -→ [back in time]
        ↑_______________________________________________________|
 ```
 
 We created a **cycle**. PositronicVariables evaluate by iterating this loop until the values settle. If they never settle? You get superpositions. Like emotional baggage, but for integers.
 
 ```csharp
-[PositronicEntry]
-static void Main()
+[DontPanic]
+internal static void Main()
 {
     double a = 2.0;
     var guess = PositronicVariable<double>.GetOrCreate("guess", 1.5);
 
-    // Watch the convergence happen before your eyes
     Console.WriteLine($"sqrt({a}) ≈ {guess.ToValues().Last()}");
 
     double v = guess.ToValues().Last();
-    guess.Assign((v + a / v) / 2.0);
+    guess.State = (v + a / v) / 2.0;
 }
 ```
 
@@ -93,23 +92,23 @@ static void Main()
 sqrt(2) ≈ 1.414213562
 ```
 
-Yes, this is real. No, we didn’t skip a step. The past just updated itself when we committed to the present.
+Yes, this is real. No, we didn't skip a step. The past just updated itself when we committed to the present.
 
 #### Why `.ToValues().Last()`?
 
 You're not just creating a variable.
 
-You’re summoning a cloud of possibilities — all the potential values that guess could take as the program recursively rewinds and replays itself.
+You're summoning a cloud of possibilities - all the potential values that guess could take as the program recursively rewinds and replays itself.
 Like a looping dream sequence where it tries different outcomes until it finds one that satisfies the logic across all iterations.
 The final value (of the not empty list) is the one that successfully stabilized the timeline after it loops through all the possibilities.
 
 ---
 
-### Advanced: Folding Time with Pascal’s Triangle
+### Advanced: Folding Time with Pascal's Triangle
 
-##  Pascal’s Triangle via Causal Iteration
+##  Pascal's Triangle via Causal Iteration
 
-This is not a program that calculates Pascal’s Triangle. This is a program that remembers the future row of Pascal’s Triangle and tries to convince the past to believe it.
+This is not a program that calculates Pascal's Triangle. This is a program that remembers the future row of Pascal's Triangle and tries to convince the past to believe it.
 
 ```csharp
 
@@ -120,18 +119,18 @@ internal static class Program
 
     // Entry point into the timeline. Begins *after* knowing the result.
     // Notice there is no explicit for loop here.
-    [PositronicEntry]
+    [DontPanic]
     private static void Main()
     {
-        // This line doesn't just create a variable. It creates a causality loop — one that stabilizes only when it finds a version of itself that matches the logical rules that come after it.
-        // "Hello, I’m row. I will become a version of Pascal’s Triangle when I grow up. Here is my future self: [1, 3, 3, 1]. Please backfill everything I need to become that."
+        // This line doesn't just create a variable. It creates a causality loop - one that stabilizes only when it finds a version of itself that matches the logical rules that come after it.
+        // "Hello, I'm row. I will become a version of Pascal's Triangle when I grow up. Here is my future self: [1, 3, 3, 1]. Please backfill everything I need to become that."
 
         var row = PositronicVariable<ComparableList>.GetOrCreate("row", new ComparableList(1));
         // Print the final result before we do the work.
         Console.WriteLine("Final converged row: " + row);
 
-        // “Give me the version of this variable that finally stopped fighting itself. I’ll use that.”
-        // The value hasn’t been computed yet — it’s being repeatedly derived in time.
+        // “Give me the version of this variable that finally stopped fighting itself. I'll use that.”
+        // The value hasn't been computed yet - it's being repeatedly derived in time.
         ComparableList currentRowWrapper = row.ToValues().Last();
         List<int> currentRow = currentRowWrapper.Items;
 
@@ -143,8 +142,8 @@ internal static class Program
             var nextComparable = new ComparableList(nextRow.ToArray());
 
             // Assign the next row.
-            row.Assign(nextComparable);
-            // (No explicit printing or looping here—the simulation will re-invoke Main() automatically.)
+            row.State = nextComparable;
+            // (No explicit printing or looping here-the simulation will re-invoke Main() automatically.)
         }
         else
         {
@@ -176,7 +175,7 @@ internal static class Program
 }
 
 /// <summary>
-/// We implement a custom IComparable<ComparableList>. Why? Because convergence requires comparison. If time  can’t tell when a value has changed, it can’t collapse reality into a stable state and you loop forever.
+/// We implement a custom IComparable<ComparableList>. Why? Because convergence requires comparison. If time  can't tell when a value has changed, it can't collapse reality into a stable state and you loop forever.
 /// </summary>
 public class ComparableList : IComparable<ComparableList>
 {
@@ -188,7 +187,7 @@ public class ComparableList : IComparable<ComparableList>
     }
 
     /// <summary>
-    /// This wrapper isn’t just syntactic sugar. It’s the contract that keeps reality from fracturing.
+    /// This wrapper isn't just syntactic sugar. It's the contract that keeps reality from fracturing.
     /// </summary>
     /// <param name="other"></param>
     /// <returns></returns>
@@ -224,9 +223,9 @@ public class ComparableList : IComparable<ComparableList>
 }
 
 ```
-Pascal’s Triangle via convergence is just the beginning.
+Pascal's Triangle via convergence is just the beginning.
 Imagine calculating Fibonacci sequences, game states, or user interfaces where the output stabilizes through pure logical declaration.
-This isn’t programming.
+This isn't programming.
 This is state declaration with timeline pressure.
 
 #### Output:
@@ -242,15 +241,15 @@ Final converged row: any(1 1, 1 2 1, 1 3 3 1, 1 4 6 4 1, 1 5 10 10 5 1, 1 6 15 2
 - You can **print values before they're calculated.**
 - You can create **logical time paradoxes.**
 - You can use **Feynman logic graphs** to debug your feedback loops.
-- You can solve classical problems like sqrt, primes, or Pascal’s triangle via **backward causality**.
+- You can solve classical problems like sqrt, primes, or Pascal's triangle via **backward causality**.
 - This is no longer programming. This is wizardry in C# form.
 
-And yes, it’s probably too much power for your coworkers. You're welcome.
+And yes, it's probably too much power for your coworkers. You're welcome.
 
 
 ## How It Works (The Short Version)
 
-When you mark your entry method with `[PositronicEntry]`, the library automatically:
+When you mark your entry method with `[DontPanic]`, the library automatically:
 
 1. **Runs** your logic silently through negative-time (reverse entropy mode).
 2. **Detects** repeating patterns and decides when your variables have "converged."
@@ -267,11 +266,16 @@ var x = v + 5;
 var y = x % 3;
 ```
 
-It’s all syntactic sugar over quantum indecision.
+It's all syntactic sugar over quantum indecision.
 
 ---
 
 ## Neural Nodule: DIY Quantum Brainstorming
+
+This pattern gives us a reusable, DI-friendly "computed positronic variable." It’s great for building little probabilistic/possibilistic circuits where each node:
+- reads the (possibly multivalued) states of other nodes,
+- emits a (possibly multivalued) state of its own.
+- and plays nicely with the convergence engine and timelines.
 
 ```csharp
 var x = PositronicVariable<int>.GetOrCreate("x", 0);
