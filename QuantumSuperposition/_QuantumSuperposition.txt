@@ -242,7 +242,7 @@ public interface IQuantumObservable<T>
 
 /// <summary>
 /// A common interface for all qubits that participate in an entangled system. 
-/// It acts as a “handle” that the QuantumSystem can use to communicate with individual qubits.
+/// It acts as a "handle" that the QuantumSystem can use to communicate with individual qubits.
 /// </summary>
 public interface IQuantumReference
 {
@@ -349,7 +349,7 @@ public struct CommutativeKey<T>
     public CommutativeKey(T a, T b)
     {
         // If a and b are equal, the order doesn’t matter.
-        // If they differ, we “order” them based on hash code (or you can require IComparable<T> for a more robust solution)
+        // If they differ, we "order" them based on hash code (or you can require IComparable<T> for a more robust solution)
         if (Comparer<T>.Default.Compare(a, b) <= 0)
         {
             A = a;
@@ -1154,7 +1154,7 @@ public class QuantumSystem
             // Only update local state for qubits whose indices intersect measuredIndices.
             if (refQ.GetQubitIndices().Intersect(measuredIndices).Any())
             {
-                // Call a “partial collapse” that only sets this qubit’s local observed value.
+                // Call a "partial collapse" that only sets this qubit’s local observed value.
                 (refQ as QuBit<bool>)?.PartialCollapse(chosenOutcome);
             }
         }
@@ -1211,7 +1211,7 @@ public class QuantumSystem
     }
 
     /// <summary>
-    /// A simple “observe everything fully” method.
+    /// A simple "observe everything fully" method.
     /// TODO: for partial measurement, expand this to do partial sums.
     /// </summary>
     /// <param name="qubitIndices"></param>
@@ -1473,7 +1473,7 @@ public class QuantumSystem
 
     /// <summary>
     /// Normalises amplitudes so the universe doesn’t implode.
-    /// Math nerds call this “preserving probability”. We call it “not being weird.”
+    /// Math nerds call this "preserving probability". We call it "not being weird."
     /// </summary>
     private void NormaliseAmplitudes()
     {
@@ -2007,7 +2007,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     /// resulting states into a final value using a result selector —
     /// like a cosmic buddy-cop movie across entangled timelines.
     ///
-    /// This is the monadic version of “yes, and…”
+    /// This is the monadic version of "yes, and…"
     /// </summary>
     /// <typeparam name="TResult">
     /// The intermediate state produced by the selector.
@@ -2265,7 +2265,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
 
     /// <summary>
-    /// ObservationalArithmetic implements *observational” behavior.
+    /// ObservationalArithmetic implements *observational" behavior.
     /// It collapses both operands (if needed) and then applies the operator
     /// on the observed (collapsed) values. The resulting qubit is created
     /// in a collapsed state.
@@ -2635,7 +2635,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
         for (int i = 0; i < states.Length; i++)
             newWeights[states[i]] = transformed[i];
 
-        // Because nothing says “science” like measuring something after you’ve changed the rules.
+        // Because nothing says "science" like measuring something after you’ve changed the rules.
         var newQubit = new QuBit<T>(states, newWeights, _ops).WithNormalisedWeights();
         return newQubit.Observe(rng);
     }
@@ -2729,7 +2729,7 @@ public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
 
 
     /// <summary>
-    /// An explicit “WithNormalisedWeights()” 
+    /// An explicit "WithNormalisedWeights()" 
     /// that returns a new QuBit or modifies in place. Here we clone for safety.
     /// </summary>
     public QuBit<T> WithNormalisedWeights()
@@ -3339,7 +3339,7 @@ public class Eigenstates<T> : QuantumSoup<T>
     #endregion
 
     #region Filtering Mode
-    // Toggle between “any of these are fine” and “they all better agree”.
+    // Toggle between "any of these are fine" and "they all better agree".
     // Like relationship statuses but for probability distributions.
 
     public Eigenstates<T> Any() { _eType = QuantumStateType.SuperpositionAny; return this; }
@@ -3491,7 +3491,7 @@ public class Eigenstates<T> : QuantumSoup<T>
     #endregion
 
     #region Filtering (Comparison) Operators
-    // Let’s you ask “which of you is actually greater than 5?” in a very judgmental way.
+    // Let’s you ask "which of you is actually greater than 5?" in a very judgmental way.
     // Returns a trimmed-down existential crisis with weights.
 
     private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, T value)
@@ -3803,7 +3803,7 @@ public class Eigenstates<T> : QuantumSoup<T>
 
     /// <summary>
     /// Filter your states by weight like you're trimming down party invites.
-    /// Only show up if your weight is greater than 0.75, Chad.”
+    /// Only show up if your weight is greater than 0.75, Chad."
     /// </summary>
     public Eigenstates<T> FilterByProbability(Func<Complex, bool> predicate)
     {

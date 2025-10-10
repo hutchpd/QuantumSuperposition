@@ -31,7 +31,7 @@ namespace QuantumMathTests
 
             _system.Entangle("BellPair_A", qubitA, qubitB);
 
-            // Confirm they’re now officially "quantum married"
+            // Confirm they're now officially "quantum married"
             Assert.That(qubitA.EntanglementGroupId, Is.Not.Null);
             Assert.That(qubitB.EntanglementGroupId, Is.Not.Null);
             Assert.That(qubitB.EntanglementGroupId.Value, Is.EqualTo(qubitA.EntanglementGroupId.Value));
@@ -176,7 +176,7 @@ namespace QuantumMathTests
             var qubitA = new QuBit<int>(_system, new[] { 0 });
             var groupId = _manager.Link("LockTestGroup", qubitA);
 
-            qubitA.Lock(); // Schrödinger’s DO NOT DISTURB sign
+            qubitA.Lock(); // Schrödinger's DO NOT DISTURB sign
 
             if (qubitA.IsLocked)
             {

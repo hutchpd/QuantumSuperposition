@@ -224,7 +224,7 @@ namespace QuantumSuperposition.QuantumSoup
         /// resulting states into a final value using a result selector —
         /// like a cosmic buddy-cop movie across entangled timelines.
         ///
-        /// This is the monadic version of “yes, and…”
+        /// This is the monadic version of "yes, and…"
         /// </summary>
         /// <typeparam name="TResult">
         /// The intermediate state produced by the selector.
@@ -482,7 +482,7 @@ namespace QuantumSuperposition.QuantumSoup
 
 
         /// <summary>
-        /// ObservationalArithmetic implements *observational” behavior.
+        /// ObservationalArithmetic implements *observational" behavior.
         /// It collapses both operands (if needed) and then applies the operator
         /// on the observed (collapsed) values. The resulting qubit is created
         /// in a collapsed state.
@@ -862,7 +862,7 @@ namespace QuantumSuperposition.QuantumSoup
             for (int i = 0; i < states.Length; i++)
                 newWeights[states[i]] = transformed[i];
 
-            // Because nothing says “science” like measuring something after you’ve changed the rules.
+            // Because nothing says "science" like measuring something after you’ve changed the rules.
             var newQubit = new QuBit<T>(states, newWeights, _ops).WithNormalisedWeights();
             return newQubit.Observe(rng);
         }
@@ -956,7 +956,7 @@ namespace QuantumSuperposition.QuantumSoup
 
 
         /// <summary>
-        /// An explicit “WithNormalisedWeights()” 
+        /// An explicit "WithNormalisedWeights()" 
         /// that returns a new QuBit or modifies in place. Here we clone for safety.
         /// </summary>
         public QuBit<T> WithNormalisedWeights()

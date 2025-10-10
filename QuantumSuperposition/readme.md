@@ -2,7 +2,7 @@
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 ![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
 
-.NET’s most confident way to say “maybe”
+.NET’s most confident way to say "maybe"
 
 QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
 
@@ -152,8 +152,8 @@ You *can* still go full Cartesian if you want, but we don’t do it for you beca
 ## Advanced Concepts
 
 ### Superposition Modes
-- Disjunctive (Any) — “Any of these values might work.”  
-- Conjunctive (All) — “They all better pass, or we riot.”
+- Disjunctive (Any) — "Any of these values might work."  
+- Conjunctive (All) — "They all better pass, or we riot."
 
 ### Arithmetic & Logic That Feels Like Sorcery
 Math just works across your whole quantum cloud.  

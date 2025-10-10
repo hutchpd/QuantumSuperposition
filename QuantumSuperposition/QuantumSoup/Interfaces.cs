@@ -39,7 +39,7 @@ namespace QuantumSuperposition.QuantumSoup
 
     /// <summary>
     /// A common interface for all qubits that participate in an entangled system. 
-    /// It acts as a “handle” that the QuantumSystem can use to communicate with individual qubits.
+    /// It acts as a "handle" that the QuantumSystem can use to communicate with individual qubits.
     /// </summary>
     public interface IQuantumReference
     {

@@ -79,7 +79,7 @@ namespace QuantumSuperposition.Utilities
         {
             rng ??= Random.Shared;
 
-            // 1) If mock collapse is active, just return forced value:
+            // If mock collapse is active, just return forced value:
             if (qubit.MockCollapseEnabled)
             {
                 if (qubit.MockCollapseValue is null)
@@ -88,25 +88,25 @@ namespace QuantumSuperposition.Utilities
                 return qubit.MockCollapseValue;
             }
 
-            // 2) If already collapsed, do nothing:
+            // If already collapsed, do nothing:
             if (qubit.IsActuallyCollapsed && qubit.CollapsedValue is not null)
             {
                 return qubit.CollapsedValue;
             }
 
-            // 3) Otherwise, sample from the superposition:
+            // Otherwise, sample from the superposition:
             if (qubit.States.Count == 0)
                 throw new InvalidOperationException("No states available to collapse.");
 
             var picked = qubit.SampleOneValue(rng);
 
-            // 4) Enforce 'no default(T)' policy if requested:
+            // Enforce 'no default(T)' policy if requested:
             if (qubit.ForbidDefault && EqualityComparer<T>.Default.Equals(picked, default!))
             {
                 throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
             }
 
-            // 5) Update qubit’s internal fields:
+            // Update qubit’s internal fields:
             qubit.CollapsedValue = picked;
             qubit.IsActuallyCollapsed = true;
 

@@ -186,7 +186,7 @@ namespace QuantumSuperposition.Systems
                 // Only update local state for qubits whose indices intersect measuredIndices.
                 if (refQ.GetQubitIndices().Intersect(measuredIndices).Any())
                 {
-                    // Call a “partial collapse” that only sets this qubit’s local observed value.
+                    // Call a "partial collapse" that only sets this qubit’s local observed value.
                     (refQ as QuBit<bool>)?.PartialCollapse(chosenOutcome);
                 }
             }
@@ -244,7 +244,7 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
-        /// A simple “observe everything fully” method.
+        /// A simple "observe everything fully" method.
         /// TODO: for partial measurement, expand this to do partial sums.
         /// </summary>
         /// <param name="qubitIndices"></param>
@@ -271,7 +271,7 @@ namespace QuantumSuperposition.Systems
                 projectionGroups[projected].Add((fullState, kvp.Value));
             }
 
-            // Step 2: Compute total probabilities for each projection group
+            // Compute total probabilities for each projection group
             var probSums = projectionGroups.ToDictionary(
                 g => g.Key,
                 g => g.Value.Sum(x => x.amplitude.Magnitude * x.amplitude.Magnitude),
@@ -672,7 +672,7 @@ namespace QuantumSuperposition.Systems
 
         /// <summary>
         /// Normalises amplitudes so the universe doesn’t implode.
-        /// Math nerds call this “preserving probability”. We call it “not being weird.”
+        /// Math nerds call this "preserving probability". We call it "not being weird."
         /// </summary>
         private void NormaliseAmplitudes()
         {

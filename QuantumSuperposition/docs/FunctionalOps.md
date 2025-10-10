@@ -9,7 +9,7 @@ using System.Numerics;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Core;
 
-Because collapsing reality should be optional. These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
+These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
 
 - **`p_op` – Conditional Without Collapse**: Choose branches based on conditions without collapsing the state. Schrödinger's choice logic.
 - **`p_func` – Functional State Transforms**: Map, filter, flatten — all without collapsing. LINQ for the superposed soul.

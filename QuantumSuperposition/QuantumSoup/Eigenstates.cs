@@ -77,7 +77,7 @@ namespace QuantumSuperposition.QuantumSoup
         #endregion
 
         #region Filtering Mode
-        // Toggle between “any of these are fine” and “they all better agree”.
+        // Toggle between "any of these are fine" and "they all better agree".
         // Like relationship statuses but for probability distributions.
 
         public Eigenstates<T> Any() { _eType = QuantumStateType.SuperpositionAny; return this; }
@@ -229,7 +229,7 @@ namespace QuantumSuperposition.QuantumSoup
         #endregion
 
         #region Filtering (Comparison) Operators
-        // Let’s you ask “which of you is actually greater than 5?” in a very judgmental way.
+        // Let’s you ask "which of you is actually greater than 5?" in a very judgmental way.
         // Returns a trimmed-down existential crisis with weights.
 
         private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, T value)
@@ -541,7 +541,7 @@ namespace QuantumSuperposition.QuantumSoup
 
         /// <summary>
         /// Filter your states by weight like you're trimming down party invites.
-        /// Only show up if your weight is greater than 0.75, Chad.”
+        /// Only show up if your weight is greater than 0.75, Chad."
         /// </summary>
         public Eigenstates<T> FilterByProbability(Func<Complex, bool> predicate)
         {

@@ -62,7 +62,7 @@ namespace QuantumMathTests
             var result = qubit.SelectMany(InnerSelector);
 
             Assert.That(result.States, Is.EquivalentTo(new[] { 10, 11, 20 }));
-            Assert.That(result.IsCollapsed, Is.False, "Just branching, not spying. We’re good.");
+            Assert.That(result.IsCollapsed, Is.False, "Just branching, not spying. We're good.");
         }
 
         [Test]
@@ -79,7 +79,7 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_NonObservationalArithmetic_ShouldNotCollapseQuBits()
         {
-            // Enabling math that doesn’t stare into your soul and judge you
+            // Enabling math that doesn't stare into your soul and judge you
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
             var q1 = new QuBit<int>(new[] { 1, 2 });
@@ -89,7 +89,7 @@ namespace QuantumMathTests
 
             // use nuget 4 syntax
             Assert.That(result.States, Is.EquivalentTo(new[] { 3, 4, 6, 8 }),
-                "Multiplying qubits should be like a quantum orgy — all combinations.");
+                "Multiplying qubits should be like a quantum orgy.");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -103,7 +103,7 @@ namespace QuantumMathTests
             var result = qubit + 5; // Just casually throwing +5 at quantum uncertainty
 
             Assert.That(result.States, Is.EquivalentTo(new[] { 6, 7, 8 }),
-                "Adding a scalar should be like adding sprinkles to a cupcake — no collapse.");
+                "Adding a scalar should be like adding sprinkles to a cupcake, no collapse.");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -120,7 +120,7 @@ namespace QuantumMathTests
             var result2 = b + a;
 
             Assert.That(result1.States, Is.EquivalentTo(result2.States),
-                "Commutativity isn’t just polite — it’s optimized");
+                "Commutativity isn't just polite");
 
             QuantumConfig.EnableNonObservationalArithmetic = false;
         }
@@ -128,7 +128,7 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_MonadChainOperations_ShouldSupportLINQStyle()
         {
-            // It’s a pipeline. A journey. A heroic quest through lambda land.
+            // It's a pipeline. A journey. A heroic quest through lambda land.
             var qubit = new QuBit<int>(new[] { 1, 2 });
 
             var result = qubit

@@ -15,7 +15,7 @@ namespace QuantumSuperposition.QuantumSoup
         public CommutativeKey(T a, T b)
         {
             // If a and b are equal, the order doesn’t matter.
-            // If they differ, we “order” them based on hash code (or you can require IComparable<T> for a more robust solution)
+            // If they differ, we "order" them based on hash code (or you can require IComparable<T> for a more robust solution)
             if (Comparer<T>.Default.Compare(a, b) <= 0)
             {
                 A = a;

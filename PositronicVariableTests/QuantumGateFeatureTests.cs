@@ -143,7 +143,7 @@
 //        public void CustomGate_RegistrationAndApplication()
 //        {
 //            // Custom gate time! Roll your own matrix and slap it into the circuit.
-//            // We’ll use a fancy phase gate, because quantum’s all about those stylish twists.
+//            // We'll use a fancy phase gate, because quantum's all about those stylish twists.
 //            double theta = Math.PI / 3;
 //            Complex[,] customPhaseMatrix = new Complex[,]
 //            {
