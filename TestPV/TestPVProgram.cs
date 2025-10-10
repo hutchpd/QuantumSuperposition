@@ -15,7 +15,7 @@ internal static class TestPVProgram
         var antival = AntiVal.GetOrCreate<Double>();
 
         Console.WriteLine($"The antival is {antival}");
-        var val = (antival + 1) % 3;
+        var val = (antival + 1) % 2;
         Console.WriteLine($"The value is {val}");
         antival.Assign(val);
     }

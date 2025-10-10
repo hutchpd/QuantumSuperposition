@@ -783,6 +783,10 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
                 && hadForwardCycle
                 && !skippedFirstForward))
             {
+                // mark the start of this forward half-cycle so reverse replay
+                // can peel exactly one cycle's worth worth of operations
+                if (_entropy.Entropy > 0)
+                    OperationLog.Record(new ForwardHalfCycleMarker());
                 code();
             }
             else
@@ -1071,6 +1075,16 @@ public interface IOperation
 }
 
 /// <summary>
+/// Marks the beginning of a forward half‑cycle in the OperationLog.
+/// Lets reverse‑replay peel exactly one forward half‑cycle and no more.
+/// </summary>
+public sealed class ForwardHalfCycleMarker : IOperation
+{
+    public string OperationName => "ForwardHalfCycleStart";
+    public void Undo() { /* no‑op */ }
+}
+
+/// <summary>
 /// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn’t.
 /// </summary>
 public static class OperationLog
@@ -1212,35 +1226,47 @@ public class ReverseReplayEngine<T>
     /// </summary>
    public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
    {
-        // Peel **exactly one** forward half‑cycle:
-        //   1) the closing snapshot (Append/Replace) for that cycle (if present)
-        //   2) all immediately‑preceding reversible ops that belong to that cycle
+        // Peel the **last forward half‑cycle**:
+        // pop ops newest->oldest until we hit the ForwardHalfCycleMarker;
+        // if there is no marker (outside the loop), fall back to greedy peel.
         var poppedSnapshots = new List<IOperation>();
         var poppedReversibles = new List<IReversibleOperation<T>>();
         var forwardValues = new HashSet<T>();
 
-        var top = OperationLog.Peek();
-        if (top is TimelineAppendOperation<T> tapTop)
+        while (true)
         {
-            forwardValues.UnionWith(tapTop.AddedSlice.ToCollapsedValues());
-            poppedSnapshots.Add(tapTop);
-            OperationLog.Pop();
+            var top = OperationLog.Peek();
+            switch (top)
+            {
+                case null:
+                    // no marker found (outside loop) – done peeling this run
+                    goto DonePeel;
+                case ForwardHalfCycleMarker:
+                    // boundary of this forward half‑cycle – stop here
+                    goto DonePeel;
+                case TimelineAppendOperation<T> tap:
+                    forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
+                    poppedSnapshots.Add(tap);
+                    OperationLog.Pop();
+                    continue;
+                case TimelineReplaceOperation<T> trp:
+                    // capture both “before” and “after” for Replace
+                    forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
+                    forwardValues.UnionWith(trp.Variable.GetCurrentQBit().ToCollapsedValues());
+                    poppedSnapshots.Add(trp);
+                    OperationLog.Pop();
+                    continue;
+                case IReversibleOperation<T> rop:
+                    poppedReversibles.Add(rop);
+                    OperationLog.Pop();
+                    continue;
+                default:
+                    // unrecognized entry – stop safely
+                    goto DonePeel;
+            }
         }
-        else if (top is TimelineReplaceOperation<T> trpTop)
-        {
-            // For Replace, capture both “before” and “after” of the last slice.
-            forwardValues.UnionWith(trpTop.ReplacedSlice.ToCollapsedValues());
-            forwardValues.UnionWith(trpTop.Variable.GetCurrentQBit().ToCollapsedValues());
-            poppedSnapshots.Add(trpTop);
-            OperationLog.Pop();
-        }
+        DonePeel:
 
-        // Pop the reversible ops that immediately precede that snapshot.
-        while (OperationLog.Peek() is IReversibleOperation<T> ropTop)
-        {
-            poppedReversibles.Add(ropTop);
-            OperationLog.Pop();
-        }
 
 
         // “rewind” step so that it undoes both appends and replaces:
@@ -1898,7 +1924,8 @@ public class PositronicVariable<T> : IPositronicVariable
                 qb.Any();
             }
 
-            if (OperationLog.Peek() is null)
+            var topOp = OperationLog.Peek();
+            if (topOp is null || topOp is ForwardHalfCycleMarker)
                 return;
 
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
@@ -1948,8 +1975,11 @@ public class PositronicVariable<T> : IPositronicVariable
         Remember(qb.ToCollapsedValues());
 
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
-        if (runtime.Entropy < 0 && OperationLog.Peek() != null)
+        if (runtime.Entropy < 0)
         {
+            var top = OperationLog.Peek();
+            if (top is null || top is ForwardHalfCycleMarker)
+                return;
             // OK, this is a true reverse-replay pass
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
             timeline.Add(rebuilt);
