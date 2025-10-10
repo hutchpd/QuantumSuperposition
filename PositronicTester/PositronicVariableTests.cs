@@ -52,15 +52,15 @@ namespace PositronicVariables.Tests
         public static void EmitOnceIfNeeded()
         {
             // If the engine already flushed to the real console, don’t print again.
-            if (AethericRedirectionGrid.SuppressProcessExitEmission)
+            if (AethericRedirectionGrid.SuppressEndOfUniverseReading)
                 return;
 
             RunOnce();
 
             // restore and flush captured content if tests redirected it
-            var real = AethericRedirectionGrid.RealConsoleOut;
+            var real = AethericRedirectionGrid.ReferenceUniverse;
             Console.SetOut(real);
-            real.Write(AethericRedirectionGrid.OutputBuffer.ToString());
+            real.Write(AethericRedirectionGrid.ImprobabilityDrive.ToString());
             real.Flush();
         }
 
@@ -170,7 +170,7 @@ namespace PositronicVariables.Tests
                 foreach (var cad in CustomAttributeData.GetCustomAttributes(m))
                 {
                     var at = cad.AttributeType;
-                    if (at != null && at == typeof(PositronicEntryAttribute))
+                    if (at != null && at == typeof(DontPanicAttribute))
                         return true;
                 }
                 return false;
@@ -195,7 +195,7 @@ namespace PositronicVariables.Tests
     // Small attributed program we can "run" via the test hook:
     public static class AttributedProgramForTests
     {
-        [PositronicEntry]
+        [DontPanic]
         public static void EntryPointForTests()
         {
             var antival = AntiVal.GetOrCreate<double>();
@@ -224,8 +224,8 @@ namespace PositronicVariables.Tests
             _runtime = PositronicAmbient.Current;
 
             QuantumConfig.ForbidDefaultOnCollapse = true;
-            OperationLog.Clear();
-            if (_runtime.OracularStream is StringWriter sw)
+            QuantumLedgerOfRegret.Clear();
+            if (_runtime.Babelfish is StringWriter sw)
                 sw.GetStringBuilder().Clear();
         }
 
@@ -234,7 +234,7 @@ namespace PositronicVariables.Tests
         {
             if (PositronicAmbient.Services is IDisposable disp)
                 disp.Dispose();
-            PositronicAmbient.ResetAmbient();
+            PositronicAmbient.PanicAndReset();
         }
 
         #region OperatorsAndAssignments
@@ -487,7 +487,7 @@ namespace PositronicVariables.Tests
                     new ServiceCollection().BuildServiceProvider()),
                 new ScopedPositronicVariableFactory(
                     new ServiceCollection().BuildServiceProvider()));
-            var redirector = new DefaultOutputRedirector(rt);
+            var redirector = new SubEthaOutputTransponder(rt);
 
             // arrange: capture anything written to Console.Out
             var output = new StringWriter();
@@ -508,16 +508,16 @@ namespace PositronicVariables.Tests
         public void Program_Main_Integration_CapturesAllAntivalStates()
         {
             // fresh world + empty buffer
-            PositronicAmbient.ResetAmbient();
-            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+            PositronicAmbient.PanicAndReset();
+            AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
 
             // ensure writes go to our buffer (NUnit may reset Console.Out)
-            Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+            Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
 
             // run the attributed entry once (test-only, opt-in)
             PositronicAttributedEntryRunner.RunOnce();
 
-            var full = AethericRedirectionGrid.OutputBuffer
+            var full = AethericRedirectionGrid.ImprobabilityDrive
                 .ToString()
                 .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
@@ -538,7 +538,7 @@ namespace PositronicVariables.Tests
 
             // Act
             PositronicVariable<int>.SetEntropy(_runtime, -1);
-            OperationLog.ReverseLastOperations();
+            QuantumLedgerOfRegret.ReverseLastOperations();
             v.Assign(v);
 
             // Assert
@@ -550,7 +550,7 @@ namespace PositronicVariables.Tests
             PositronicVariable<int>.SetEntropy(_runtime, entropy);
             code();
             if (entropy < 0)
-                OperationLog.ReverseLastOperations();
+                QuantumLedgerOfRegret.ReverseLastOperations();
         }
 
         #endregion
@@ -835,8 +835,8 @@ namespace PositronicVariables.Tests
             _runtime = PositronicAmbient.Current;
 
             QuantumConfig.ForbidDefaultOnCollapse = true;
-            OperationLog.Clear();
-            if (_runtime.OracularStream is StringWriter sw)
+            QuantumLedgerOfRegret.Clear();
+            if (_runtime.Babelfish is StringWriter sw)
                 sw.GetStringBuilder().Clear();
         }
 
@@ -845,7 +845,7 @@ namespace PositronicVariables.Tests
         {
             if (PositronicAmbient.Services is IDisposable disp)
                 disp.Dispose();
-            PositronicAmbient.ResetAmbient();
+            PositronicAmbient.PanicAndReset();
         }
 
 
@@ -887,7 +887,7 @@ namespace PositronicVariables.Tests
             v.Assign(1);
 
             // simulate what ConvergenceEngine does at the *very* end:
-            OperationLog.ReverseLastOperations();
+            QuantumLedgerOfRegret.ReverseLastOperations();
 
             // If the write had been logged, Undo() would have restored the 0.
             var final = v.ToValues().Single();
@@ -948,8 +948,8 @@ namespace PositronicVariables.Tests
         public void AttributedEntry_PrintsExactlyOnce_WithExitHookEnabled()
         {
             // Fresh world + clean buffer + capture console
-            PositronicAmbient.ResetAmbient();
-            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+            PositronicAmbient.PanicAndReset();
+            AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
 
             var output = new StringWriter();
             Console.SetOut(output);

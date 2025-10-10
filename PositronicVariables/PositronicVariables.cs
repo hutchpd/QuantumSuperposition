@@ -1,16 +1,16 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using QuantumSuperposition.DependencyInjection;
+using QuantumSuperposition.QuantumSoup;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
-using QuantumSuperposition.QuantumSoup;
-using Microsoft.Extensions.DependencyInjection;
 using System.Threading;
-using System.Numerics;
-using System.Collections;
-using Microsoft.Extensions.Hosting;
-using QuantumSuperposition.DependencyInjection;
 
 namespace QuantumSuperposition.DependencyInjection
 {
@@ -29,16 +29,16 @@ namespace QuantumSuperposition.DependencyInjection
             services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
             services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
 
-            services.AddScoped<IConvergenceEngine<T>>(sp =>
+            services.AddScoped<IImprobabilityEngine<T>>(sp =>
             {
                 var runtime = sp.GetRequiredService<IPositronicRuntime>();
 
-                var defaultEngine = new ConvergenceEngine<T>(
+                var defaultEngine = new ImprobabilityEngine<T>(
                     new DefaultEntropyController(runtime),
-                    new DefaultOperationLogHandler<T>(),
-                    new DefaultOutputRedirector(runtime),
+                    new RegretScribe<T>(),
+                    new SubEthaOutputTransponder(runtime),
                     runtime,
-                    new DefaultVersioningService<T>()
+                    new BureauOfTemporalRecords<T>()
                 );
 
                 var builder = new ConvergenceEngineBuilder<T>();
@@ -65,7 +65,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
     private readonly IServiceProvider _provider;
     private IPositronicRuntime Runtime => _provider.GetRequiredService<IPositronicRuntime>();
 
-    private readonly Dictionary<(Type, string), IPositronicVariable> _registry
+    private readonly Dictionary<(Type, string), IPositronicVariable> _multiverseIndex
         = new();
 
     public ScopedPositronicVariableFactory(IServiceProvider provider)
@@ -77,11 +77,11 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         where T : IComparable<T>
     {
         var key = (typeof(T), id);
-        if (_registry.TryGetValue(key, out var existing))
+        if (_multiverseIndex.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
 
         var created = new PositronicVariable<T>(initialValue, Runtime);
-        _registry[key] = created;
+        _multiverseIndex[key] = created;
         return created;
     }
 
@@ -89,10 +89,10 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         where T : IComparable<T>
     {
         var key = (typeof(T), id);
-        if (_registry.TryGetValue(key, out var existing))
+        if (_multiverseIndex.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
         var created = new PositronicVariable<T>(default, Runtime);
-        _registry[key] = created;
+        _multiverseIndex[key] = created;
         return created;
     }
 
@@ -100,10 +100,10 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         where T : IComparable<T>
     {
         var key = (typeof(T), "default");
-        if (_registry.TryGetValue(key, out var existing))
+        if (_multiverseIndex.TryGetValue(key, out var existing))
             return (PositronicVariable<T>)existing;
         var created = new PositronicVariable<T>(initialValue, Runtime);
-        _registry[key] = created;
+        _multiverseIndex[key] = created;
         return created;
     }
 
@@ -112,14 +112,14 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
         // pry T out of PositronicVariable<T> with reflection—a technique so eldritch even your toaster fears it
         var t = v.GetType().GetGenericArguments()[0];
         var key = (t, Guid.NewGuid().ToString());
-        _registry[key] = v;
+        _multiverseIndex[key] = v;
     }
 
     void IPositronicVariableRegistry.Clear()
-            => _registry.Clear();
+            => _multiverseIndex.Clear();
 
     public IEnumerator<IPositronicVariable> GetEnumerator()
-        => _registry.Values.GetEnumerator();
+        => _multiverseIndex.Values.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
 }
@@ -127,7 +127,7 @@ public class ScopedPositronicVariableFactory : IPositronicVariableFactory, IPosi
 
 
 /// <summary>
-/// In an episode of slider's - this is the current version of the universe that we happen to have fallen into. A container for the runtime and services that are available to the positronic variables.
+/// This is the current version of the universe that we happen to have fallen into. A container for the runtime and services that are available to the positronic variables.
 /// </summary>
 public static class PositronicAmbient
 {
@@ -173,9 +173,9 @@ public static class PositronicAmbient
     }
 
     /// <summary>
-    /// Unhooks all known realities from the runtime matrix and chucks them into the bin marked “Let's Pretend That Didn’t Happen.”
+    /// Unhooks all known realities from the runtime matrix and chucks them into the bin marked "Let's Pretend That Didn't Happen."
     /// </summary>
-    public static void ResetAmbient()
+    public static void PanicAndReset()
     {
         _ambient.Value = null;
         _global = null;
@@ -185,7 +185,7 @@ public static class PositronicAmbient
 }
 
 
-public interface IConvergenceEngine<T>
+public interface IImprobabilityEngine<T>
     where T : IComparable<T>
 {
     void Run(
@@ -193,13 +193,13 @@ public interface IConvergenceEngine<T>
         bool runFinalIteration = true,
         bool unifyOnConvergence = true,
         bool bailOnFirstReverseWhenIdle = false,
-        IConvergenceEngine<T> next = null);
+        IImprobabilityEngine<T> next = null);
 }
 
 
 
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
-public sealed class PositronicEntryAttribute : Attribute
+public sealed class DontPanicAttribute : Attribute
 {
 }
 
@@ -207,7 +207,7 @@ public interface IReversibleOperation<T> : IOperation
 {
     /// <summary>
     /// When time insists on moving forward, this little chap figures out how to make it march in reverse.
-    /// (E.g. if you’ve divided by 9 in one universe, we smuggle you back with a ×9 in another.)
+    /// (E.g. if you've divided by 9 in one universe, we smuggle you back with a ×9 in another.)
     /// </summary>
     T ApplyInverse(T result);
     /// <summary>
@@ -232,7 +232,7 @@ public interface IReversibleSnapshotOperation<T> : IReversibleOperation<T>
     }
 }
 
-// Addition: forward op is x + A, so inverse is (result - A).
+// Multiversal maths isn't as hard as it looks
 public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -252,7 +252,17 @@ public class AdditionOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
+    /// <summary>
+    /// When time goes backwards the addition becomes a subtraction.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Subtract(result, _addend);
+    /// <summary>
+    /// And going forwards is just the regular old addition we all know and love.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyForward(T result) => Arithmetic.Add(result, _addend);
 
 }
@@ -272,14 +282,21 @@ public class AssignOperation<T> : IReversibleSnapshotOperation<T>
         _assigned = assigned;
     }
 
-    // Inverse: go back to whatever was there before
+    /// <summary>
+    /// Go back to whatever was once there after we started going forwards the first time
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Original;
-    // Forward: a no-op (value already set)
+    /// <summary>
+    /// Time travel as we know it on a day to day basis
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => _assigned;
 }
 
 
-// Subtraction: forward op is x - B, so inverse is (result + B).
 public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -298,12 +315,21 @@ public class SubtractionOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
+    /// <summary>
+    /// You get the idea, right? Subtracting is just adding the negative, so we reverse it by adding.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Add(result, _subtrahend);
+    /// <summary>
+    /// And going forwards is just the regular old subtraction we all know and love.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Subtract(value, _subtrahend);
 
 }
 
-// SubtractionReversed: for T - x. Forward op is: result = M - x, so the inverse is x = M - result.
 public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -322,12 +348,21 @@ public class SubtractionReversedOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
+    /// <summary>
+    /// It's like regular subtraction, but backwards. So we reverse it by subtracting from the minuend.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Subtract(_minuend, result);
+    /// <summary>
+    /// And going forwards is just the regular old subtraction we all know and love.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Subtract(_minuend, value);
 
 }
 
-// Multiplication: forward op is x * M, so inverse is (result / M).
 public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -346,13 +381,21 @@ public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    // use the Arithmetic class rather than dynamic
+    /// <summary>
+    /// When time goes backwards the multiplication becomes a division.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Divide(result, _multiplier);
+    /// <summary>
+    /// Otherwise we get out the multiplication table.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Multiply(value, _multiplier);
 
 }
 
-// Division: forward op is x / D, so inverse is (result * D).
 public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -370,13 +413,21 @@ public class DivisionOperation<T> : IReversibleSnapshotOperation<T>
         Original = variable.GetCurrentQBit().ToCollapsedValues().First();
         _rt = rt;
     }
-    // use the Arithmetic class rather than dynamic
+    /// <summary>
+    /// When time goes backwards the division becomes a multiplication.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Multiply(result, _divisor);
+    /// <summary>
+    /// Otherwise we try and remember what long division was like, something to do with shifting one column to the right and then I get confused.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Divide(value, _divisor);
 
 }
 
-// DivisionReversed: for T / x. Forward op is: result = N / x, so inverse is x = N / result.
 public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -395,13 +446,21 @@ public class DivisionReversedOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    // use the Arithmetic class rather than dynamic
+    /// <summary>
+    /// When time goes backwards the division becomes a multiplication.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Divide(_numerator, result);
+    /// <summary>
+    /// Otherwise we try and remember what long division was like, something to do with shifting one column to the right and then I get confused.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Divide(_numerator, value);
 
 }
 
-// Unary Negation: forward op is -x, and its own inverse.
 public class NegationOperation<T> : IReversibleSnapshotOperation<T>
     where T : IComparable<T>
 {
@@ -418,8 +477,17 @@ public class NegationOperation<T> : IReversibleSnapshotOperation<T>
         _rt = rt;
     }
 
-    // use the Arithmetic class rather than dynamic
+    /// <summary>
+    /// Negation is its own inverse, like a well-trained quantum ninja.
+    /// </summary>
+    /// <param name="result"></param>
+    /// <returns></returns>
     public T ApplyInverse(T result) => Arithmetic.Negate(result);
+    /// <summary>
+    /// And going forwards is just the regular old negation.
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyForward(T value) => Arithmetic.Negate(value);
 
 }
@@ -436,7 +504,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
     public PositronicVariable<T> Variable { get; }
     private readonly T _divisor;
     public T Divisor => _divisor;
-    private readonly T _quotient;     // ⟵  floor(original/divisor)
+    private readonly T _quotient;
 
     public T Original { get; }
 
@@ -455,14 +523,25 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
         _quotient = Arithmetic.FloorDiv(Original, divisor);
     }
 
-    // Forward:   r  ⟶  q·d + r  (rebuild the original value)
+    /// <summary>
+    /// Inverse:   x % d  ->  (x // d) * d + (x % d)   (i.e. reconstruct the original value)
+    /// </summary>
+    /// <param name="remainder"></param>
+    /// <returns></returns>
     public T ApplyForward(T remainder)
        => Arithmetic.Add(Arithmetic.Multiply(_quotient, _divisor), remainder);
 
-    // Inverse:   x  ⟶  x % d   (rarely used by the engine but nice to have)
+    /// <summary>
+    /// Forward:   x  ->  x % d
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public T ApplyInverse(T value)
         => Arithmetic.Modulus(value, _divisor);
 
+    /// <summary>
+    /// Undoing a modulus operation is a bit like trying to un bake a cake.
+    /// </summary>
     void IOperation.Undo()
     {
         // jam the original quantum sandwich back into the timeline like nothing ever happened
@@ -470,7 +549,7 @@ public sealed class ReversibleModulusOp<T> : IReversibleSnapshotOperation<T>
         qb.Any();
         Variable.timeline[^1] = qb;
 
-        // 2. tell the convergence loop we're done
+        // Tell the convergence loop we're done
         _runtime.Converged = true;
     }
 
@@ -495,6 +574,9 @@ public class InversionOperation<T> : IOperation
         _rt = rt;
     }
 
+    /// <summary>
+    /// When time moves forward, we apply the inversion.
+    /// </summary>
     public void Undo()
     {
         // To undo an inversion, reassign the original forward value.
@@ -514,10 +596,10 @@ public interface IOperationLogHandler<T>
     void Record(IOperation op);
     void UndoLastForwardCycle();
     void Clear();
-    bool HadForwardAppend { get; set; }
+    bool SawForwardWrite { get; set; }
 }
 
-public interface IVersioningService<T>
+public interface ITimelineArchivist<T>
     where T : IComparable<T>
 {
     void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice);
@@ -529,7 +611,7 @@ public interface IVersioningService<T>
 
 }
 
-public class DefaultVersioningService<T> : IVersioningService<T>
+public class BureauOfTemporalRecords<T> : ITimelineArchivist<T>
     where T : IComparable<T>
 {
     private readonly Stack<(PositronicVariable<T> Variable, List<QuBit<T>> Timeline)> _snapshots = new();
@@ -559,12 +641,12 @@ public class DefaultVersioningService<T> : IVersioningService<T>
             _snapshots.Push((variable, copy));
 
             // append the new qubit
-            OperationLog.Record(new TimelineAppendOperation<T>(variable, copy, newSlice));
+            QuantumLedgerOfRegret.Record(new TimelineAppendOperation<T>(variable, copy, newSlice));
 
             // tell the variable its bootstrap has definitely gone
             variable.NotifyFirstAppend();
 
-            // fire the hook so the convergence engine knows “something changed”
+            // fire the hook so the convergence engine knows "something changed"
             variable.timeline.Add(newSlice);
             _onAppend?.Invoke();
         }
@@ -590,7 +672,7 @@ public class DefaultVersioningService<T> : IVersioningService<T>
             var backup = variable.timeline
                                         .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
                                         .ToList();
-            OperationLog.Record(new TimelineReplaceOperation<T>(variable, backup));
+            QuantumLedgerOfRegret.Record(new TimelineReplaceOperation<T>(variable, backup));
 
             variable.timeline[^1] = mergedSlice;
             _onAppend?.Invoke();
@@ -609,13 +691,13 @@ public class DefaultVersioningService<T> : IVersioningService<T>
 }
 
 
-public interface IOutputRedirector
+public interface ISubEthaTransponder
 {
     void Redirect();
     void Restore();
 }
 
-// --- 2. Implement default services (omitting full bodies) ---
+// Implement default services (omitting full bodies) ---
 public class DefaultEntropyController : IEntropyController
 {
     private readonly IPositronicRuntime _runtime;
@@ -627,51 +709,60 @@ public class DefaultEntropyController : IEntropyController
     /// Winds the temporal crank backwards to appease the spiteful spirits of past simulations.
     /// </summary>
     public void Initialise() => _runtime.Entropy = -1;
+    /// <summary>
+    /// Flips the entropy switch, because even the universe needs to change its mind sometimes.
+    /// </summary>
     public void Flip() => _runtime.Entropy = -_runtime.Entropy;
 }
 
-public class DefaultOperationLogHandler<T> : IOperationLogHandler<T>
+public class RegretScribe<T> : IOperationLogHandler<T>
 {
-    public bool HadForwardAppend { get; set; }
-    public void Record(IOperation op) => OperationLog.Record(op);
-    public void UndoLastForwardCycle() => OperationLog.ReverseLastOperations();
-    public void Clear() => OperationLog.Clear();
+    public bool SawForwardWrite { get; set; }
+    public void Record(IOperation op) => QuantumLedgerOfRegret.Record(op);
+    /// <summary>
+    /// Undo all operations since the last forward half-cycle marker, a half-cycle being a forward pass followed by a reverse pass, (the 'to' to a Merlin 'fro')
+    /// </summary>
+    public void UndoLastForwardCycle() => QuantumLedgerOfRegret.ReverseLastOperations();
+    /// <summary>
+    /// Sometimes you just need to start fresh and pretend none of that ever happened.
+    /// </summary>
+    public void Clear() => QuantumLedgerOfRegret.Clear();
 }
 
-public class DefaultOutputRedirector : IOutputRedirector
+public class SubEthaOutputTransponder : ISubEthaTransponder
 {
     private readonly IPositronicRuntime _runtime;
     private TextWriter _originalOut;
 
-    public DefaultOutputRedirector(IPositronicRuntime runtime)
+    public SubEthaOutputTransponder(IPositronicRuntime runtime)
         => _runtime = runtime;
 
     public void Redirect()
     {
-       // If we're already writing into the grid buffer, remember the *real* console instead.
-       _originalOut = ReferenceEquals(Console.Out, AethericRedirectionGrid.OutputBuffer)
-           ? AethericRedirectionGrid.RealConsoleOut
+       // Like leaving a towel where you parked the time machine.
+       _originalOut = ReferenceEquals(Console.Out, AethericRedirectionGrid.ImprobabilityDrive)
+           ? AethericRedirectionGrid.ReferenceUniverse
            : Console.Out;
        // Hijack the console output like a space-time parasite.
-       Console.SetOut(AethericRedirectionGrid.OutputBuffer);
-        _runtime.OracularStream = AethericRedirectionGrid.OutputBuffer;
+       Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
+        _runtime.Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
     }
     public void Restore()
     {
 
-        var bufferText = AethericRedirectionGrid.OutputBuffer.ToString();
-        if (!AethericRedirectionGrid.InProcessExitRunner)
+        var bufferText = AethericRedirectionGrid.ImprobabilityDrive.ToString();
+        if (!AethericRedirectionGrid.AtTheRestaurant)
         {
             _originalOut.Write(bufferText);
             _originalOut.Flush();
 
-            // Prevent the ProcessExit hook (or EmitOnceIfNeeded) from running it again.
-            AethericRedirectionGrid.SuppressProcessExitEmission = true;
+            // Prevent temporal echoes when we exit the time stream
+            AethericRedirectionGrid.SuppressEndOfUniverseReading = true;
         }
         else
         {
-            // Ensure the exit hook will emit once.
-            AethericRedirectionGrid.SuppressProcessExitEmission = false;
+            // Our breadrumb trail to the reference universe, else we'll end up like Quinn from Sliders.
+            AethericRedirectionGrid.SuppressEndOfUniverseReading = false;
         }
 
         Console.SetOut(_originalOut);
@@ -682,12 +773,12 @@ public class DefaultOutputRedirector : IOutputRedirector
 public class ConvergenceEngineBuilder<T>
     where T : IComparable<T>
 {
-    private readonly List<Func<IConvergenceEngine<T>, IConvergenceEngine<T>>> _middlewares = new();
+    private readonly List<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>> _middlewares = new();
 
     /// <summary>
-    /// Bolts a new questionable device onto the engine. Nobody asked what it does, and it’s too late to stop now.
+    /// Bolts a new questionable device onto the engine. Nobody asked what it does, and it's too late to stop now.
     /// </summary>
-    public ConvergenceEngineBuilder<T> Use(Func<IConvergenceEngine<T>, IConvergenceEngine<T>> middleware)
+    public ConvergenceEngineBuilder<T> Use(Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>> middleware)
     {
         _middlewares.Add(middleware);
         return this;
@@ -696,10 +787,10 @@ public class ConvergenceEngineBuilder<T>
     /// <summary>
     /// Summons the convergence abomination from its component horrors. Add enough decorators and it starts resembling sentience.
     /// </summary>
-    public IConvergenceEngine<T> Build(IConvergenceEngine<T> core)
+    public IImprobabilityEngine<T> Build(IImprobabilityEngine<T> core)
     {
-        IConvergenceEngine<T> engine = core;
-        foreach (var middleware in _middlewares.Reverse<Func<IConvergenceEngine<T>, IConvergenceEngine<T>>>())
+        IImprobabilityEngine<T> engine = core;
+        foreach (var middleware in _middlewares.Reverse<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>>())
         {
             engine = middleware(engine);
         }
@@ -708,7 +799,7 @@ public class ConvergenceEngineBuilder<T>
 }
 
 
-public class LoggingConvergenceEngine<T> : IConvergenceEngine<T>
+public class ChroniclerDrive<T> : IImprobabilityEngine<T>
     where T : IComparable<T>
 {
     public void Run(
@@ -716,45 +807,43 @@ public class LoggingConvergenceEngine<T> : IConvergenceEngine<T>
         bool runFinalIteration = true,
         bool unifyOnConvergence = true,
         bool bailOnFirstReverseWhenIdle = false,
-        IConvergenceEngine<T> next = null)
+        IImprobabilityEngine<T> next = null)
     {
-        Console.WriteLine("[🌟] Starting convergence cycle...");
         next?.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
-        Console.WriteLine("[✅] Finished convergence cycle.");
     }
 }
 
 
 // --- Convergence engine orchestrating the core loop ---
-public class ConvergenceEngine<T> : IConvergenceEngine<T>
+public class ImprobabilityEngine<T> : IImprobabilityEngine<T>
     where T : IComparable<T>
 {
     private readonly IEntropyController _entropy;
     private readonly IOperationLogHandler<T> _ops;
-    private readonly IOutputRedirector _redirect;
+    private readonly ISubEthaTransponder _redirect;
     private readonly IPositronicRuntime _runtime;
-    private readonly IVersioningService<T> _versioningService;
+    private readonly ITimelineArchivist<T> _timelineArchivist;
     private readonly int _maxIters = 1000;
 
-    public ConvergenceEngine(
+    public ImprobabilityEngine(
         IEntropyController entropy,
         IOperationLogHandler<T> ops,
-        IOutputRedirector redirect,
+        ISubEthaTransponder redirect,
         IPositronicRuntime runtime,
-        IVersioningService<T> versioningService)
+        ITimelineArchivist<T> timelineArchivist)
     {
         _entropy = entropy;
         _ops = ops;
         _redirect = redirect;
         _runtime = runtime;
-        _versioningService = versioningService;
+        _timelineArchivist = timelineArchivist;
     }
 
     public void Run(Action code,
                     bool runFinalIteration = true,
                     bool unifyOnConvergence = true,
                     bool bailOnFirstReverseWhenIdle = false,
-                    IConvergenceEngine<T> next = null)
+                    IImprobabilityEngine<T> next = null)
     {
         if (next != null)
         {
@@ -774,10 +863,17 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
         while (!_runtime.Converged && iteration < hardLimit)
         {
-            // reset at the *start* of every half-cycle, not just forward ones
-            _ops.HadForwardAppend = false; // Why? Guarantees HadForwardAppend is in a known state; without this the engine occasionally thought “nothing happened” and broke the snapshot-clearing logic.
+            // Reset at the *start* of every half-cycle, not just forward ones,
+            // so the engine doesn't confuse what has happened, what will happen,
+            // and what it merely *thinks* has happened (which hasn't happened yet, probably).
+            _ops.SawForwardWrite = false; // Why? Guarantees HadForwardAppend is in a known state; without this the engine occasionally thought "nothing happened" and broke the snapshot-clearing logic.
 
             // skip the *very* first forward cycle if requested
+            // this is useful for scenarios where you want to
+            // immediately start in reverse time, e.g. for
+            // probing variable domains without any initial
+            // assignments having been made
+            // After all, it hasn't technically happened yet, and possibly never will, depending on who's asking
             if (!(bailOnFirstReverseWhenIdle
                 && _entropy.Entropy > 0
                 && hadForwardCycle
@@ -785,8 +881,10 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             {
                 // mark the start of this forward half-cycle so reverse replay
                 // can peel exactly one cycle's worth worth of operations
+                // peel-back is painfully precise; it must not overshoot or undershoot.
+                // just ask a slugblaster.
                 if (_entropy.Entropy > 0)
-                    OperationLog.Record(new ForwardHalfCycleMarker());
+                    QuantumLedgerOfRegret.Record(new MerlinFroMarker());
                 code();
             }
             else
@@ -799,7 +897,7 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
             if (bailOnFirstReverseWhenIdle
                 && _entropy.Entropy < 0
-                && !_ops.HadForwardAppend)
+                && !_ops.SawForwardWrite)
             {
                 _runtime.Converged = false;
                 break;
@@ -807,7 +905,7 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
             if (hadForwardCycle && PositronicVariable<T>.AllConverged(_runtime) && _entropy.Entropy < 0)
             {
-                _versioningService.ClearSnapshots();
+                _timelineArchivist.ClearSnapshots();
 
                 if (unifyOnConvergence)
                 {
@@ -820,8 +918,13 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
             }
 
             _entropy.Flip();
-            // When switching into reverse, assign a **clone** of the last slice.
-            // Passing the same instance short-circuits reverse replay.
+            // Reality is extremly fragile, each PositronicVariable<T> has a timeline
+            // a list of QuBit<T> slices representing its different states across forward and reverse iterations.
+            // When the convergence engine flips entropy, it effectively rewinds or fast-forwards time.
+            // Now if we don't clone the last slice as we do here, both the current timeline entry and the incoming value
+            // would reference the same QuBit<T> object causing a catastrophic collapse of the multiverse.
+            // When journeying backwards through time, one should never share quantum state with oneself.
+            // It's like borrowing your toothbrush from a parallel universe—things get weird very fast.
             if (_entropy.Entropy < 0)
             {
                 foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
@@ -839,23 +942,23 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
         if (runFinalIteration && _runtime.Converged)
         {
-            // Ensure variables expose their converged union during the final print-only pass.
+            // We give the universe one last chance to tidy itself up before the auditors arrive.
             if (unifyOnConvergence)
             {
-                _versioningService.ClearSnapshots();
+                _timelineArchivist.ClearSnapshots();
                 foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime).OfType<PositronicVariable<T>>())
                     ((PositronicVariable<T>)v).UnifyAll();
             }
-            // do one final forward march so all your `Console.WriteLine`s feel heard and validated
+            // This is the quantum equivalent of nodding politely after the universe finishes talking.
             _runtime.Entropy = 1;
             _runtime.Converged = false;
 
             // undo any reversible ops from that final pass
+            // the cosmic broom sweeps up the paradoxes before they stain the carpet.
             _ops.UndoLastForwardCycle();
 
-            // 🧹 start the output buffer afresh so tests only see the
-            // converged-state print-out
-            AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+            // Trim the timelines, purge any stray Loki variants.
+            AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
 
             code();
 
@@ -864,17 +967,18 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 
         _ops.Clear();
 
-        _versioningService.ClearSnapshots();
-        // ── freshly clear & re-align each variable’s domain to its final state
+        _timelineArchivist.ClearSnapshots();
+        // re-align each universe's timeline so the current state is the only state
         foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime)
                                                .OfType<PositronicVariable<T>>())
         {
             v.ResetDomainToCurrent();
 
             if (unifyOnConvergence && v.timeline.Count > 1)
-                v.UnifyAll();   // guarantees distinct values & one slice only
+                v.UnifyAll();   // Every alternate reality now agrees to disagree quietly.
         }
 
+        // This is the portal home back to our reference universe.
         _redirect.Restore();
     }
 }
@@ -884,22 +988,21 @@ public class ConvergenceEngine<T> : IConvergenceEngine<T>
 /// </summary>
 internal static class AethericRedirectionGrid
 {
-    // The reference universe
-    internal static readonly TextWriter RealConsoleOut;
+    internal static readonly TextWriter ReferenceUniverse;
     public static bool Initialised { get; } = true;
 
     // Store the actual StringWriter we create.
-    private static readonly StringWriter _outputBuffer;
+    private static readonly StringWriter _heartOfGold;
     private static int _hasRun;
     private static bool TryBeginRunOnce() => Interlocked.Exchange(ref _hasRun, 1) == 0;
 
-    public static StringWriter OutputBuffer => _outputBuffer;
+    public static StringWriter ImprobabilityDrive => _heartOfGold;
 
     private static bool PositronicAmbientIsUnInitialised()
         => !PositronicAmbient.IsInitialized;
 
-    internal static volatile bool SuppressProcessExitEmission;
-    internal static volatile bool InProcessExitRunner;
+    internal static volatile bool SuppressEndOfUniverseReading;
+    internal static volatile bool AtTheRestaurant;
 
     private static void InitialiseDefaultRuntime()
     {
@@ -916,29 +1019,28 @@ internal static class AethericRedirectionGrid
 
     static AethericRedirectionGrid()
     {
-        RealConsoleOut = Console.Out;
-        _outputBuffer = new StringWriter();
+        ReferenceUniverse = Console.Out;
+        _heartOfGold = new StringWriter();
 
-        // Capture everything from the very beginning so non-converged
-        // writes never reach the real console. The engine clears this
-        // buffer just before the final print-only pass.
-        if (!ReferenceEquals(Console.Out, _outputBuffer))
-            Console.SetOut(_outputBuffer);
+        // Capture everything from the very beginning so parallel universes
+        // never accidentally leak into the reference universe
+        if (!ReferenceEquals(Console.Out, _heartOfGold))
+            Console.SetOut(_heartOfGold);
 
         try
         {
             var rt = PositronicAmbient.Current;
-            rt.OracularStream = _outputBuffer;
+            rt.Babelfish = _heartOfGold;
             rt.Reset();
         }
         catch (InvalidOperationException)
         {
-            // no runtime yet – defer until DI calls Initialise()
+            // There's no cosmic event manager yet... that's fine.... probably? Yes definetly fine ¬.¬
         }
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-            InProcessExitRunner = true;
+            AtTheRestaurant = true;
             try
             {
                 // Run once; idempotent gate stays the same.
@@ -946,15 +1048,15 @@ internal static class AethericRedirectionGrid
             }
             finally
             {
-                InProcessExitRunner = false;
+                AtTheRestaurant = false;
             }
 
-            // If we didn't already emit to the real console, do it now.
-            if (!SuppressProcessExitEmission)
+            // If the reference universe doesn't know about us then we die, so this is our last chance.
+            if (!SuppressEndOfUniverseReading)
             {
-                Console.SetOut(RealConsoleOut);
-                RealConsoleOut.Write(OutputBuffer.ToString());
-                RealConsoleOut.Flush();
+                Console.SetOut(ReferenceUniverse);
+                ReferenceUniverse.Write(ImprobabilityDrive.ToString());
+                ReferenceUniverse.Flush();
             }
         };
 
@@ -962,9 +1064,7 @@ internal static class AethericRedirectionGrid
     }
 
     /// <summary>
-    /// Public test hook: run the single [PositronicEntry] method
-    /// inside the convergence loop and capture the converged output
-    /// into <see cref="OutputBuffer"/>.
+    /// Just for our tests. <see cref="ImprobabilityDrive"/>.
     /// </summary>
     public static void RunAttributedEntryPointForTests()
     {
@@ -986,7 +1086,7 @@ internal static class AethericRedirectionGrid
                 .SelectMany(t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
                 .Where(m =>
                 {
-                    try { return m.GetCustomAttribute<PositronicEntryAttribute>() != null; }
+                    try { return m.GetCustomAttribute<DontPanicAttribute>() != null; }
                     catch (TypeLoadException) { return false; }
                     catch (ReflectionTypeLoadException) { return false; }
                     catch (FileNotFoundException) { return false; }
@@ -1005,7 +1105,7 @@ internal static class AethericRedirectionGrid
         var entryPoint = entryPoints[0];
         var rt = PositronicAmbient.Current;
 
-        // If no variables exist yet, do a minimal “probe run” at reverse time
+        // If no variables exist yet, do a minimal "probe run" at reverse time
         // to allow the entry point to register its first PositronicVariable<T>.
         if (!rt.Registry.Any())
         {
@@ -1016,7 +1116,7 @@ internal static class AethericRedirectionGrid
             var prevOut = Console.Out;
             try
             {
-                Console.SetOut(AethericRedirectionGrid.OutputBuffer);
+                Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
                 var pProbe = entryPoint.GetParameters();
                 object[] probeArgs = pProbe.Length == 0 ? null : new object[] { Array.Empty<string>() };
                 entryPoint.Invoke(null, probeArgs);
@@ -1024,7 +1124,7 @@ internal static class AethericRedirectionGrid
             finally
             {
                 // Discard anything the probe wrote and restore console.
-                AethericRedirectionGrid.OutputBuffer.GetStringBuilder().Clear();
+                AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
                 Console.SetOut(prevOut);
                 rt.Entropy = savedEntropy;
             }
@@ -1078,16 +1178,16 @@ public interface IOperation
 /// Marks the beginning of a forward half‑cycle in the OperationLog.
 /// Lets reverse‑replay peel exactly one forward half‑cycle and no more.
 /// </summary>
-public sealed class ForwardHalfCycleMarker : IOperation
+public sealed class MerlinFroMarker : IOperation
 {
     public string OperationName => "ForwardHalfCycleStart";
     public void Undo() { /* no‑op */ }
 }
 
 /// <summary>
-/// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn’t.
+/// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn't.
 /// </summary>
-public static class OperationLog
+public static class QuantumLedgerOfRegret
 {
     private static readonly Stack<IOperation> _log = new Stack<IOperation>();
 
@@ -1188,7 +1288,7 @@ public class TimelineReplaceOperation<T> : IOperation
 public static class NeuroCascadeInitialiser
 {
     /// <summary>
-    /// Activates the latent matrix Initialiser. It doesn’t *do* anything,
+    /// Activates the latent matrix Initialiser. It doesn't *do* anything,
     /// but the side effects are, frankly, terrifying.
     /// </summary>
     public static void AutoEnable()
@@ -1199,13 +1299,13 @@ public static class NeuroCascadeInitialiser
 
 #endregion
 
-public class ReverseReplayEngine<T>
+public class UnhappeningEngine<T>
     where T : IComparable<T>
 {
     private readonly IOperationLogHandler<T> _ops;
-    private readonly IVersioningService<T> _versioningService;
+    private readonly ITimelineArchivist<T> _versioningService;
 
-    public ReverseReplayEngine(IOperationLogHandler<T> ops, IVersioningService<T> versioningService)
+    public UnhappeningEngine(IOperationLogHandler<T> ops, ITimelineArchivist<T> versioningService)
     {
         _ops = ops;
         _versioningService = versioningService;
@@ -1219,10 +1319,10 @@ public class ReverseReplayEngine<T>
     ///    we apply its **forward** mapping. Example:
     ///       x = 10;            // last write
     ///       x = x + 1;         // earlier in code
-    ///    The earlier read must be 11 (addition still “adds” as we walk back).
+    ///    The earlier read must be 11 (addition still "adds" as we walk back).
     ///
     /// The only special case is modulus: the forward mapping we apply is the
-    /// “rebuild” q·d + r using the quotient captured at record‑time.
+    /// "rebuild" q·d + r using the quotient captured at record‑time.
     /// </summary>
    public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
    {
@@ -1235,33 +1335,33 @@ public class ReverseReplayEngine<T>
 
         while (true)
         {
-            var top = OperationLog.Peek();
+            var top = QuantumLedgerOfRegret.Peek();
             switch (top)
             {
                 case null:
-                    // no marker found (outside loop) – done peeling this run
+                    // no marker found (outside loop) - done peeling this run
                     goto DonePeel;
-                case ForwardHalfCycleMarker:
-                    // boundary of this forward half‑cycle – stop here
+                case MerlinFroMarker:
+                    // boundary of this forward half‑cycle - stop here
                     goto DonePeel;
                 case TimelineAppendOperation<T> tap:
                     forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
                     poppedSnapshots.Add(tap);
-                    OperationLog.Pop();
+                    QuantumLedgerOfRegret.Pop();
                     continue;
                 case TimelineReplaceOperation<T> trp:
-                    // capture both “before” and “after” for Replace
+                    // capture both "before" and "after" for Replace
                     forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
                     forwardValues.UnionWith(trp.Variable.GetCurrentQBit().ToCollapsedValues());
                     poppedSnapshots.Add(trp);
-                    OperationLog.Pop();
+                    QuantumLedgerOfRegret.Pop();
                     continue;
                 case IReversibleOperation<T> rop:
                     poppedReversibles.Add(rop);
-                    OperationLog.Pop();
+                    QuantumLedgerOfRegret.Pop();
                     continue;
                 default:
-                    // unrecognized entry – stop safely
+                    // unrecognized entry - stop safely
                     goto DonePeel;
             }
         }
@@ -1269,7 +1369,7 @@ public class ReverseReplayEngine<T>
 
 
 
-        // “rewind” step so that it undoes both appends and replaces:
+        // "rewind" step so that it undoes both appends and replaces:
         foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
             op.Undo();
 
@@ -1348,7 +1448,7 @@ public class ReverseReplayEngine<T>
 
 
 
-        // If arithmetic occurred, don’t union the forward remainder set into the *earlier* reads;
+        // If arithmetic occurred, don't union the forward remainder set into the *earlier* reads;
         // that remainder belongs to the later state, not the prior one.
         if (!scalarWriteDetected && !hasArithmetic)
         {
@@ -1364,7 +1464,7 @@ public class ReverseReplayEngine<T>
         rebuilt.Any();
 
         /*  When a scalar overwrite closed the forward half‑cycle we
- *  want that new scalar – and *only* that scalar – to survive.
+ *  want that new scalar - and *only* that scalar - to survive.
  *  The older slices (bootstrap + intermediate) are discarded.
  */
         if (scalarWriteDetected)
@@ -1413,7 +1513,7 @@ public interface IPositronicVariable
     int Converged();
 
     /// <summary>
-    /// Melds every branching future into one reluctant consensus, like a committee that’s given up.
+    /// Melds every branching future into one reluctant consensus, like a committee that's given up.
     /// </summary>
     void UnifyAll();
 }
@@ -1425,8 +1525,8 @@ public interface IPositronicVariable
 public interface IPositronicRuntime
 {
     /// <summary>
-    /// Controls the emotional direction of time: +1 means “we’re moving on,”
-    /// -1 means “let’s try that whole simulation again but sadder.”
+    /// Controls the emotional direction of time: +1 means "we're moving on,"
+    /// -1 means "let's try that whole simulation again but sadder."
     /// </summary>
     int Entropy { get; set; }
 
@@ -1436,10 +1536,9 @@ public interface IPositronicRuntime
     bool Converged { get; set; }
 
     /// <summary>
-    /// Where all your ill-fated `Console.WriteLine` dreams are stored during convergence.
-    /// It’s like a black box for your simulation.
+    /// A bit wetware, but it gets the job done.
     /// </summary>
-    TextWriter OracularStream { get; set; }
+    TextWriter Babelfish { get; set; }
 
     /// <summary>
     /// The collection of all Positronic variables registered.
@@ -1448,7 +1547,7 @@ public interface IPositronicRuntime
 
     /// <summary>
     /// Performs a ceremonial memory wipe on the runtime state.
-    /// Ideal for fresh starts, debugging, or pretending the last run didn’t happen.
+    /// Ideal for fresh starts, debugging, or pretending the last run didn't happen.
     /// </summary>
     void Reset();
 
@@ -1478,7 +1577,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 {
     public int Entropy { get; set; } = 1;
     public bool Converged { get; set; } = false;
-    public TextWriter OracularStream { get; set; }
+    public TextWriter Babelfish { get; set; }
     public IPositronicVariableRegistry Variables { get; }
     public int TotalConvergenceIterations { get; set; } = 0;
 
@@ -1490,7 +1589,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
 
     public DefaultPositronicRuntime(IPositronicVariableFactory factory, IPositronicVariableRegistry registry)
     {
-        OracularStream = AethericRedirectionGrid.OutputBuffer;
+        Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
 
         // Create a minimal fake IServiceProvider
         var provider = new FallbackServiceProvider(this);
@@ -1525,7 +1624,7 @@ public class DefaultPositronicRuntime : IPositronicRuntime
     {
         Entropy = 1;
         Converged = false;
-        OracularStream = AethericRedirectionGrid.OutputBuffer;
+        Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
         Registry.Clear();
         TotalConvergenceIterations = 0;
     }
@@ -1557,53 +1656,52 @@ public class PositronicVariable<T> : IPositronicVariable
     // Determines at runtime if T is a value type.
     private readonly bool isValueType = typeof(T).IsValueType;
     private readonly HashSet<T> _domain = new();
-    private static bool _reverseReplayDone;
+    private static bool _reverseReplayStarted;
     public static int _loopDepth;
     private readonly IPositronicRuntime _runtime;
     private bool _hasWrittenInitialForward = false;
-    internal void NotifyFirstAppend() => replacedInitialSlice = true;
+    internal void NotifyFirstAppend() => bootstrapSuperseded = true;
 
     internal static bool InConvergenceLoop => _loopDepth > 0;
-    private readonly ReverseReplayEngine<T> _reverseReplay;
+    private readonly UnhappeningEngine<T> _reverseReplay;
     private readonly IOperationLogHandler<T> _ops;
 
-    private readonly IVersioningService<T> _versioningService;
+    private readonly ITimelineArchivist<T> _temporalRecords;
 
     public void SeedBootstrap(params T[] values)
     {
         var qb = new QuBit<T>(values);
         qb.Any();
-        _versioningService.OverwriteBootstrap(this, qb); // A small sacrifice to the versioning gods
+        _temporalRecords.OverwriteBootstrap(this, qb); // A small sacrifice to the versioning gods
 
-        replacedInitialSlice = false;
+        bootstrapSuperseded = false;
     }
 
 
     public PositronicVariable(
         T initialValue,
         IPositronicRuntime runtime,
-        IVersioningService<T> versioningService = null,
+        ITimelineArchivist<T> timelineArchivist = null,
         IOperationLogHandler<T> opsHandler = null)
     {
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
 
         // seed the timeline exactly once
-        _versioningService = versioningService ?? new DefaultVersioningService<T>();
+        _temporalRecords = timelineArchivist ?? new BureauOfTemporalRecords<T>();
         var qb = new QuBit<T>(new[] { initialValue });
         qb.Any();
-        _versioningService.OverwriteBootstrap(this, qb);
+        _temporalRecords.OverwriteBootstrap(this, qb);
         _hasWrittenInitialForward = true;
 
         _domain.Add(initialValue);
         _runtime.Registry.Add(this);
 
-        // wire up the rest of our services
+        // DI my temporal records and ops handler
+        _ops = opsHandler ?? new RegretScribe<T>();
+        _reverseReplay = new UnhappeningEngine<T>(_ops, _temporalRecords);
 
-        _ops = opsHandler ?? new DefaultOperationLogHandler<T>();
-        _reverseReplay = new ReverseReplayEngine<T>(_ops, _versioningService);
-
-        // register the “something appended” hook (now thread-safe)
-        _versioningService.RegisterTimelineAppendedHook(() => OnTimelineAppended?.Invoke());
+        // "something appended" hook
+        _temporalRecords.RegisterTimelineAppendedHook(() => OnTimelineAppended?.Invoke());
     }
 
     static PositronicVariable()
@@ -1628,7 +1726,7 @@ public class PositronicVariable<T> : IPositronicVariable
 
     internal static void ResetReverseReplayFlag()
     {
-        _reverseReplayDone = false;           // called each time the direction flips
+        _reverseReplayStarted = false;           // called each time the direction flips
     }
 
     /// <summary>
@@ -1644,8 +1742,8 @@ public class PositronicVariable<T> : IPositronicVariable
         if (qb is null)
             throw new ArgumentNullException(nameof(qb));
 
-        // Ensure it’s been observed at least once so that
-        // subsequent operator overloads won’t collapse accidentally.
+        // Ensure it's been observed at least once so that
+        // subsequent operator overloads won't collapse accidentally.
         qb.Any();
         ReplaceOrAppendOrUnify(qb, replace: true);
     }
@@ -1665,14 +1763,14 @@ public class PositronicVariable<T> : IPositronicVariable
 
     // The timeline of quantum slices.
     public readonly List<QuBit<T>> timeline = new List<QuBit<T>>();
-    private bool replacedInitialSlice = false;
+    private bool bootstrapSuperseded = false;
 
     public event Action OnConverged;
     public event Action OnCollapse;
     public event Action OnTimelineAppended;
 
     /// <summary>
-    /// How many alternate realities we’ve stacked on this poor variable’s timeline. More is usually bad.
+    /// How many alternate realities we've stacked on this poor variable's timeline. More is usually bad.
     /// </summary>
     public int TimelineLength => timeline.Count;
 
@@ -1721,20 +1819,20 @@ public class PositronicVariable<T> : IPositronicVariable
     {
         var runtime = rt;
         var entropy = new DefaultEntropyController(runtime);
-        var opsHandler = new DefaultOperationLogHandler<T>();
-        var redirect = new DefaultOutputRedirector(runtime);
+        var opsHandler = new RegretScribe<T>();
+        var redirect = new SubEthaOutputTransponder(runtime);
 
-        var engine = PositronicAmbient.Services.GetService<IConvergenceEngine<T>>()
-                ?? new ConvergenceEngine<T>(
+        var engine = PositronicAmbient.Services.GetService<IImprobabilityEngine<T>>()
+                ?? new ImprobabilityEngine<T>(
                        new DefaultEntropyController(runtime),
-                       new DefaultOperationLogHandler<T>(),
-                       new DefaultOutputRedirector(runtime),
+                       new RegretScribe<T>(),
+                       new SubEthaOutputTransponder(runtime),
                        runtime,
-                       new DefaultVersioningService<T>());
+                       new BureauOfTemporalRecords<T>());
 
         try
         {
-            // ‼️ mark “we’re inside the loop” so the fast-path is disabled
+            // ‼️ mark "we're inside the loop" so the fast-path is disabled
             _loopDepth++;
             engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
         }
@@ -1750,14 +1848,14 @@ public class PositronicVariable<T> : IPositronicVariable
     /// </summary>
     public int Converged()
     {
-        // If the engine itself already flagged full convergence, we’re done.
+        // If the engine itself already flagged full convergence, we're done.
         if (_runtime.Converged)
             return 1;
 
         if (timeline.Count < 3)
             return 0;
 
-        // If the last two slices match, that’s a 1‐step convergence.
+        // If the last two slices match, that's a 1‐step convergence.
         if (SameStates(timeline[^1], timeline[^2]))
             return 1;
 
@@ -1804,7 +1902,7 @@ public class PositronicVariable<T> : IPositronicVariable
         foreach (var x in mergedStates)
             _domain.Add(x);
 
-        OperationLog.Clear();
+        QuantumLedgerOfRegret.Clear();
         _runtime.Converged = true;
         OnCollapse?.Invoke();
         OnConverged?.Invoke();
@@ -1866,19 +1964,19 @@ public class PositronicVariable<T> : IPositronicVariable
         var runtime = _runtime;
 
         /* -------------------------------------------------------------
-*  Inside a convergence‑loop, forward half‑cycles follow
- *  different rules:
- *      – scalar  writes  (replace == false) **append**
- *      – qubit / union   (replace == true)  **overwrite**
- *    …but never touch the bootstrap slice.
- * ------------------------------------------------------------- */
+        *  Inside a convergence‑loop, forward half‑cycles follow
+        *  different rules:
+        *      - scalar  writes  (replace == false) **append**
+        *      - qubit / union   (replace == true)  **overwrite**
+        *    …but never touch the bootstrap slice.
+        * ------------------------------------------------------------- */
         if (runtime.Entropy > 0 && InConvergenceLoop)
         {
             if (timeline.Count == 1) // still on bootstrap
             {
                 // Never mutate slice 0 during the loop; always append the first write.
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
                 return;
             }
 
@@ -1890,7 +1988,7 @@ public class PositronicVariable<T> : IPositronicVariable
                 // single‑value qubits are *scalar* writes → append
                 if (incoming.Count() == 1)
                 {
-                    _versioningService.SnapshotAppend(this, qb);
+                    _temporalRecords.SnapshotAppend(this, qb);
                 }
                 else                // real union → keep the old merge path
                 {
@@ -1900,16 +1998,16 @@ public class PositronicVariable<T> : IPositronicVariable
                                     .Distinct()
                                     .ToArray();
                     var mergedQb = new QuBit<T>(merged); mergedQb.Any();
-                    _versioningService.ReplaceLastSlice(this, mergedQb);
+                    _temporalRecords.ReplaceLastSlice(this, mergedQb);
                 }
 
-                _ops.HadForwardAppend = true;
+                _ops.SawForwardWrite = true;
                 return;
             }
-            else                                         // scalar – append
+            else                                         // scalar - append
             {
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
             }
             return;
         }
@@ -1924,8 +2022,8 @@ public class PositronicVariable<T> : IPositronicVariable
                 qb.Any();
             }
 
-            var topOp = OperationLog.Peek();
-            if (topOp is null || topOp is ForwardHalfCycleMarker)
+            var topOp = QuantumLedgerOfRegret.Peek();
+            if (topOp is null || topOp is MerlinFroMarker)
                 return;
 
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
@@ -1934,15 +2032,15 @@ public class PositronicVariable<T> : IPositronicVariable
             return;
         }
 
-        // Emergency override for when we’re flailing outside the loop like a time-traveling otter
+        // Emergency override for when we're flailing outside the loop like a time-traveling otter
         if (runtime.Entropy > 0 && !InConvergenceLoop)
         {
             // First ever forward write OR first after Unify → APPEND
             if (timeline.Count == 1)
             {
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
-                replacedInitialSlice = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
+                bootstrapSuperseded = true;
                 return;
             }
             if (!replace)
@@ -1956,19 +2054,19 @@ public class PositronicVariable<T> : IPositronicVariable
                        .Distinct()
                        .ToArray();
                 var mergedQb = new QuBit<T>(merged); mergedQb.Any();
-                _versioningService.ReplaceLastSlice(this, mergedQb);
+                _temporalRecords.ReplaceLastSlice(this, mergedQb);
             }
             else
             {
                 // Otherwise we need to preserve causality - else Marty McFly's hand will disappear again.
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
             }
 
             return;
         }
 
-        // If we’ve already converged, do nothing.
+        // If we've already converged, do nothing.
         if (_runtime.Converged)
             return;
 
@@ -1977,8 +2075,8 @@ public class PositronicVariable<T> : IPositronicVariable
         // --- Reverse‐time pass (Entropy < 0) -----------------------------
         if (runtime.Entropy < 0)
         {
-            var top = OperationLog.Peek();
-            if (top is null || top is ForwardHalfCycleMarker)
+            var top = QuantumLedgerOfRegret.Peek();
+            if (top is null || top is MerlinFroMarker)
                 return;
             // OK, this is a true reverse-replay pass
             var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
@@ -1990,26 +2088,26 @@ public class PositronicVariable<T> : IPositronicVariable
         // --- Forward‐time pass (Entropy > 0) -----------------------------
         if (runtime.Entropy > 0)
         {
-            // — overwrite bootstrap if that’s all we have
-            if (replacedInitialSlice && timeline.Count == 1)
+            // — overwrite bootstrap if that's all we have
+            if (bootstrapSuperseded && timeline.Count == 1)
             {
                 // ③ post‑Unify forward write should append, not overwrite
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
                 return;
             }
 
             // — first real forward write: snapshot+append
-            if (!replacedInitialSlice && timeline.Count == 1)
+            if (!bootstrapSuperseded && timeline.Count == 1)
             {
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
-                replacedInitialSlice = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
+                bootstrapSuperseded = true;
                 return;
             }
 
             // — overwrite (merge) if this is the very first forward write
-            if (replace && !_ops.HadForwardAppend)
+            if (replace && !_ops.SawForwardWrite)
             {
                 var merged = timeline[^1]
                    .ToCollapsedValues()
@@ -2018,20 +2116,20 @@ public class PositronicVariable<T> : IPositronicVariable
                    .ToArray();
                 var mergedQb = new QuBit<T>(merged);
                 mergedQb.Any();
-                _versioningService.ReplaceLastSlice(this, mergedQb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.ReplaceLastSlice(this, mergedQb);
+                _ops.SawForwardWrite = true;
                 return;
             }
             // — otherwise decide append vs. merge
-            if (!replace || (!_ops.HadForwardAppend && !SameStates(qb, timeline[^1])))
+            if (!replace || (!_ops.SawForwardWrite && !SameStates(qb, timeline[^1])))
             {
                 // snapshot-append the new slice
-                _versioningService.SnapshotAppend(this, qb);
-                _ops.HadForwardAppend = true;
+                _temporalRecords.SnapshotAppend(this, qb);
+                _ops.SawForwardWrite = true;
             }
             else
             {
-                // merge into the last slice if it’s a duplicate scalar write
+                // merge into the last slice if it's a duplicate scalar write
                 var merged = timeline[^1]
                                       .ToCollapsedValues()
                                       .Union(qb.ToCollapsedValues())
@@ -2039,7 +2137,7 @@ public class PositronicVariable<T> : IPositronicVariable
                                       .ToArray();
                 var mergedQb = new QuBit<T>(merged);
                 mergedQb.Any();
-                _versioningService.ReplaceLastSlice(this, mergedQb);
+                _temporalRecords.ReplaceLastSlice(this, mergedQb);
             }
 
 
@@ -2067,7 +2165,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new AdditionOperation<T>(left, right, left._runtime));
+            QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, right, left._runtime));
         }
         return new QExpr(left, resultQB);
     }
@@ -2078,7 +2176,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (right._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new AdditionOperation<T>(right, left, right._runtime));
+            QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right, left, right._runtime));
         }
         return new QExpr(right, resultQB);
     }
@@ -2091,7 +2189,7 @@ public class PositronicVariable<T> : IPositronicVariable
         {
             // Record addition using the collapsed value from the right variable.
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-            OperationLog.Record(new AdditionOperation<T>(left, operand, left._runtime));
+            QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
         }
         return new QExpr(left, resultQB);
     }
@@ -2103,7 +2201,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var resultQB = left.GetCurrentQBit() % right;
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
-            OperationLog.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
+            QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
         return resultQB;
     }
 
@@ -2114,7 +2212,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var resultQB = right.GetCurrentQBit() % left;
         resultQB.Any();
         if (right._runtime.Entropy >= 0)
-            OperationLog.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
+            QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
         return resultQB;
     }
 
@@ -2126,7 +2224,7 @@ public class PositronicVariable<T> : IPositronicVariable
         var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
-            OperationLog.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
+            QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
         return resultQB;
     }
 
@@ -2137,7 +2235,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new SubtractionOperation<T>(left, right, left._runtime));
+            QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, right, left._runtime));
         }
         return resultQB;
     }
@@ -2150,7 +2248,7 @@ public class PositronicVariable<T> : IPositronicVariable
         if (right._runtime.Entropy >= 0)
         {
             // Use a reversed subtraction so that the inverse is: value = left - result.
-            OperationLog.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
+            QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
         }
         return resultQB;
     }
@@ -2162,7 +2260,7 @@ public class PositronicVariable<T> : IPositronicVariable
         if (left._runtime.Entropy >= 0)
         {
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-            OperationLog.Record(new SubtractionOperation<T>(left, operand, left._runtime));
+            QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, operand, left._runtime));
         }
         return resultQB;
     }
@@ -2176,7 +2274,7 @@ public class PositronicVariable<T> : IPositronicVariable
         negatedQb.Any();
         if (value._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new NegationOperation<T>(value, value._runtime));
+            QuantumLedgerOfRegret.Record(new NegationOperation<T>(value, value._runtime));
         }
         return negatedQb;
     }
@@ -2188,7 +2286,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new MultiplicationOperation<T>(left, right, left._runtime));
+            QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, right, left._runtime));
         }
         return resultQB;
     }
@@ -2199,7 +2297,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (right._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new MultiplicationOperation<T>(right, left, right._runtime));
+            QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(right, left, right._runtime));
         }
         return resultQB;
     }
@@ -2211,7 +2309,7 @@ public class PositronicVariable<T> : IPositronicVariable
         if (left._runtime.Entropy >= 0)
         {
             T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-            OperationLog.Record(new MultiplicationOperation<T>(left, operand, left._runtime));
+            QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand, left._runtime));
         }
         return resultQB;
     }
@@ -2224,7 +2322,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (left._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new DivisionOperation<T>(left, right, left._runtime));
+            QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, right, left._runtime));
         }
         return resultQB;
     }
@@ -2235,7 +2333,7 @@ public class PositronicVariable<T> : IPositronicVariable
         resultQB.Any();
         if (right._runtime.Entropy >= 0)
         {
-            OperationLog.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
+            QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
         }
         return resultQB;
     }
@@ -2414,7 +2512,7 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
-    /// Outputs the history of this variable’s midlife crises in a human-readable format.
+    /// Outputs the history of this variable's midlife crises in a human-readable format.
     /// </summary>
     public string ToTimelineString()
     {
@@ -2485,10 +2583,9 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Lightweight expression wrapper so we can keep provenance (the source PV)
-    // and record downstream ops like `%` even when they’re applied to a QuBit.
-    // ─────────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// A helper struct to enable chained operations without immediate collapse.
+    /// </summary>
     public readonly struct QExpr
     {
         internal readonly QuBit<T> Q;
@@ -2498,24 +2595,32 @@ public class PositronicVariable<T> : IPositronicVariable
         public override string ToString() => Q.ToString();
         public static implicit operator QuBit<T>(QExpr e) => e.Q;
 
-        // (QExpr % T) – e.g., (antival + 1) % 3
+        /// <summary>
+        /// (QExpr % T) - e.g., (antival + 1) % 3
+        /// </summary>
         public static QuBit<T> operator %(QExpr left, T right)
         {
             var resultQB = left.Q % right;
             resultQB.Any();
             if (left.Source._runtime.Entropy >= 0)
-                OperationLog.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
+                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
             return resultQB;
         }
 
-        // (QExpr % PositronicVariable<T>) – optional, for parity with PV%PV
+
+        /// <summary>
+        /// (QExpr % PositronicVariable<T>) - optional, for parity with PV%PV
+        /// </summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <returns></returns>
         public static QuBit<T> operator %(QExpr left, PositronicVariable<T> right)
         {
             var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
             var resultQB = left.Q % right.GetCurrentQBit();
             resultQB.Any();
             if (left.Source._runtime.Entropy >= 0)
-                OperationLog.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
+                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
             return resultQB;
         }
 
@@ -2583,59 +2688,137 @@ public class NeuralNodule<T> where T : struct, IComparable<T>
 
 public static class Arithmetic
 {
-    // GENERIC, zero-overhead path when T : INumber<T>
+    /// <summary>
+    /// Sometimes maths is just adding two numbers together.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Add<T>(T x, T y)
         where T : INumber<T>
         => x + y;
 
-    // FALLBACK for *any* other T
+    /// <summary>
+    /// A fallback for dynamic types that don't support generic maths (e.g. Qubits)
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Add(dynamic x, dynamic y)
         => x + y;
 
-
-
+    /// <summary>
+    /// Who's even reading this far down? 1 - 1 = 0, right?
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Subtract<T>(T x, T y)
         where T : ISubtractionOperators<T, T, T>
         => x - y;
+    /// <summary>
+    /// I hate dynamics, they're the worst.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Subtract(dynamic x, dynamic y)
         => x - y;
 
-
-
+    /// <summary>
+    /// There's a video somewhere on the internet from the 90s of Carol Vorderman dressed as Madonna singing
+    /// "I'm going to show you how to multiply", it's as easy as 1, 2, 3. I think about that video a lot.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Multiply<T>(T x, T y)
         where T : IMultiplyOperators<T, T, T>
         => x * y;
+    /// <summary>
+    /// Who are you and why are you using dynamics in 2025?
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Multiply(dynamic x, dynamic y)
         => x * y;
 
-
-
+    /// <summary>
+    /// Division is the most controversial of the basic arithmetic operations.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Divide<T>(T x, T y)
         where T : IDivisionOperators<T, T, T>
         => x / y;
+    /// <summary>
+    /// Seriously, stop using dynamics.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Divide(dynamic x, dynamic y)
         => x / y;
 
-
-
+    /// <summary>
+    /// The remainder operation, also known as modulo, gives you the leftover part of a division.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Remainder<T>(T x, T y)
         where T : IModulusOperators<T, T, T>
         => x % y;
+    /// <summary>
+    /// Dynamic remainder, because why not.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Remainder(dynamic x, dynamic y)
         => x % y;
 
-
-
+    /// <summary>
+    /// The mirror universe, we put a beard on every number.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <returns></returns>
     public static T Negate<T>(T x)
         where T : IUnaryNegationOperators<T, T>
         => -x;
+    /// <summary>
+    /// Dynamic negation, because some people just want to watch the world burn.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <returns></returns>
     public static dynamic Negate(dynamic x)
         => -x;
 
+    /// <summary>
+    /// Modulus operation that always returns a non-negative result.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static T Modulus<T>(T x, T y)
         where T : IModulusOperators<T, T, T>
         => x % y;
 
+    /// <summary>
+    /// Dynamic modulus that always returns a non-negative result.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic Modulus(dynamic x, dynamic y)
     {
         if (x is double || x is float)
@@ -2643,6 +2826,12 @@ public static class Arithmetic
         return x % y;
     }
 
+    /// <summary>
+    /// Floor division, which rounds down to the nearest whole number.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
     public static dynamic FloorDiv(dynamic x, dynamic y)
     {
         if (x is double || x is float || x is decimal)
@@ -2670,7 +2859,7 @@ public static class AntiVal
     private static bool PositronicAmbientIsUninitialized()
         => PositronicAmbient.Current == null;
 
-    // If the runtime hasn’t been initialized, we gently whisper it into existence like a haunted lullaby.
+    // If the runtime hasn't been initialized, we gently whisper it into existence like a haunted lullaby.
     private static void InitialiseDefaultRuntime()
     {
         if (PositronicAmbient.IsInitialized)

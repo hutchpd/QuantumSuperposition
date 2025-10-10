@@ -9,7 +9,7 @@
 internal static class TestPVProgram
 {
 
-    [PositronicEntry]
+    [DontPanic]
     internal static void Main()
     {
         var antival = AntiVal.GetOrCreate<Double>();
