@@ -1335,6 +1335,7 @@ public class UnhappeningEngine<T>
 
         while (true)
         {
+            // Gotos are evil and wrong a deliciously tasty with hot sauce.
             var top = QuantumLedgerOfRegret.Peek();
             switch (top)
             {
@@ -1366,8 +1367,6 @@ public class UnhappeningEngine<T>
             }
         }
         DonePeel:
-
-
 
         // "rewind" step so that it undoes both appends and replaces:
         foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
@@ -1445,9 +1444,6 @@ public class UnhappeningEngine<T>
             }
         }
 
-
-
-
         // If arithmetic occurred, don't union the forward remainder set into the *earlier* reads;
         // that remainder belongs to the later state, not the prior one.
         if (!scalarWriteDetected && !hasArithmetic)
@@ -1457,16 +1453,14 @@ public class UnhappeningEngine<T>
             rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
         }
 
-
-
         // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
         var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
         rebuilt.Any();
 
         /*  When a scalar overwrite closed the forward half‑cycle we
- *  want that new scalar - and *only* that scalar - to survive.
- *  The older slices (bootstrap + intermediate) are discarded.
- */
+         *  want that new scalar - and *only* that scalar - to survive.
+         *  The older slices (bootstrap + intermediate) are discarded.
+         */
         if (scalarWriteDetected)
         {
             /* Keep slice 0 intact, discard only the intermediate
@@ -1502,7 +1496,7 @@ public class UnhappeningEngine<T>
 #region Interfaces and Runtime
 
 /// <summary>
-/// Direction of time: +1 for forward, -1 for reverse. Like a microwave, but emotionally.
+/// Direction of time: +1 for forward, -1 for reverse, this time machine only has two gears.
 /// </summary>
 public interface IPositronicVariable
 {
@@ -2542,6 +2536,25 @@ public class PositronicVariable<T> : IPositronicVariable
     }
 
     /// <summary>
+    /// Gets or sets the current quantum state.
+    /// </summary>
+    public QuBit<T> State
+    {
+        get => GetCurrentQBit();
+        set => Assign(value);
+    }
+
+    /// <summary>
+    /// Gets or sets the current scalar value, collapsing if necessary.
+    /// </summary>
+    public T Scalar
+    {
+        get => GetCurrentQBit().ToCollapsedValues().First();
+        set => Assign(value);
+    }
+
+
+    /// <summary>
     /// Collapses the current quantum cloud into discrete values.
     /// </summary>
     public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
@@ -2594,6 +2607,16 @@ public class PositronicVariable<T> : IPositronicVariable
         public IEnumerable<T> ToCollapsedValues() => Q.ToCollapsedValues();
         public override string ToString() => Q.ToString();
         public static implicit operator QuBit<T>(QExpr e) => e.Q;
+
+        /// <summary>
+        /// (PositronicVariable<T> = QExpr) - e.g., antival = (antival + 1)
+        /// </summary>
+        /// <param name="e"></param>
+        public static implicit operator PositronicVariable<T>(QExpr e)
+        {
+            e.Source.Assign(e.Q);
+            return e.Source;
+        }
 
         /// <summary>
         /// (QExpr % T) - e.g., (antival + 1) % 3

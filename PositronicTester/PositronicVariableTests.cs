@@ -402,30 +402,6 @@ namespace PositronicVariables.Tests
                         Is.EquivalentTo(new[] { 1, 2 }));
         }
 
-        // fails with       Second in‑loop forward write should append, not overwrite
-        // Assert.That(v.TimelineLength, Is.EqualTo(before + 1))
-        // Expected: 3
-        // But was:  2
-        // commented out as unsure if relevant.
-        //[Test]
-        //public void ForwardWrite_AfterLoopUnify_AppendsRatherThanOverwrites()
-        //{
-        //    var v = PositronicVariable<int>.GetOrCreate("chk", 0, _runtime);
-
-        //    // force a single‑slice timeline (simulate an in‑loop Unify)
-        //    PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
-        //    {
-        //        v.Assign(v + 1);
-        //        v.Unify(2);   // timeline length == 1 again
-        //    }, runFinalIteration: false);
-
-        //    var before = v.TimelineLength;                 // must be 1
-        //    PositronicVariable<int>.SetEntropy(_runtime, +1);
-        //    v.Assign(99);                                  // second forward write
-
-        //    Assert.That(v.TimelineLength, Is.EqualTo(before + 1),
-        //        "Second in‑loop forward write should append, not overwrite");
-        //}
 
         [Test]
         public void Engine_Stops_When_UnifyDisabled()
@@ -576,34 +552,7 @@ namespace PositronicVariables.Tests
             Assert.That(after.Count, Is.EqualTo(before.Count + 1));
         }
 
-        // commented out, unsure if relevant.
-        // fails with
-        //       Assert.That(after.Count, Is.LessThanOrEqualTo(before.Count))
-        // Expected: less than or equal to 1
-        // But was:  2
 
-        //[Test]
-        //public void TimelineState_ForwardPassMayMerge()
-        //{
-        //    // Arrange
-        //    var pv = PositronicVariable<int>.GetOrCreate("t2", 0, _runtime);
-        //    PositronicVariable<int>.SetEntropy(_runtime, -1);
-        //    for (int i = 0; i < 5; i++)
-        //        pv.Assign((pv + 1) % 3);
-        //    var before = Snapshot(pv);
-
-        //    // Act
-        //    PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
-        //    {
-        //        PositronicVariable<int>.SetEntropy(_runtime, 1);
-        //        pv.Assign((pv + 1) % 3);
-        //    }, runFinalIteration: false);
-
-        //    var after = Snapshot(pv);
-
-        //    // Assert
-        //    Assert.That(after.Count, Is.LessThanOrEqualTo(before.Count));
-        //}
 
         private List<List<int>> Snapshot(PositronicVariable<int> var)
         {
@@ -617,31 +566,29 @@ namespace PositronicVariables.Tests
 
         #region DomainAndLogTests
 
-        // fails with "System.InvalidOperationException : Sequence contains more than one element"
-        // commented out as I am unsure if relevant
-        //[Test]
-        //public void OperationLog_And_Domain_Are_Cleared_After_Convergence()
-        //{
-        //    // Arrange
-        //    var v = PositronicVariable<double>.GetOrCreate("d", 0, _runtime);
+        [Test]
+        public void OperationLog_And_Domain_Are_Cleared_After_Convergence()
+        {
+            // Arrange
+            var v = PositronicVariable<double>.GetOrCreate("d", 0, _runtime);
 
-        //    // Act
-        //    PositronicVariable<double>.RunConvergenceLoop(_runtime, () =>
-        //    {
-        //        v.Assign(v + 1);
-        //    }, runFinalIteration: false);
+            // Act
+            PositronicVariable<double>.RunConvergenceLoop(_runtime, () =>
+            {
+                v.Assign(v + 1);
+            }, runFinalIteration: false);
 
-        //    // Assert
-        //    var log = (ICollection)typeof(OperationLog)
-        //        .GetField("_log", BindingFlags.NonPublic | BindingFlags.Static)
-        //        .GetValue(null);
-        //    Assert.That(log.Count, Is.EqualTo(0));
+            // Assert
+            var log = (ICollection)typeof(QuantumLedgerOfRegret)
+                .GetField("_log", BindingFlags.NonPublic | BindingFlags.Static)
+                .GetValue(null);
+            Assert.That(log.Count, Is.EqualTo(0));
 
-        //    var domain = (ICollection<double>)typeof(PositronicVariable<double>)
-        //        .GetField("_domain", BindingFlags.NonPublic | BindingFlags.Instance)
-        //        .GetValue(v);
-        //    Assert.That(domain, Is.EquivalentTo(new[] { v.ToValues().Single() }));
-        //}
+            var domain = (ICollection<double>)typeof(PositronicVariable<double>)
+                .GetField("_domain", BindingFlags.NonPublic | BindingFlags.Instance)
+                .GetValue(v);
+            Assert.That(domain, Is.EquivalentTo(new[] { v.ToValues().Single() }));
+        }
 
         #endregion
 
@@ -660,40 +607,6 @@ namespace PositronicVariables.Tests
                               .ToCollapsedValues().Single();
             Assert.That(firstSlice, Is.EqualTo(0));                    // should still be 0
         }
-
-
-        // fails with "    System.InvalidOperationException : Sequence contains more than one element"
-        // commented out as unsure if relevant.
-        //[Test]
-        //public void ConvergenceLoop_ScalarWrites_Always_AppendDistinctSlices()
-        //{
-        //    // Arrange: start at negative time so we see all slices
-        //    PositronicVariable<int>.SetEntropy(_runtime, -1);
-        //    var v = PositronicVariable<int>.GetOrCreate("sliceTest", 0, _runtime);
-
-        //    // Act: run one full negative→positive pass, but don’t unify
-        //    PositronicVariable<int>.RunConvergenceLoop(
-        //        _runtime,
-        //        () =>
-        //        {
-        //            v.Assign(v + 1);   // should snapshot 1
-        //            v.Assign(v + 2);   // should snapshot 3 (1+2)
-        //            v.Assign(v + 3);   // should snapshot 6 (3+3)   
-        //        },
-        //        runFinalIteration: false,
-        //        unifyOnConvergence: false,
-        //        bailOnFirstReverseWhenIdle: false);
-
-        //    // Grab the private timeline via reflection (or use your Snapshot helper)
-        //    var timelineField = typeof(PositronicVariable<int>)
-        //        .GetField("timeline", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-        //    var slices = (List<QuBit<int>>)timelineField.GetValue(v);
-
-        //    // Assert: we expect four slices: [0], [1], [3], [6]
-        //    Assert.That(slices.Select(qb => qb.ToCollapsedValues().Single()),
-        //                Is.EqualTo(new[] { 0, 1, 3, 6 }),
-        //                "Every scalar write inside the convergence loop must produce its own new slice.");
-        //}
 
         [Test]
         public void SimpleProgram_BackwardsAssignments_Prints12()
@@ -752,7 +665,7 @@ namespace PositronicVariables.Tests
             // Act
             var result = v.GetCurrentQBit().ToCollapsedValues().Single();
 
-            // Assert:  7 + 3 + 2  ⇒ 12
+            // Assert:  7 + 3 + 2  => 12
             Assert.That(result, Is.EqualTo(12),
                 "Backward‐replay should invert the +2 and +3 before the scalar assignment, giving 12");
         }
@@ -920,30 +833,6 @@ namespace PositronicVariables.Tests
                 "Unify(count) must preserve the whole set.");
         }
 
-        // fails with       Assert.That(vals, Is.EquivalentTo(new[] { 0, 1 }))
-        // Expected: equivalent to< 0, 1 >
-        // But was:  < 1 >
-        // Missing (1): < 0 >
-        // commented out as unsure if relevant.
-        //[Test]
-        //public void Seed_IsNotTreatedAsForwardAppend()
-        //{
-        //    var rt = PositronicAmbient.Current;
-        //    var a = AntiVal.GetOrCreate<int>();
-
-        //    // Trigger a reverse replay path so that a forward-append would leak
-        //    PositronicVariable<int>.SetEntropy(rt, +1);
-        //    a.Assign(1); // real forward write
-        //    var snap = a.GetCurrentQBit();
-
-        //    PositronicVariable<int>.SetEntropy(rt, -1);
-        //    a.Assign(snap); // reverse replay
-
-        //    // Final union must not contain AntiVal's bootstrap card beyond constraints
-        //    var vals = a.ToValues().OrderBy(x => x).ToArray();
-        //    Assert.That(vals, Is.EquivalentTo(new[] { 0, 1 }));
-        //}
-
         [Test]
         public void AttributedEntry_PrintsExactlyOnce_WithExitHookEnabled()
         {
@@ -954,10 +843,10 @@ namespace PositronicVariables.Tests
             var output = new StringWriter();
             Console.SetOut(output);
 
-            // 1) Run the attributed entry once via the normal runner (engine will flush + set SuppressProcessExitEmission)
+            // Run the attributed entry once via the normal runner (engine will flush + set SuppressProcessExitEmission)
             PositronicAttributedEntryRunner.RunOnce();
 
-            // 2) Simulate what our test ProcessExit hook would do
+            // Simulate what our test ProcessExit hook would do
             //    (after the patch, this helper checks the suppression flag)
             PositronicAttributedEntryRunner.EmitOnceIfNeeded();
 
