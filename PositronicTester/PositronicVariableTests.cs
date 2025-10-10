@@ -1,14 +1,8 @@
-﻿using System;
+﻿#region Using directives
 using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.VisualStudio.TestPlatform.TestHost;
-using NUnit.Framework;
 using PositronicVariables.Attributes;
 using QuantumSuperposition.Core;
 using PositronicVariables.DependencyInjection;
@@ -18,9 +12,11 @@ using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables.Factory;
 using PositronicVariables.Variables;
+#endregion
 
 namespace PositronicVariables.Tests
 {
+    #region Test infrastructure
 
     [SetUpFixture]
     public sealed class EnableAttributedExitHook
@@ -69,7 +65,6 @@ namespace PositronicVariables.Tests
             real.Write(AethericRedirectionGrid.ImprobabilityDrive.ToString());
             real.Flush();
         }
-
 
         /// <summary>
         /// Run the single [PositronicEntry] method inside the convergence loop,
@@ -153,6 +148,7 @@ namespace PositronicVariables.Tests
                     false   // bailOnFirstReverseWhenIdle
                 });
         }
+
         private static bool IsCandidateAssembly(Assembly asm)
         {
             try
@@ -186,7 +182,6 @@ namespace PositronicVariables.Tests
             catch (FileNotFoundException) { return false; }
         }
 
-
         private static void EnsureRuntime()
         {
             if (PositronicAmbient.IsInitialized)
@@ -212,11 +207,15 @@ namespace PositronicVariables.Tests
         }
     }
 
+    #endregion
 
+    #region PositronicVariableTests
 
     [TestFixture]
     public class PositronicVariableTests
     {
+        #region Fixture state
+
         private ServiceProvider _provider;
         private IPositronicRuntime _runtime;
 
@@ -243,7 +242,53 @@ namespace PositronicVariables.Tests
             PositronicAmbient.PanicAndReset();
         }
 
-        #region OperatorsAndAssignments
+        #endregion
+
+        #region Operators and Assignments
+
+        [Test]
+        public void PascalTriangle_RowLength10_Converges_Correctly()
+        {
+            const int TargetRowLength = 10;
+
+            // Seed the "future" we want time to backfill from.
+            var row = PositronicVariable<ComparableList>.GetOrCreate("row", new ComparableList(1), _runtime);
+
+            // Grow one row per *forward* half-cycle; ignore reverse half-cycles.
+            // Disable auto-unify so the engine doesn't stop on the first reverse replay.
+            while (row.ToValues().OrderBy(v => v.Items.Count).Last().Items.Count < TargetRowLength)
+            {
+                PositronicVariable<ComparableList>.RunConvergenceLoop(
+                    _runtime,
+                    () =>
+                    {
+                        // Only mutate on forward ticks; reverse ticks just probe.
+                        if (PositronicVariable<ComparableList>.GetEntropy(_runtime) <= 0)
+                            return;
+
+                        var current = row.ToValues().OrderBy(v => v.Items.Count).Last().Items;
+
+                        // Compute next Pascal row.
+                        var next = new List<int> { 1 };
+                        for (int i = 0; i < current.Count - 1; i++)
+                            next.Add(current[i] + current[i + 1]);
+                        next.Add(1);
+
+                        row.Assign(new ComparableList(next.ToArray()));
+                    },
+                    runFinalIteration: false,
+                    unifyOnConvergence: false);
+            }
+
+            // Collapse accumulated states; the longest row should now have length 10.
+            row.UnifyAll();
+
+
+            // Verify the final converged row is the 10-element row C(9, k).
+            var finalRow = row.ToValues().OrderBy(v => v.Items.Count).Last().Items;
+            Assert.That(finalRow.Count, Is.EqualTo(TargetRowLength));
+            Assert.That(finalRow, Is.EqualTo(new[] { 1, 9, 36, 84, 126, 126, 84, 36, 9, 1 }));
+        }
 
         [Test]
         public void AdditionOperator_AddsValueToPositronicVariable()
@@ -291,7 +336,7 @@ namespace PositronicVariables.Tests
 
         #endregion
 
-        #region ConvergenceLoopBehavior
+        #region Convergence loop behaviour
 
         [Test]
         public void ConvergenceLoop_Should_Run_More_Than_One_HalfCycle()
@@ -373,7 +418,7 @@ namespace PositronicVariables.Tests
 
         #endregion
 
-        #region ReverseReplaySemantics
+        #region Reverse replay semantics
 
         [Test]
         public void Addition_Undoes_Itself_On_ReverseStep()
@@ -408,7 +453,6 @@ namespace PositronicVariables.Tests
                         Is.EquivalentTo(new[] { 1, 2 }));
         }
 
-
         [Test]
         public void Engine_Stops_When_UnifyDisabled()
         {
@@ -420,7 +464,7 @@ namespace PositronicVariables.Tests
                 unifyOnConvergence: false);
 
             Assert.That(iterations, Is.EqualTo(2),     // one reverse + one forward
-                "Engine should bail out after one round‑trip when unification is disabled");
+                "Engine should bail out after one round-trip when unification is disabled");
         }
 
         [Test]
@@ -438,7 +482,6 @@ namespace PositronicVariables.Tests
             var final = v.GetCurrentQBit().ToCollapsedValues().OrderBy(x => x);
             Assert.That(final, Is.EquivalentTo(new[] { 1, 2 }));
         }
-
 
         [Test]
         public void ForwardHalfCycle_ShouldAppend_WhenReplaceTrue()
@@ -485,7 +528,6 @@ namespace PositronicVariables.Tests
             Assert.That(text, Does.Contain("hello"));
         }
 
-
         [Test]
         public void Program_Main_Integration_CapturesAllAntivalStates()
         {
@@ -507,7 +549,6 @@ namespace PositronicVariables.Tests
             Assert.That(full.ElementAtOrDefault(1), Does.Contain("The value is any(1, 2, 0)"));
         }
 
-
         [Test]
         public void ModPlusModulus_Reversal_Should_Restore_Original_Value()
         {
@@ -527,17 +568,9 @@ namespace PositronicVariables.Tests
             Assert.That(v.ToValues().Single(), Is.EqualTo(-1));
         }
 
-        private void RunStep(Action code, int entropy)
-        {
-            PositronicVariable<int>.SetEntropy(_runtime, entropy);
-            code();
-            if (entropy < 0)
-                QuantumLedgerOfRegret.ReverseLastOperations();
-        }
-
         #endregion
 
-        #region TimelineStateTests
+        #region Timeline state tests
 
         [Test]
         public void TimelineState_BeforeAndAfterForwardPass()
@@ -558,19 +591,9 @@ namespace PositronicVariables.Tests
             Assert.That(after.Count, Is.EqualTo(before.Count + 1));
         }
 
-
-
-        private List<List<int>> Snapshot(PositronicVariable<int> var)
-        {
-            var field = typeof(PositronicVariable<int>)
-                .GetField("timeline", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            var slices = (List<QuBit<int>>)field.GetValue(var);
-            return slices.Select(q => q.States.ToList()).ToList();
-        }
-
         #endregion
 
-        #region DomainAndLogTests
+        #region Domain and log tests
 
         [Test]
         public void OperationLog_And_Domain_Are_Cleared_After_Convergence()
@@ -598,7 +621,7 @@ namespace PositronicVariables.Tests
 
         #endregion
 
-        #region IOAndFormatting
+        #region IO and formatting
 
         [Test]
         public void ScalarAssign_InLoop_ShouldNotTouchBootstrap()
@@ -650,7 +673,6 @@ namespace PositronicVariables.Tests
             Assert.That(v.GetCurrentQBit().ToCollapsedValues().Single(), Is.EqualTo(1));
         }
 
-
         [Test]
         public void BackwardsAssignmentOfScalarPlusAdds_YieldsCorrectAntiValue()
         {
@@ -676,7 +698,6 @@ namespace PositronicVariables.Tests
                 "Backward‐replay should invert the +2 and +3 before the scalar assignment, giving 12");
         }
 
-
         [Test]
         public void UnifiedQuBit_ToString_ShouldDisplayFullUnion()
         {
@@ -693,7 +714,7 @@ namespace PositronicVariables.Tests
 
         #endregion
 
-        #region SpecialCases
+        #region Special cases
 
         [Test]
         public void Antival_CyclesThrough0_1_2_AndEventuallyConvergesToAllThree()
@@ -736,11 +757,37 @@ namespace PositronicVariables.Tests
         }
 
         #endregion
+
+        #region Private helpers
+
+        private void RunStep(Action code, int entropy)
+        {
+            PositronicVariable<int>.SetEntropy(_runtime, entropy);
+            code();
+            if (entropy < 0)
+                QuantumLedgerOfRegret.ReverseLastOperations();
+        }
+
+        private List<List<int>> Snapshot(PositronicVariable<int> var)
+        {
+            var field = typeof(PositronicVariable<int>)
+                .GetField("timeline", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var slices = (List<QuBit<int>>)field.GetValue(var);
+            return slices.Select(q => q.States.ToList()).ToList();
+        }
+
+        #endregion
     }
+
+    #endregion
+
+    #region PositronicQuickPathBugTests
 
     [TestFixture]
     public class PositronicQuickPathBugTests
     {
+        #region Fixture state
+
         private ServiceProvider _provider;
         private IPositronicRuntime _runtime;
 
@@ -767,6 +814,9 @@ namespace PositronicVariables.Tests
             PositronicAmbient.PanicAndReset();
         }
 
+        #endregion
+
+        #region QuickPath / regression tests
 
         [Test]
         public void QuickPath_SecondAssign_ShouldMergeNotOverwrite()
@@ -796,7 +846,6 @@ namespace PositronicVariables.Tests
                         Is.EquivalentTo(new[] { 0, 1, 2 }));
         }
 
-
         [Test]
         public void QuickPath_WritesAreNotRolledBackByFinalUndo()
         {
@@ -810,7 +859,6 @@ namespace PositronicVariables.Tests
 
             // If the write had been logged, Undo() would have restored the 0.
             var final = v.ToValues().Single();
-
 
             Assert.That(final, Is.EqualTo(0),
                 "The final reverse pass did not undo the quick-path overwrite—" +
@@ -865,7 +913,6 @@ namespace PositronicVariables.Tests
             Assert.That(lines[1], Does.StartWith("The value is any("));
         }
 
-
         [Test]
         public void Simple_Backwards_Assignments_Print12()
         {
@@ -919,5 +966,43 @@ namespace PositronicVariables.Tests
             Assert.That(greeting.timeline.Count, Is.GreaterThanOrEqualTo(2));
         }
 
+        #endregion
     }
+
+    #endregion
+
+    #region Helpers
+
+    /// <summary>
+    /// Comparable wrapper so the engine can order and detect stability between timeline states.
+    /// Mirrors the sample program's semantics.
+    /// </summary>
+    internal class ComparableList : IComparable<ComparableList>
+    {
+        public List<int> Items { get; }
+
+        public ComparableList(params int[] values) => Items = new List<int>(values);
+
+        public int CompareTo(ComparableList other)
+        {
+            if (other == null) return 1;
+            int countCompare = Items.Count.CompareTo(other.Items.Count);
+            if (countCompare != 0) return countCompare;
+
+            for (int i = 0; i < Items.Count; i++)
+            {
+                int cmp = Items[i].CompareTo(other.Items[i]);
+                if (cmp != 0) return cmp;
+            }
+            return 0;
+        }
+
+        public override bool Equals(object obj) => obj is ComparableList cl && CompareTo(cl) == 0;
+
+        public override int GetHashCode() => Items.Aggregate(17, (acc, val) => acc * 31 + val);
+
+        public override string ToString() => string.Join(" ", Items);
+    }
+
+    #endregion
 }
