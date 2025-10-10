@@ -15,9 +15,9 @@ This repository contains two interlinked .NET libraries for working with uncerta
 ###  QuantumSuperposition
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 
-> “Maybe” as a first-class value.
+> "Maybe" as a first-class value.
 
-A library that allows .NET variables to hold multiple values at once — like Schrödinger’s cat, but without the vet bills.
+A library that allows .NET variables to hold multiple values at once - like Schrödinger's cat, but without the vet bills.
 
 - Define `QuBit<T>` superpositions: sets of possible values with optional weights.
 - Perform arithmetic, comparisons, and logic across all values.
@@ -43,8 +43,8 @@ A framework built atop `QuBit<T>` that enables variables to evolve across simula
 
 - Automatically detects cycles across timelines.
 - Merges diverging states into unified multiverses.
-- Lets you simulate “what if” before committing to a result.
-- `RunConvergenceLoop` executes your logic until everyone agrees. It’s like couple’s therapy, but for variables.
+- Lets you simulate "what if" before committing to a result.
+- `RunConvergenceLoop` executes your logic until everyone agrees. It's like couple's therapy, but for variables.
 
 [Full README](PositronicVariables/readme.md)
 
@@ -83,9 +83,9 @@ Console.WriteLine($"Final Output: {node.Output}");
 
 ## Philosophy
 
-This project was born out of a deeply unhealthy desire to simulate philosophical paradoxes in enterprise-grade C#. Here’s what we believe:
+This project was born out of a deeply unhealthy desire to simulate philosophical paradoxes in enterprise-grade C#. Here's what we believe:
 
-- Uncertainty is not a bug — it’s a feature.
+- Uncertainty is not a bug
 - A variable should be allowed to have an identity crisis.
 - Time should be a reversible concept in your runtime.
 - Your code deserves to collapse its own quantum wavefunction.
@@ -107,7 +107,7 @@ Open an issue if:
 ## License
 
 This code is released under the [Unlicense](https://unlicense.org/).  
-Do whatever. Just don’t blame us when your compiler becomes sentient.
+Do whatever. Just don't blame us when your compiler becomes sentient.
 
 ---
 
@@ -117,6 +117,6 @@ This repo is for people who:
 
 - Think recursion is a lifestyle.
 - Are disappointed that LINQ doesn't support parallel universes.
-- Yell “collapse!” at their variables and expect them to listen.
+- Yell "collapse!" at their variables and expect them to listen.
 
-Congratulations. You’re one of us now.
+Congratulations. You're one of us now.
