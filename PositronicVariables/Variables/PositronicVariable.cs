@@ -1164,15 +1164,6 @@ namespace PositronicVariables.Variables
             _hadOutsideWritesSinceLastLoop = true;
         }
 
-        /// <summary>
-        /// Console formatter for the "antival" line.
-        /// Uses ONLY the current slice (respects epoch semantics inside the loop).
-        /// Produces strings like: "The antival is 11" or "The antival is any(1, 10)".
-        /// </summary>
-        public string ToAntivalConsoleString()
-        {
-            return $"The antival is {GetCurrentQBit()}";
-        }
 
 
         /// <summary>

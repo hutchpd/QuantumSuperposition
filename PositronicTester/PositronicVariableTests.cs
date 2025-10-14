@@ -775,37 +775,6 @@ namespace PositronicVariables.Tests
 
 
         [Test]
-        public void AntivalPrinter_UsesCurrentSlice_NotAggregate()
-        {
-            // Arrange
-            var v = PositronicVariable<int>.GetOrCreate("antival");
-
-            // Simulate a first (console-style) pass that leaves stale values around
-            // These writes are "outside the loop" in your harness:
-            v.Assign(1);   // epoch 0
-            v.Assign(10);  // epoch 0
-
-            v.NoteOutsideWrites();
-
-            v.ResetTimelineIfOutsideWrites(); 
-
-            // Now run the real convergence pass; it should converge to a single value 11
-            v.Assign(11);  // inside loop (epoch 1) -> single converged slice
-
-            // Act
-            var printed = v.ToAntivalConsoleString(); 
-
-            // Assert: the printer must reflect ONLY the current/converged slice
-            StringAssert.Contains("any(11)", printed);
-            StringAssert.DoesNotContain("1, 10", printed);
-
-            // And for extra safety, assert internal state matches:
-            CollectionAssert.AreEquivalent(new[] { 11 }, v.GetCurrentQBit().ToCollapsedValues());
-        }
-
-
-
-        [Test]
         public void FirstForwardScalar_Appends_NotMerges()
         {
             var v = PositronicVariable<int>.GetOrCreate("probe", 0, _runtime);
