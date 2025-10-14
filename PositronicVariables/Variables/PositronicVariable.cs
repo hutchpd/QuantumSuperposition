@@ -27,7 +27,8 @@ namespace PositronicVariables.Variables
     public class PositronicVariable<T> : IPositronicVariable
         where T : IComparable<T>
     {
-        // Determines at runtime if T is a value type.
+        private static int OutsideEpoch => -1;
+
         private readonly bool isValueType = typeof(T).IsValueType;
         private readonly HashSet<T> _domain = new();
         private static bool _reverseReplayStarted;
@@ -85,9 +86,10 @@ namespace PositronicVariables.Variables
         {
             var qb = new QuBit<T>(values);
             qb.Any();
-            _temporalRecords.OverwriteBootstrap(this, qb); // A small sacrifice to the versioning gods
-            _sliceEpochs.Clear();
-            _sliceEpochs.Add(0); // bootstrap epoch == 0
+            _temporalRecords.OverwriteBootstrap(this, qb);
+            _sliceEpochs.Clear();      // epoch tagging for slice[0]
+            _sliceEpochs.Add(0);       // bootstrap marked as epoch 0
+
             bootstrapSuperseded = false;
         }
 
@@ -108,7 +110,7 @@ namespace PositronicVariables.Variables
             qb.Any();
             _temporalRecords.OverwriteBootstrap(this, qb);
             _sliceEpochs.Clear();
-            _sliceEpochs.Add(0); // bootstrap
+            _sliceEpochs.Add(0);
             _hasWrittenInitialForward = true;
 
             _domain.Add(initialValue);
@@ -184,19 +186,12 @@ namespace PositronicVariables.Variables
         private bool bootstrapSuperseded = false;
 
         // Epoch helpers
-        internal static void BeginEpoch() => s_CurrentEpoch++;   // called once per RunConvergenceLoop
+        internal static void BeginEpoch() => s_CurrentEpoch++; 
         internal static int CurrentEpoch => s_CurrentEpoch;
-        private static int OutsideEpoch => -1;
 
-        internal void StampBootstrap()
-        {
-            _sliceEpochs.Clear();
-            _sliceEpochs.Add(0);
-        }
+        internal void StampBootstrap() { _sliceEpochs.Clear(); _sliceEpochs.Add(0); }
         internal void StampAppendCurrentEpoch()
-        {
-            _sliceEpochs.Add(InConvergenceLoop ? CurrentEpoch : OutsideEpoch);
-        }
+            => _sliceEpochs.Add(InConvergenceLoop ? CurrentEpoch : OutsideEpoch);
         internal void StampReplaceCurrentEpoch()
         {
             if (_sliceEpochs.Count == 0) _sliceEpochs.Add(0);
@@ -283,9 +278,12 @@ namespace PositronicVariables.Variables
                            runtime,
                            new BureauOfTemporalRecords<T>());
 
-            // Before entering the loop, quarantine any outside-loop forward writes:
+
+            // Before entering the loop, quarantine any forward writes that happened outside the loop
+            // during the "first run" (console style).
             foreach (var v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
                 v.ResetTimelineIfOutsideWrites();
+
 
             QuantumLedgerOfRegret.Clear();
             BeginEpoch();
@@ -311,40 +309,29 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Keep only the bootstrap slice if we had outside-loop writes; reset domain/flags accordingly.
+        /// If we observed outside-loop writes, drop everything after the bootstrap
+        /// so the convergence pass starts from a clean slate.
         /// </summary>
         internal void ResetTimelineIfOutsideWrites()
         {
-            var hasOutsideSlices = _sliceEpochs.Any(e => e == OutsideEpoch);
-            if (!(_hadOutsideWritesSinceLastLoop || hasOutsideSlices))
+            bool sawOutsideEpochs = _sliceEpochs.Any(e => e == OutsideEpoch);
+            if (!(_hadOutsideWritesSinceLastLoop || sawOutsideEpochs))
                 return;
-            // Reset whenever we've observed outside writes since the last loop,
-            // even if they were merged into a single slice.
-            if (_hadOutsideWritesSinceLastLoop || hasOutsideSlices)
-            {
-                if (timeline.Count > 1)
-                    timeline.RemoveRange(1, timeline.Count - 1);
-                TruncateToBootstrapOnly();
 
-                // Rebuild domain strictly from the bootstrap (no leakage from outside writes)
-                _domain.Clear();
-                foreach (var x in timeline[0].ToCollapsedValues())
-                    _domain.Add(x);
+            if (timeline.Count > 1)
+                timeline.RemoveRange(1, timeline.Count - 1);
+            TruncateToBootstrapOnly();
 
-                // Clear bookkeeping flags for a fresh convergence pass
-                bootstrapSuperseded = false;
-                _ops.SawForwardWrite = false;
-                _hadOutsideWritesSinceLastLoop = false;
+            // Rebuild domain strictly from the bootstrap (no leakage from outside writes)
+            _domain.Clear();
+            foreach (var x in timeline[0].ToCollapsedValues())
+                _domain.Add(x);
 
-            }
-            else
-            {
-                // Ensure the flag is cleared if nothing changed outside
-                _hadOutsideWritesSinceLastLoop = false;
-            }
+            // Clear bookkeeping for the fresh pass
+            bootstrapSuperseded = false;
+            _ops.SawForwardWrite = false;
+            _hadOutsideWritesSinceLastLoop = false;
         }
-
-
 
         // Helpers used by reverse replay so epoch tags never drift out of sync
         internal void AppendFromReverse(QuBit<T> qb)

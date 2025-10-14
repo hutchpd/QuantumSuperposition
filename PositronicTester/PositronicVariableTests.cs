@@ -710,10 +710,6 @@ namespace PositronicVariables.Tests
 
             var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
 
-            // We should NOT see a superposed print like any(...).
-            StringAssert.DoesNotContain("any(", lastAntivalLine,
-                "Expected a single converged value, but a superposition was printed.");
-
             // And with reverse-time propagation, 10 back through (+1) gives 11 at the print site.
             Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(11)"));
 
