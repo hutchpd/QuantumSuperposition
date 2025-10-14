@@ -313,6 +313,8 @@ namespace PositronicVariables.Variables
             // even if they were merged into a single slice.
             if (_hadOutsideWritesSinceLastLoop)
             {
+                if (timeline.Count > 1)
+                    timeline.RemoveRange(1, timeline.Count - 1);
                 TruncateToBootstrapOnly();
 
                 // Rebuild domain strictly from the bootstrap (no leakage from outside writes)
