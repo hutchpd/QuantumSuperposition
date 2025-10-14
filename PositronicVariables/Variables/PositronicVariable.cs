@@ -334,6 +334,7 @@ namespace PositronicVariables.Variables
         }
 
 
+
         // Helpers used by reverse replay so epoch tags never drift out of sync
         internal void AppendFromReverse(QuBit<T> qb)
         {
@@ -1141,6 +1142,26 @@ namespace PositronicVariables.Variables
             _domain.Clear();
             foreach (var x in GetCurrentQBit().ToCollapsedValues())
                 _domain.Add(x);
+        }
+
+        /// <summary>
+        /// Marks this variable as having had outside-loop forward writes.
+        /// On the next RunConvergenceLoop(), ResetTimelineIfOutsideWrites() will
+        /// quarantine to the bootstrap slice. This does NOT mutate the timeline.
+        /// </summary>
+        public void NoteOutsideWrites()
+        {
+            _hadOutsideWritesSinceLastLoop = true;
+        }
+
+        /// <summary>
+        /// Console formatter for the "antival" line.
+        /// Uses ONLY the current slice (respects epoch semantics inside the loop).
+        /// Produces strings like: "The antival is 11" or "The antival is any(1, 10)".
+        /// </summary>
+        public string ToAntivalConsoleString()
+        {
+            return $"The antival is {GetCurrentQBit()}";
         }
 
 
