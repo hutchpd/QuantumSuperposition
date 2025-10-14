@@ -33,6 +33,13 @@ namespace PositronicVariables.Variables
         private static bool _reverseReplayStarted;
         public static int _loopDepth;
         private readonly IPositronicRuntime _runtime;
+        // --- Epoch tagging ---
+        // - sliceEpochs is kept strictly in lockstep with 'timeline'
+        // -  0  : bootstrap
+        // - -1  : outside-loop writes
+        // - 1+  : each invocation of RunConvergenceLoop increments this per-T epoch
+        private static int s_CurrentEpoch = 0;
+        private readonly List<int> _sliceEpochs = new();
         private bool _hasWrittenInitialForward = false;
         internal void NotifyFirstAppend() => bootstrapSuperseded = true;
 
@@ -79,9 +86,12 @@ namespace PositronicVariables.Variables
             var qb = new QuBit<T>(values);
             qb.Any();
             _temporalRecords.OverwriteBootstrap(this, qb); // A small sacrifice to the versioning gods
-
+            _sliceEpochs.Clear();
+            _sliceEpochs.Add(0); // bootstrap epoch == 0
             bootstrapSuperseded = false;
         }
+
+
 
 
         public PositronicVariable(
@@ -97,6 +107,8 @@ namespace PositronicVariables.Variables
             var qb = new QuBit<T>(new[] { initialValue });
             qb.Any();
             _temporalRecords.OverwriteBootstrap(this, qb);
+            _sliceEpochs.Clear();
+            _sliceEpochs.Add(0); // bootstrap
             _hasWrittenInitialForward = true;
 
             _domain.Add(initialValue);
@@ -170,6 +182,31 @@ namespace PositronicVariables.Variables
         // The timeline of quantum slices.
         public readonly List<QuBit<T>> timeline = new List<QuBit<T>>();
         private bool bootstrapSuperseded = false;
+
+        // Epoch helpers
+        internal static void BeginEpoch() => s_CurrentEpoch++;   // called once per RunConvergenceLoop
+        internal static int CurrentEpoch => s_CurrentEpoch;
+        private static int OutsideEpoch => -1;
+
+        internal void StampBootstrap()
+        {
+            _sliceEpochs.Clear();
+            _sliceEpochs.Add(0);
+        }
+        internal void StampAppendCurrentEpoch()
+        {
+            _sliceEpochs.Add(InConvergenceLoop ? CurrentEpoch : OutsideEpoch);
+        }
+        internal void StampReplaceCurrentEpoch()
+        {
+            if (_sliceEpochs.Count == 0) _sliceEpochs.Add(0);
+            _sliceEpochs[^1] = InConvergenceLoop ? CurrentEpoch : OutsideEpoch;
+        }
+        internal void TruncateToBootstrapOnly()
+        {
+            if (_sliceEpochs.Count > 1)
+                _sliceEpochs.RemoveRange(1, _sliceEpochs.Count - 1);
+        }
 
         public event Action OnConverged;
         public event Action OnCollapse;
@@ -250,6 +287,8 @@ namespace PositronicVariables.Variables
             foreach (var v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
                 v.ResetTimelineIfOutsideWrites();
 
+            BeginEpoch();
+
             try            {
                 // ‼mark "we're inside the loop" so the fast-path is disabled
                 _loopDepth++;
@@ -272,6 +311,8 @@ namespace PositronicVariables.Variables
             if (timeline.Count > 1)
             {
                 var bootstrap = timeline[0];
+                // shrink both structures
+                TruncateToBootstrapOnly();
                 timeline.Clear();
                 timeline.Add(bootstrap);
                 bootstrapSuperseded = false;
@@ -282,6 +323,27 @@ namespace PositronicVariables.Variables
             }
             _hadOutsideWritesSinceLastLoop = false;
         }
+
+
+        // Helpers used by reverse replay so epoch tags never drift out of sync
+        internal void AppendFromReverse(QuBit<T> qb)
+        {
+            timeline.Add(qb);
+            StampAppendCurrentEpoch();
+            OnTimelineAppended?.Invoke();
+        }
+        internal void ReplaceLastFromReverse(QuBit<T> qb)
+        {
+            timeline[^1] = qb;
+            StampReplaceCurrentEpoch();
+            OnTimelineAppended?.Invoke();
+        }
+        internal void ReplaceForwardHistoryWith(QuBit<T> qb)
+        {
+            if (timeline.Count > 1) { timeline.RemoveRange(1, timeline.Count - 1); TruncateToBootstrapOnly(); }
+            timeline.Add(qb); StampAppendCurrentEpoch(); OnTimelineAppended?.Invoke();
+        }
+
 
 
         /// <summary>
@@ -472,8 +534,7 @@ namespace PositronicVariables.Variables
                     return;
 
                 var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
-                timeline.Add(rebuilt);
-                OnTimelineAppended?.Invoke();
+                AppendFromReverse(rebuilt);
                 return;
             }
 
@@ -528,7 +589,7 @@ namespace PositronicVariables.Variables
                     return;
                 // OK, this is a true reverse-replay pass
                 var rebuilt = _reverseReplay.ReplayReverseCycle(qb, this);
-                timeline.Add(rebuilt);
+                AppendFromReverse(rebuilt);
                 OnTimelineAppended?.Invoke();
                 return;
             }
@@ -1015,8 +1076,32 @@ namespace PositronicVariables.Variables
 
         /// <summary>
         /// Retrieves the freshest slice of existence, still warm from the cosmic oven.
+        /// Return the "current" qubit:
+        ///  - outside the loop: last slice wins (legacy behavior)
+        ///  - inside the loop : last slice of the *current epoch*
         /// </summary>
-        public QuBit<T> GetCurrentQBit() => timeline[^1];
+        public QuBit<T> GetCurrentQBit()
+        {
+            if (timeline.Count == 0)
+                throw new InvalidOperationException("Timeline is empty.");
+
+            if (!InConvergenceLoop)
+                return timeline[^1];                  // legacy outside-loop semantics
+
+            // Inside the loop: prefer the freshest slice from the current epoch.
+            var epoch = CurrentEpoch;
+            // Defensive: keep index in bounds even if something goes off the rails.
+            int lastIdx = Math.Min(timeline.Count, _sliceEpochs.Count) - 1;
+            for (int i = lastIdx; i >= 0; i--)
+            {
+                if (_sliceEpochs[i] == epoch)
+                    return timeline[i];
+            }
+
+            // Fallback: if no slice is tagged (shouldn't happen because the engine pre-appends a reverse slice),
+            // use the most recent slice rather than exploding.
+            return timeline[lastIdx];
+        }
 
 
         /// <summary>

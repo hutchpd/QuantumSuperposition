@@ -179,7 +179,9 @@ namespace PositronicVariables.Engine
                 /* Keep slice 0 intact, discard only the intermediate
                    forward‑pass history, then append the new scalar. */
                 if (variable.timeline.Count > 1)
-                    variable.timeline.RemoveRange(1, variable.timeline.Count - 1);
+                    variable.ReplaceForwardHistoryWith(rebuilt);
+                else
+                    variable.AppendFromReverse(rebuilt);
 
                 variable.timeline.Add(rebuilt);
             }
@@ -191,11 +193,11 @@ namespace PositronicVariables.Engine
                 // spurious slice growth on pure-merge passes.
                 if (!poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any() && variable.timeline.Count > 0)
                 {
-                    variable.timeline[^1] = rebuilt;
+                    variable.ReplaceLastFromReverse(rebuilt);
                 }
                 else
                 {
-                    variable.timeline.Add(rebuilt);
+                    variable.AppendFromReverse(rebuilt);
                 }
             }
 

@@ -46,6 +46,8 @@ namespace PositronicVariables.Engine.Timeline
 
                 // fire the hook so the convergence engine knows "something changed"
                 variable.timeline.Add(newSlice);
+                // keep epoch tags aligned with the timeline 
+                variable.StampAppendCurrentEpoch();
                 _onAppend?.Invoke();
             }
         }
@@ -73,6 +75,7 @@ namespace PositronicVariables.Engine.Timeline
                 QuantumLedgerOfRegret.Record(new TimelineReplaceOperation<T>(variable, backup));
 
                 variable.timeline[^1] = mergedSlice;
+                variable.StampAppendCurrentEpoch();
                 _onAppend?.Invoke();
             }
         }
@@ -83,6 +86,7 @@ namespace PositronicVariables.Engine.Timeline
             {
                 variable.timeline.Clear();
                 variable.timeline.Add(slice);
+                variable.StampBootstrap();
                 _onAppend?.Invoke();
             }
         }
