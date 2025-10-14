@@ -715,6 +715,24 @@ namespace PositronicVariables.Tests
 
         }
 
+        [Test]
+        public void ReverseReplay_Excludes_Replaced_Content_From_Seeds()
+        {
+            var rt = PositronicAmbient.Current;
+            var v = PositronicVariable<int>.GetOrCreate("z", 0, rt);
+
+            // Emulate a cycle: we had 1, then it was replaced by 10.
+            v.Assign(1);   // earlier result
+            v.Assign(10);  // closing replace
+
+            // Reverse replay using incoming=10 (copy of current)
+            var incoming = new QuBit<int>(v.GetCurrentQBit().ToCollapsedValues().ToArray()); incoming.Any();
+            v.Assign(incoming);
+
+            var final = v.GetCurrentQBit().ToCollapsedValues().OrderBy(x => x).ToArray();
+            // The replaced value '1' must not appear in seeds.
+            CollectionAssert.DoesNotContain(final, 1, "Replaced content must not seed reverse replay.");
+        }
 
 
         [Test]

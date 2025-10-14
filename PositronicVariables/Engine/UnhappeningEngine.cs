@@ -89,7 +89,14 @@ namespace PositronicVariables.Engine
 
             // Was the forward half-cycle closed by a scalar overwrite?
             var hasArithmetic = poppedReversibles.Count > 0;
-            bool scalarWriteDetected = hasArithmetic && poppedSnapshots.Count > poppedReversibles.Count;
+            // True Replace is always a scalar-close if arithmetic happened.
+            var sawReplace = poppedSnapshots.OfType<TimelineReplaceOperation<T>>().Any();
+            // Also treat a trailing scalar *append* as a scalar-close, but only if arithmetic happened.
+            var lastAppendWasScalar =
+                poppedSnapshots.LastOrDefault() is TimelineAppendOperation<T> ap &&
+                ap.AddedSlice.ToCollapsedValues().Count() == 1;
+            // Final rule: only scalar-close when arithmetic occurred.
+            bool scalarWriteDetected = hasArithmetic && (sawReplace || lastAppendWasScalar);
             bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
             IEnumerable<T> seeds;
@@ -110,16 +117,18 @@ namespace PositronicVariables.Engine
             }
             else
             {
-                // Scalar overwrite close: rebuild from the new scalar(s) only,
-                // but exclude the replaced slice (if any) and the bootstrap.
+                // Scalar overwrite close: rebuild only from the “new scalar(s)” carried by incoming,
+                // but exclude the replaced slice and the bootstrap.
                 var bootstrap = variable.timeline[0].ToCollapsedValues();
-                var baseTrim = incomingVals.Except(bootstrap);
 
                 var replaced = poppedSnapshots
                     .OfType<TimelineReplaceOperation<T>>()
                     .SelectMany(op => op.ReplacedSlice.ToCollapsedValues());
 
-                seeds = baseTrim.Except(replaced).Distinct();
+                seeds = incomingVals
+                    .Except(bootstrap)
+                    .Except(replaced)
+                    .Distinct();
             }
 
             if (!seeds.Any())
