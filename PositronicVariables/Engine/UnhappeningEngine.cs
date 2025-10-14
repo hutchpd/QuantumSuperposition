@@ -45,6 +45,8 @@ namespace PositronicVariables.Engine
             var poppedSnapshots = new List<IOperation>();
             var poppedReversibles = new List<IReversibleOperation<T>>();
             var forwardValues = new HashSet<T>();
+            var replacedDuringCycle = false;
+            var replacedValues = new HashSet<T>();
 
             while (true)
             {
@@ -64,9 +66,8 @@ namespace PositronicVariables.Engine
                         QuantumLedgerOfRegret.Pop();
                         continue;
                     case TimelineReplaceOperation<T> trp:
-                        // capture both "before" and "after" for Replace
+                        replacedDuringCycle = true;
                         forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
-                        forwardValues.UnionWith(trp.Variable.GetCurrentQBit().ToCollapsedValues());
                         poppedSnapshots.Add(trp);
                         QuantumLedgerOfRegret.Pop();
                         continue;
@@ -89,7 +90,6 @@ namespace PositronicVariables.Engine
             // Was the forward half-cycle closed by a scalar overwrite?
             var hasArithmetic = poppedReversibles.Count > 0;
             bool scalarWriteDetected = hasArithmetic && poppedSnapshots.Count > poppedReversibles.Count;
-
             bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
             IEnumerable<T> seeds;
@@ -183,7 +183,7 @@ namespace PositronicVariables.Engine
                 else
                     variable.AppendFromReverse(rebuilt);
 
-                variable.timeline.Add(rebuilt);
+                //variable.timeline.Add(rebuilt);
             }
             else
             {

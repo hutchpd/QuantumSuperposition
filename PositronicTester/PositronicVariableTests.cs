@@ -715,6 +715,8 @@ namespace PositronicVariables.Tests
 
         }
 
+
+
         [Test]
         public void ConsoleStyle_DoubleRun_PrePrintSlice_IsScalar_AfterConvergence()
         {
