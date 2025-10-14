@@ -1,15 +1,14 @@
 ﻿using PositronicVariables.Attributes;
 using PositronicVariables.Variables;
-using PositronicVariables.Runtime;
 
 internal static class Program
 {
     [DontPanic]
     private static void Main()
     {
-        var x = PositronicVariable<int>.GetOrCreate("x", 0);
-        Console.WriteLine($"x is {x}");
-        x.State = 10;
+        var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+        Console.WriteLine($"The antival is {antival}"); // the result is printed
+        antival.State = antival.State + 1; // We add one
+        antival.State = 10; // the start of the program
     }
 }
-

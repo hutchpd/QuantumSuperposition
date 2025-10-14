@@ -1,17 +1,18 @@
 ﻿#region Using directives
-using System.Collections;
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NUnit.Framework.Legacy;
 using PositronicVariables.Attributes;
-using QuantumSuperposition.Core;
 using PositronicVariables.DependencyInjection;
-using QuantumSuperposition.QuantumSoup;
 using PositronicVariables.Engine.Logging;
 using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Runtime;
-using PositronicVariables.Variables.Factory;
 using PositronicVariables.Variables;
+using PositronicVariables.Variables.Factory;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using System.Collections;
+using System.Reflection;
 #endregion
 
 namespace PositronicVariables.Tests
@@ -659,6 +660,61 @@ namespace PositronicVariables.Tests
             Assert.That(output.ToString().TrimEnd(),
                         Is.EqualTo("The temperature in c is any(12)"));
         }
+
+        /// <summary>
+        /// Reproduces the console-app behaviour: a first "normal" run of the program body,
+        /// then an "engine" run inside the convergence loop. 
+        /// 
+        /// Current BUG: the printed antival is a superposition (any(...)) instead of a single converged value.
+        /// </summary>
+        [Test]
+        public void ConsoleStyle_DoubleRun_PrintsSuperposedAntival_BugRepro()
+        {
+            // Clean world so previous tests don’t leak state
+            PositronicAmbient.PanicAndReset();
+
+            // Program body mirroring the console example
+            static void ProgramBody()
+            {
+                var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+                Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
+                antival.State = antival.State + 1;               // forward mutation
+                antival.State = 10;                              // overwrite / "start of program"
+            }
+
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+
+            try
+            {
+                Console.SetOut(sw);
+
+                // "Normal" run (outside the convergence loop) — this mimics how the console app executes Main initially
+                ProgramBody();
+
+                // Engine run (inside the convergence loop) — this mimics what the runtime does on ProcessExit
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
+
+            StringAssert.DoesNotContain("any(", lastAntivalLine,
+                "Bug repro failed: expected a superposed antival in console-style double run.");
+
+            // Make sure the specific values observed are not present (order-agnostic)
+            foreach (var expected in new[] { "1", "10", "11", "2", "12" })
+            {
+                StringAssert.DoesNotContain(expected, lastAntivalLine);
+            }
+        }
+
 
         [Test]
         public void FirstForwardScalar_Appends_NotMerges()

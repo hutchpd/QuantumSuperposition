@@ -43,7 +43,7 @@ namespace PositronicVariables.Variables
         private readonly ITimelineArchivist<T> _temporalRecords;
 
         private static readonly object s_initLock = new();
-
+        private bool _hadOutsideWritesSinceLastLoop = false;
         private static IPositronicRuntime EnsureAmbientRuntime()
         {
             if (!PositronicAmbient.IsInitialized)
@@ -246,9 +246,12 @@ namespace PositronicVariables.Variables
                            runtime,
                            new BureauOfTemporalRecords<T>());
 
-            try
-            {
-                // ‼️ mark "we're inside the loop" so the fast-path is disabled
+            // Before entering the loop, quarantine any outside-loop forward writes:
+            foreach (var v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
+                v.ResetTimelineIfOutsideWrites();
+
+            try            {
+                // ‼mark "we're inside the loop" so the fast-path is disabled
                 _loopDepth++;
                 engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
             }
@@ -258,6 +261,28 @@ namespace PositronicVariables.Variables
             }
 
         }
+
+        /// <summary>
+        /// Keep only the bootstrap slice if we had outside-loop writes; reset domain/flags accordingly.
+        /// </summary>
+        internal void ResetTimelineIfOutsideWrites()
+        {
+            if (!_hadOutsideWritesSinceLastLoop)
+                return;
+            if (timeline.Count > 1)
+            {
+                var bootstrap = timeline[0];
+                timeline.Clear();
+                timeline.Add(bootstrap);
+                bootstrapSuperseded = false;
+                _ops.SawForwardWrite = false;
+                _domain.Clear();
+                foreach (var x in bootstrap.ToCollapsedValues())
+                    _domain.Add(x);
+            }
+            _hadOutsideWritesSinceLastLoop = false;
+        }
+
 
         /// <summary>
         /// Audits the quantum history to see if all timelines are finally tired of arguing and want to go home.
@@ -461,6 +486,7 @@ namespace PositronicVariables.Variables
                     _temporalRecords.SnapshotAppend(this, qb);
                     _ops.SawForwardWrite = true;
                     bootstrapSuperseded = true;
+                    _hadOutsideWritesSinceLastLoop = true;
                     return;
                 }
                 if (!replace)
@@ -475,12 +501,14 @@ namespace PositronicVariables.Variables
                            .ToArray();
                     var mergedQb = new QuBit<T>(merged); mergedQb.Any();
                     _temporalRecords.ReplaceLastSlice(this, mergedQb);
+                    _hadOutsideWritesSinceLastLoop = true;
                 }
                 else
                 {
                     // Otherwise we need to preserve causality - else Marty McFly's hand will disappear again.
                     _temporalRecords.SnapshotAppend(this, qb);
                     _ops.SawForwardWrite = true;
+                    _hadOutsideWritesSinceLastLoop = true;
                 }
 
                 return;
