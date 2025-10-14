@@ -287,6 +287,7 @@ namespace PositronicVariables.Variables
             foreach (var v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
                 v.ResetTimelineIfOutsideWrites();
 
+            QuantumLedgerOfRegret.Clear();
             BeginEpoch();
 
             try            {
