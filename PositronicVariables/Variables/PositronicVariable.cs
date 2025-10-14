@@ -458,6 +458,28 @@ namespace PositronicVariables.Variables
         /// </summary>
         public void Assign(T scalarValue)
         {
+            // Console-style support:
+            // Detect "x = x + k" on the very first forward in-loop write and
+            // record it as an Addition so reverse replay can rebuild e.g. → 11.
+            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1)
+            {
+                try
+                {
+                    var before = GetCurrentQBit().ToCollapsedValues().First();
+                    dynamic a = scalarValue;
+                    dynamic b = before;
+                    var delta = a - b;
+                    if (delta != 0)
+                    {
+                        QuantumLedgerOfRegret.Record(new AdditionOperation<T>(this, (T)delta, _runtime));
+                    }
+                }
+                catch
+                {
+                    // Non-numeric T or operator not supported: ignore and fall back to plain scalar write.
+                }
+            }
+
             var qb = new QuBit<T>(new[] { scalarValue });
             qb.Any();
 

@@ -45,8 +45,8 @@ namespace PositronicVariables.Engine
             var poppedSnapshots = new List<IOperation>();
             var poppedReversibles = new List<IReversibleOperation<T>>();
             var forwardValues = new HashSet<T>();
-            var replacedDuringCycle = false;
-            var replacedValues = new HashSet<T>();
+            var closingReplaceEncountered = false;
+            var preReplaceScalarAppends = new List<T>();
 
             while (true)
             {
@@ -62,12 +62,19 @@ namespace PositronicVariables.Engine
                         goto DonePeel;
                     case TimelineAppendOperation<T> tap:
                         forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
+                        {
+                            var vals = tap.AddedSlice.ToCollapsedValues();
+                            if (!closingReplaceEncountered)
+                                forwardValues.UnionWith(vals);                // normal forward appends
+                            else
+                                preReplaceScalarAppends.AddRange(vals);       // these were overwritten by the closing replace
+                        }
                         poppedSnapshots.Add(tap);
                         QuantumLedgerOfRegret.Pop();
                         continue;
                     case TimelineReplaceOperation<T> trp:
-                        replacedDuringCycle = true;
                         forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
+                        closingReplaceEncountered = true;
                         poppedSnapshots.Add(trp);
                         QuantumLedgerOfRegret.Pop();
                         continue;
