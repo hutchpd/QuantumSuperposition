@@ -309,20 +309,28 @@ namespace PositronicVariables.Variables
         {
             if (!_hadOutsideWritesSinceLastLoop)
                 return;
-            if (timeline.Count > 1)
+            // Reset whenever we've observed outside writes since the last loop,
+            // even if they were merged into a single slice.
+            if (_hadOutsideWritesSinceLastLoop)
             {
-                var bootstrap = timeline[0];
-                // shrink both structures
                 TruncateToBootstrapOnly();
-                timeline.Clear();
-                timeline.Add(bootstrap);
+
+                // Rebuild domain strictly from the bootstrap (no leakage from outside writes)
+                _domain.Clear();
+                foreach (var x in timeline[0].ToCollapsedValues())
+                    _domain.Add(x);
+
+                // Clear bookkeeping flags for a fresh convergence pass
                 bootstrapSuperseded = false;
                 _ops.SawForwardWrite = false;
-                _domain.Clear();
-                foreach (var x in bootstrap.ToCollapsedValues())
-                    _domain.Add(x);
+                _hadOutsideWritesSinceLastLoop = false;
+
             }
-            _hadOutsideWritesSinceLastLoop = false;
+            else
+            {
+                // Ensure the flag is cleared if nothing changed outside
+                _hadOutsideWritesSinceLastLoop = false;
+            }
         }
 
 
