@@ -291,13 +291,21 @@ namespace PositronicVariables.Variables
             BeginEpoch();
 
             try            {
-                // ‼mark "we're inside the loop" so the fast-path is disabled
+                // mark "we're inside the loop" so the fast-path is disabled
                 _loopDepth++;
                 engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
             }
             finally
             {
                 _loopDepth--;
+                // After the engine finishes (including the final iteration),
+                // clear the op log and re-seed domains from the *current* slice.
+                if (runtime.Converged)
+                {
+                    foreach (var v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
+                        v.ResetDomainToCurrent();
+                    QuantumLedgerOfRegret.Clear();
+                }
             }
 
         }
@@ -417,7 +425,6 @@ namespace PositronicVariables.Variables
             foreach (var x in mergedStates)
                 _domain.Add(x);
 
-            QuantumLedgerOfRegret.Clear();
             _runtime.Converged = true;
             OnCollapse?.Invoke();
             OnConverged?.Invoke();
