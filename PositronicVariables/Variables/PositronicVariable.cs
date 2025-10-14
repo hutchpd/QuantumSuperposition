@@ -315,11 +315,12 @@ namespace PositronicVariables.Variables
         /// </summary>
         internal void ResetTimelineIfOutsideWrites()
         {
-            if (!_hadOutsideWritesSinceLastLoop)
+            var hasOutsideSlices = _sliceEpochs.Any(e => e == OutsideEpoch);
+            if (!(_hadOutsideWritesSinceLastLoop || hasOutsideSlices))
                 return;
             // Reset whenever we've observed outside writes since the last loop,
             // even if they were merged into a single slice.
-            if (_hadOutsideWritesSinceLastLoop)
+            if (_hadOutsideWritesSinceLastLoop || hasOutsideSlices)
             {
                 if (timeline.Count > 1)
                     timeline.RemoveRange(1, timeline.Count - 1);
