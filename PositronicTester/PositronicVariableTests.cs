@@ -662,13 +662,17 @@ namespace PositronicVariables.Tests
         }
 
         /// <summary>
-        /// Reproduces the console-app behaviour: a first "normal" run of the program body,
-        /// then an "engine" run inside the convergence loop. 
-        /// 
-        /// Current BUG: the printed antival is a superposition (any(...)) instead of a single converged value.
+        /// Console-style execution: first a "normal" run (outside the engine), then a run inside the
+        /// convergence loop (as the console app does on process exit).
+        ///
+        /// With reverse-time semantics, the print occurs at the earliest point in the body and later
+        /// statements push constraints backwards. For:
+        ///   print(antival); antival = antival + 1; antival = 10;
+        /// we expect the printed value to be 11 (because 10 + 1 == 11).
+        ///
         /// </summary>
         [Test]
-        public void ConsoleStyle_DoubleRun_PrintsSuperposedAntival_BugRepro()
+        public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_11()
         {
             // Clean world so previous tests don’t leak state
             PositronicAmbient.PanicAndReset();
@@ -705,14 +709,13 @@ namespace PositronicVariables.Tests
 
             var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
 
+            // We should NOT see a superposed print like any(...).
             StringAssert.DoesNotContain("any(", lastAntivalLine,
-                "Bug repro failed: expected a superposed antival in console-style double run.");
+                "Expected a single converged value, but a superposition was printed.");
 
-            // Make sure the specific values observed are not present (order-agnostic)
-            foreach (var expected in new[] { "1", "10", "11", "2", "12" })
-            {
-                StringAssert.DoesNotContain(expected, lastAntivalLine);
-            }
+            // And with reverse-time propagation, 10 back through (+1) gives 11 at the print site.
+            Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is 11"),
+                "Expected the printed antival to be 11 (10 pushed backwards through +1).");
         }
 
 
