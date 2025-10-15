@@ -1,21 +1,22 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using PositronicVariables.DependencyInjection;
+using PositronicVariables.Engine;
 using PositronicVariables.Engine.Entropy;
 using PositronicVariables.Engine.Logging;
 using PositronicVariables.Engine.Timeline;
 using PositronicVariables.Engine.Transponder;
-using PositronicVariables.Engine;
 using PositronicVariables.Initialisation;
 using PositronicVariables.Operations;
 using PositronicVariables.Runtime;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using PositronicVariables.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace PositronicVariables.Variables
 {
@@ -41,8 +42,17 @@ namespace PositronicVariables.Variables
         // - 1+  : each invocation of RunConvergenceLoop increments this per-T epoch
         private static int s_CurrentEpoch = 0;
         private readonly List<int> _sliceEpochs = new();
-
         private bool _sawStateReadThisForward = false;
+        private static readonly bool s_IsIntegralType =
+            typeof(T) == typeof(byte)   || typeof(T) == typeof(sbyte)  ||
+            typeof(T) == typeof(short)  || typeof(T) == typeof(ushort) ||
+            typeof(T) == typeof(int)    || typeof(T) == typeof(uint)   ||
+            typeof(T) == typeof(long)   || typeof(T) == typeof(ulong);
+        private static readonly bool s_IsFloatingType =
+            typeof(T) == typeof(float)  || typeof(T) == typeof(double) || typeof(T) == typeof(decimal);
+
+        private static bool IsZero(dynamic v) { try { return v == 0; } catch { return false; } }
+
         internal void NotifyFirstAppend() => bootstrapSuperseded = true;
 
         internal static bool InConvergenceLoop => _loopDepth > 0;
@@ -156,60 +166,37 @@ namespace PositronicVariables.Variables
 
         /// <summary>
         /// Injects a quantum state into the timeline and pretends like that was always the plan.
-        /// Also attempts to infer if you're doing "x = x ± 1" like a keyboard-bound caveman,
-        /// so it can record that operation for reverse replay. Yes, this is legal.
         /// </summary>
         public void Assign(QuBit<T> qb)
         {
             if (qb is null)
                 throw new ArgumentNullException(nameof(qb));
 
-            // Ensure the qubit has been collapsed at least once, or else later maths
-            // operations might throw a fit and fall over.
             qb.Any();
 
-            // If we're inside the convergence loop and this is the first pathetic attempt at a forward write,
-            // we may be able to guess whether you meant to increment or decrement by 1. Which is adorable.
-            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1 && _sawStateReadThisForward)
-            {
-                // Make sure we didn't already log this as an addition,
-                // because double-logging is how timelines split and universes cry.
-                var top = QuantumLedgerOfRegret.Peek();
-                if (top is not AdditionOperation<T>)
-                {
-                    // Single-value qubit? Great. At least something is behaving.
-                    var incomingPreview = qb.ToCollapsedValues().Take(2).ToArray();
-                    if (incomingPreview.Length == 1)
-                    {
-                        try
-                        {
-                            var before = GetCurrentQBit().ToCollapsedValues().First();
-                            dynamic a = incomingPreview[0];
-                            dynamic b = before;
-                            var delta = a - b;
-
-                            // Only allow increments/decrements of 1.
-                            // This is not a fan fiction generator for chaotic state changes
-                            if (delta != 0)
-                                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(this, (T)delta, _runtime));
-                        }
-                        catch
-                        {
-                            // T is probably a string, or a cat, or something equally uncooperative
-                            // in which case good luck!
-                        }
-                    }
-                }
-                // consume the read marker so it cannot leak to subsequent writes
-                _sawStateReadThisForward = false;
-            }
-            else
-            {
-                _sawStateReadThisForward = false;
-            }
-
-            // And now we quietly overwrite or merge, as though time is a spreadsheet.
             ReplaceOrAppendOrUnify(qb, replace: true);
+            _sawStateReadThisForward = false;
+        }
+
+        /// <summary>
+        /// Forcefully injects a single scalar value into the timeline.
+        /// </summary>
+        public void Assign(T scalarValue)
+        {
+            Assign(new[] { scalarValue });
+        }
+
+        /// <summary>
+        /// Forcefully injects scalar value(s) into the timeline.
+        /// </summary>
+        public void Assign(params T[] scalarValues)
+        {
+            if (scalarValues == null || scalarValues.Length == 0)
+                throw new ArgumentException("At least one value must be provided.");
+
+            var qb = new QuBit<T>(scalarValues);
+            qb.Any();
+            ReplaceOrAppendOrUnify(qb, replace: !isValueType);
         }
 
         // Automatically enable simulation on first use.
@@ -494,38 +481,7 @@ namespace PositronicVariables.Variables
             ReplaceOrAppendOrUnify(qb, replace: true);
         }
 
-        /// <summary>
-        /// Forcefully injects a scalar value into the timeline.
-        /// </summary>
-        public void Assign(T scalarValue)
-        {
-            // Console-style support:
-            // Detect "x = x + k" on the very first forward in-loop write and
-            // record it as an Addition so reverse replay can rebuild e.g. → 11.
-            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1)
-            {
-                try
-                {
-                    var before = GetCurrentQBit().ToCollapsedValues().First();
-                    dynamic a = scalarValue;
-                    dynamic b = before;
-                    var delta = a - b;
-                    if (delta != 0)
-                    {
-                        QuantumLedgerOfRegret.Record(new AdditionOperation<T>(this, (T)delta, _runtime));
-                    }
-                }
-                catch
-                {
-                    // Non-numeric T or operator not supported: ignore and fall back to plain scalar write.
-                }
-            }
 
-            var qb = new QuBit<T>(new[] { scalarValue });
-            qb.Any();
-
-            ReplaceOrAppendOrUnify(qb, replace: !isValueType);
-        }
 
         /// <summary>
         /// Disambiguation overload so calls like <c>v.Assign(v + 1)</c> bind deterministically.
@@ -553,34 +509,30 @@ namespace PositronicVariables.Variables
                 {
                     // Never mutate slice 0 during the loop; always append the first write.
                     _temporalRecords.SnapshotAppend(this, qb);
+
                     _ops.SawForwardWrite = true;
                     return;
                 }
 
 
-                else if (replace)                            // overwrite/merge
+                else if (replace)                      // `.State = ...` inside the loop
                 {
-                    var incoming = qb.ToCollapsedValues();
-
-                    // single‑value qubits are *scalar* writes → append
-                    if (incoming.Count() == 1)
+                    // Check if this is a scalar write (single value)
+                    var incoming = qb.ToCollapsedValues().ToArray();
+                    if (incoming.Length == 1 && _ops.SawForwardWrite)
                     {
+                        // Second+ scalar write in same epoch: REPLACE to avoid accumulation
+                        _temporalRecords.ReplaceLastSlice(this, qb);
+                    }
+                    else
+                    {
+                        // First write or multi-value: append
                         _temporalRecords.SnapshotAppend(this, qb);
                     }
-                    else                // real union → keep the old merge path
-                    {
-                        var merged = timeline[^1]
-                                        .ToCollapsedValues()
-                                        .Union(incoming)
-                                        .Distinct()
-                                        .ToArray();
-                        var mergedQb = new QuBit<T>(merged); mergedQb.Any();
-                        _temporalRecords.ReplaceLastSlice(this, mergedQb);
-                    }
-
                     _ops.SawForwardWrite = true;
                     return;
                 }
+
                 else                                         // scalar - append
                 {
                     _temporalRecords.SnapshotAppend(this, qb);
@@ -738,328 +690,268 @@ namespace PositronicVariables.Variables
         #region region Operator Overloads
         // --- Operator Overloads ---
         // --- Addition Overloads ---
-        public static QExpr operator +(PositronicVariable<T> left, T right)
-        {
-            var resultQB = left.GetCurrentQBit() + right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, right, left._runtime));
-            }
-            return new QExpr(left, resultQB);
-        }
+public static QExpr operator +(PositronicVariable<T> left, T right)
+{
+    var resultQB = left.GetCurrentQBit() + right;
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, right, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
-        public static QExpr operator +(T left, PositronicVariable<T> right)
-        {
-            var resultQB = right.GetCurrentQBit() + left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right, left, right._runtime));
-            }
-            return new QExpr(right, resultQB);
-        }
+public static QExpr operator +(T left, PositronicVariable<T> right)
+{
+    var resultQB = right.GetCurrentQBit() + left;
+    resultQB.Any();
+    if (right._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right, left, right._runtime));
+    }
+    return new QExpr(right, resultQB);
+}
 
-        public static QExpr operator +(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                // Record addition using the collapsed value from the right variable.
-                T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
-            }
-            return new QExpr(left, resultQB);
-        }
+public static QExpr operator +(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    var resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        // Record addition using the collapsed value from the right variable.
+        T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+        QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
-        // --- Modulus Overloads ---
-        public static QuBit<T> operator %(PositronicVariable<T> left, T right)
-        {
-            var before = left.GetCurrentQBit().ToCollapsedValues().First();
-            var resultQB = left.GetCurrentQBit() % right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
-            return resultQB;
-        }
+// --- Subtraction Overloads ---
+public static QExpr operator -(PositronicVariable<T> left, T right)
+{
+    var resultQB = left.GetCurrentQBit() - right;
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, right, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
+public static QExpr operator -(T left, PositronicVariable<T> right)
+{
+    // Here, result = left - rightValue.
+    var resultQB = right.GetCurrentQBit() - left;
+    resultQB.Any();
+    if (right._runtime.Entropy >= 0)
+    {
+        // Use a reversed subtraction so that the inverse is: value = left - result.
+        QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
+    }
+    return new QExpr(right, resultQB);
+}
 
-        public static QuBit<T> operator %(T left, PositronicVariable<T> right)
-        {
-            var before = right.GetCurrentQBit().ToCollapsedValues().First();
-            var resultQB = right.GetCurrentQBit() % left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
-            return resultQB;
-        }
+public static QExpr operator -(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+        QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, operand, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
+// --- Unary Negation ---
+public static QExpr operator -(PositronicVariable<T> value)
+{
+    var qb = value.GetCurrentQBit();
 
-        public static QuBit<T> operator %(PositronicVariable<T> left, PositronicVariable<T> right)
+    var negatedValues = qb
+        .ToCollapsedValues()
+        .Select(v =>
         {
-            var before = left.GetCurrentQBit().ToCollapsedValues().First();
-            var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
-            var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
-            return resultQB;
-        }
+            dynamic dv = v;
+            return (T)(-dv);
+        })
+        .ToArray();
 
-        // --- Subtraction Overloads ---
-        public static QuBit<T> operator -(PositronicVariable<T> left, T right)
-        {
-            var resultQB = left.GetCurrentQBit() - right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, right, left._runtime));
-            }
-            return resultQB;
-        }
+    var negatedQb = new QuBit<T>(negatedValues);
+    negatedQb.Any();
+    if (value._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new NegationOperation<T>(value, value._runtime));
+    }
+    return new QExpr(value, negatedQb);
+}
 
-        public static QuBit<T> operator -(T left, PositronicVariable<T> right)
-        {
-            // Here, result = left - rightValue.
-            var resultQB = right.GetCurrentQBit() - left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
-            {
-                // Use a reversed subtraction so that the inverse is: value = left - result.
-                QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
-            }
-            return resultQB;
-        }
+// --- Multiplication Overloads ---
+public static QExpr operator *(PositronicVariable<T> left, T right)
+{
 
-        public static QuBit<T> operator -(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            var resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, operand, left._runtime));
-            }
-            return resultQB;
-        }
+    var resultQB = left.GetCurrentQBit() * right;
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, right, left._runtime));
+    }
+    return new QExpr(left, resultQB);  // ✓ Return QExpr
+}
 
-        // --- Unary Negation ---
-        public static QuBit<T> operator -(PositronicVariable<T> value)
-        {
-            var qb = value.GetCurrentQBit();
+public static QExpr operator *(T left, PositronicVariable<T> right)
+{
+    var resultQB = right.GetCurrentQBit() * left;
 
-            var negatedValues = qb
-                .ToCollapsedValues()
-                .Select(v =>
-                {
-                    dynamic dv = v;
-                    return (T)(-dv);
-                })
-                .ToArray();
+    resultQB.Any();
+    if (right._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(right, left, right._runtime));
+    }
+    return new QExpr(right, resultQB);
+}
 
-            var negatedQb = new QuBit<T>(negatedValues);
-            negatedQb.Any();
-            if (value._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new NegationOperation<T>(value, value._runtime));
-            }
-            return negatedQb;
-        }
+public static QExpr operator *(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+        QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
-        // --- Multiplication Overloads ---
-        public static QuBit<T> operator *(PositronicVariable<T> left, T right)
-        {
+// --- Division Overloads ---
+public static QExpr operator /(PositronicVariable<T> left, T right)
+{
+    var currentQB = left.GetCurrentQBit();
+    var resultQB = currentQB / right;
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, right, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
-            QuBit<T> sourceQB;
-            if (InConvergenceLoop && left._runtime.Entropy < 0)
-            {
-                bool isNegationFactor = false;
-                try { isNegationFactor = Math.Abs(Convert.ToDouble(right) + 1.0) < 1e-12; } catch { }
-                if (isNegationFactor && left.timeline.Count >= 1)
-                {
-                    var known = left.timeline.SelectMany(q => q.ToCollapsedValues())
-                                            .Distinct()
-                                            .ToArray();
-                    var symm = new HashSet<T>(known);
-                    foreach (var v in known)
-                    {
-                        try
-                        {
-                            dynamic dv = v;
-                            symm.Add((T)(-dv));
-                        }
-                        catch
-                        {
-                            // non-numeric T: ignore, fall back to merged only
-                        }
-                    }
-                    sourceQB = new QuBit<T>(symm.ToArray()); sourceQB.Any();
-                }
-                else
-                {
-                    sourceQB = left.GetCurrentQBit();
-                }
-            }
-            else
-            {
-                sourceQB = left.GetCurrentQBit();
-            }
+public static QExpr operator /(T left, PositronicVariable<T> right)
+{
+    var resultQB = right.GetCurrentQBit() / left;
+    resultQB.Any();
+    if (right._runtime.Entropy >= 0)
+    {
+        QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
+    }
+    return new QExpr(right, resultQB);
+}
 
-            var resultQB = sourceQB * right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, right, left._runtime));
-            }
-            return resultQB;
-        }
+public static QExpr operator /(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    var resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+    {
+        T operand = right.GetCurrentQBit().ToCollapsedValues().First();
+        QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, operand, left._runtime));
+    }
+    return new QExpr(left, resultQB);
+}
 
-        public static QuBit<T> operator *(T left, PositronicVariable<T> right)
-        {
-            QuBit<T> sourceQB;
-            if (InConvergenceLoop && right._runtime.Entropy < 0)
-            {
-                bool isNegationFactor = false;
-                try { isNegationFactor = Math.Abs(Convert.ToDouble(left) + 1.0) < 1e-12; } catch { }
-                if (isNegationFactor && right.timeline.Count >= 1)
-                {
-                   var known = right.timeline.SelectMany(q => q.ToCollapsedValues())
-                                             .Distinct()
-                                             .ToArray();
-                   var symm = new HashSet<T>(known);
-                   foreach (var v in known)
+// --- Modulus Overloads ---
+public static QExpr operator %(PositronicVariable<T> left, T right)
+{
+    var before = left.GetCurrentQBit().ToCollapsedValues().First();
+    var resultQB = left.GetCurrentQBit() % right;
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+        QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
+    return new QExpr(left, resultQB);
+}
 
-                    {
-                        try
-                        {
-                            dynamic dv = v;
-                            symm.Add((T)(-dv));
-                        }
-                        catch
-                        {
-                            // non-numeric T: ignore, fall back to merged only
-                        }
-                    }
-                    sourceQB = new QuBit<T>(symm.ToArray()); sourceQB.Any();
-                }
-                else
-                {
-                    sourceQB = right.GetCurrentQBit();
-                }
-            }
-            else
-            {
-                sourceQB = right.GetCurrentQBit();
-            }
+public static QExpr operator %(T left, PositronicVariable<T> right)
+{
+    var before = right.GetCurrentQBit().ToCollapsedValues().First();
+    var resultQB = right.GetCurrentQBit() % left;
+    resultQB.Any();
+    if (right._runtime.Entropy >= 0)
+        QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
+    return new QExpr(right, resultQB);
+}
 
-            var resultQB = sourceQB * left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(right, left, right._runtime));
-            }
-            return resultQB;
-        }
+public static QExpr operator %(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    var before = left.GetCurrentQBit().ToCollapsedValues().First();
+    var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
+    var resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
+    resultQB.Any();
+    if (left._runtime.Entropy >= 0)
+        QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
+    return new QExpr(left, resultQB);
+}
 
-        public static QuBit<T> operator *(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            var resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand, left._runtime));
-            }
-            return resultQB;
-        }
+// --- Comparison Operators Using Comparer<T>.Default ---
 
-        // --- Division Overloads ---
-        public static QuBit<T> operator /(PositronicVariable<T> left, T right)
-        {
-            var currentQB = left.GetCurrentQBit();
-            var resultQB = currentQB / right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, right, left._runtime));
-            }
-            return resultQB;
-        }
+public static bool operator <(PositronicVariable<T> left, T right)
+{
+    return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) < 0;
+}
+public static bool operator >(PositronicVariable<T> left, T right)
+{
+    return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) > 0;
+}
+public static bool operator <=(PositronicVariable<T> left, T right)
+{
+    return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) <= 0;
+}
+public static bool operator >=(PositronicVariable<T> left, T right)
+{
+    return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) >= 0;
+}
+public static bool operator <(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    return Comparer<T>.Default.Compare(
+        left.GetCurrentQBit().ToCollapsedValues().First(),
+        right.GetCurrentQBit().ToCollapsedValues().First()) < 0;
+}
+public static bool operator >(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    return Comparer<T>.Default.Compare(
+        left.GetCurrentQBit().ToCollapsedValues().First(),
+        right.GetCurrentQBit().ToCollapsedValues().First()) > 0;
+}
+public static bool operator <=(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    return Comparer<T>.Default.Compare(
+        left.GetCurrentQBit().ToCollapsedValues().First(),
+        right.GetCurrentQBit().ToCollapsedValues().First()) <= 0;
+}
+public static bool operator >=(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    return Comparer<T>.Default.Compare(
+        left.GetCurrentQBit().ToCollapsedValues().First(),
+        right.GetCurrentQBit().ToCollapsedValues().First()) >= 0;
+}
 
-        public static QuBit<T> operator /(T left, PositronicVariable<T> right)
-        {
-            var resultQB = right.GetCurrentQBit() / left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
-            }
-            return resultQB;
-        }
-
-        // --- Comparison Operators Using Comparer<T>.Default ---
-
-        public static bool operator <(PositronicVariable<T> left, T right)
-        {
-            return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) < 0;
-        }
-        public static bool operator >(PositronicVariable<T> left, T right)
-        {
-            return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) > 0;
-        }
-        public static bool operator <=(PositronicVariable<T> left, T right)
-        {
-            return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) <= 0;
-        }
-        public static bool operator >=(PositronicVariable<T> left, T right)
-        {
-            return Comparer<T>.Default.Compare(left.GetCurrentQBit().ToCollapsedValues().First(), right) >= 0;
-        }
-        public static bool operator <(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            return Comparer<T>.Default.Compare(
-                left.GetCurrentQBit().ToCollapsedValues().First(),
-                right.GetCurrentQBit().ToCollapsedValues().First()) < 0;
-        }
-        public static bool operator >(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            return Comparer<T>.Default.Compare(
-                left.GetCurrentQBit().ToCollapsedValues().First(),
-                right.GetCurrentQBit().ToCollapsedValues().First()) > 0;
-        }
-        public static bool operator <=(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            return Comparer<T>.Default.Compare(
-                left.GetCurrentQBit().ToCollapsedValues().First(),
-                right.GetCurrentQBit().ToCollapsedValues().First()) <= 0;
-        }
-        public static bool operator >=(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            return Comparer<T>.Default.Compare(
-                left.GetCurrentQBit().ToCollapsedValues().First(),
-                right.GetCurrentQBit().ToCollapsedValues().First()) >= 0;
-        }
-
-        public static bool operator ==(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            if (ReferenceEquals(left, right)) return true;
-            if (left is null || right is null) return false;
-            return left.SameStates(left.GetCurrentQBit(), right.GetCurrentQBit());
-        }
-        public static bool operator !=(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            return !(left == right);
-        }
-        public static bool operator ==(PositronicVariable<T> left, T right)
-        {
-            return left.GetCurrentQBit().ToCollapsedValues().First().Equals(right);
-        }
-        public static bool operator !=(PositronicVariable<T> left, T right)
-        {
-            return !(left == right);
-        }
-        #endregion
+public static bool operator ==(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    if (ReferenceEquals(left, right)) return true;
+    if (left is null || right is null) return false;
+    return left.SameStates(left.GetCurrentQBit(), right.GetCurrentQBit());
+}
+public static bool operator !=(PositronicVariable<T> left, PositronicVariable<T> right)
+{
+    return !(left == right);
+}
+public static bool operator ==(PositronicVariable<T> left, T right)
+{
+    return left.GetCurrentQBit().ToCollapsedValues().First().Equals(right);
+}
+public static bool operator !=(PositronicVariable<T> left, T right)
+{
+    return !(left == right);
+}
+#endregion
 
         public override bool Equals(object obj)
         {
@@ -1203,17 +1095,16 @@ namespace PositronicVariables.Variables
 
         /// <summary>
         /// Gets or sets the current quantum state.
+        /// Returns a QExpr to ensure arithmetic operations are logged correctly.
         /// </summary>
-        public QuBit<T> State
+        public QExpr State
         {
             get
             {
-                // Mark that this forward half-cycle read `.State`, so a subsequent `.State = ...`
-                // can safely infer deltas (only inside the loop, forward direction).
                 if (InConvergenceLoop && _runtime.Entropy > 0) _sawStateReadThisForward = true;
-                return GetCurrentQBit();
+                return new QExpr(this, GetCurrentQBit());
             }
-            set => Assign(value);
+            set => Assign(value);  // QExpr has implicit conversion through Assign(QExpr)
         }
 
         /// <summary>
@@ -1318,7 +1209,6 @@ namespace PositronicVariables.Variables
             /// <summary>
             /// (PositronicVariable<T> = QExpr) - e.g., antival = (antival + 1)
             /// </summary>
-            /// <param name="e"></param>
             public static implicit operator PositronicVariable<T>(QExpr e)
             {
                 e.Source.Assign(e.Q);
@@ -1328,34 +1218,76 @@ namespace PositronicVariables.Variables
             /// <summary>
             /// (QExpr % T) - e.g., (antival + 1) % 3
             /// </summary>
-            public static QuBit<T> operator %(QExpr left, T right)
+            public static QExpr operator %(QExpr left, T right)
             {
                 var resultQB = left.Q % right;
                 resultQB.Any();
                 if (left.Source._runtime.Entropy >= 0)
                     QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
-                return resultQB;
+                return new QExpr(left.Source, resultQB);
             }
-
 
             /// <summary>
             /// (QExpr % PositronicVariable<T>) - optional, for parity with PV%PV
             /// </summary>
-            /// <param name="left"></param>
-            /// <param name="right"></param>
-            /// <returns></returns>
-            public static QuBit<T> operator %(QExpr left, PositronicVariable<T> right)
+            public static QExpr operator %(QExpr left, PositronicVariable<T> right)
             {
                 var divisor = right.GetCurrentQBit().ToCollapsedValues().First();
                 var resultQB = left.Q % right.GetCurrentQBit();
                 resultQB.Any();
                 if (left.Source._runtime.Entropy >= 0)
                     QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
-                return resultQB;
+                return new QExpr(left.Source, resultQB);
             }
 
+            /// <summary>
+            /// (QExpr + T) - e.g., (antival * 2) + 1
+            /// </summary>
+            public static QExpr operator +(QExpr left, T right)
+            {
+                var resultQB = left.Q + right;
+                resultQB.Any();
+                if (left.Source._runtime.Entropy >= 0)
+                    QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left.Source, right, left.Source._runtime));
+                return new QExpr(left.Source, resultQB);
+            }
 
+            /// <summary>
+            /// (QExpr - T) - e.g., (antival * 2) - 1
+            /// </summary>
+            public static QExpr operator -(QExpr left, T right)
+            {
+                var resultQB = left.Q - right;
+                resultQB.Any();
+                if (left.Source._runtime.Entropy >= 0)
+                    QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left.Source, right, left.Source._runtime));
+                return new QExpr(left.Source, resultQB);
+            }
+
+            /// <summary>
+            /// (QExpr * T) - e.g., (antival + 1) * 2
+            /// </summary>
+            public static QExpr operator *(QExpr left, T right)
+            {
+                var resultQB = left.Q * right;
+                resultQB.Any();
+                if (left.Source._runtime.Entropy >= 0)
+                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left.Source, right, left.Source._runtime));
+                return new QExpr(left.Source, resultQB);
+            }
+
+            /// <summary>
+            /// (QExpr / T) - e.g., (antival + 10) / 2
+            /// </summary>
+            public static QExpr operator /(QExpr left, T right)
+            {
+                var resultQB = left.Q / right;
+                resultQB.Any();
+                if (left.Source._runtime.Entropy >= 0)
+                    QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left.Source, right, left.Source._runtime));
+                return new QExpr(left.Source, resultQB);
+            }
         }
-
+       
     }
 }

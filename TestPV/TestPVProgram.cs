@@ -1,14 +1,17 @@
 ﻿using PositronicVariables.Attributes;
 using PositronicVariables.Variables;
 
-internal static class Program
+internal static class TestPVProgram
 {
+
     [DontPanic]
-    private static void Main()
+    internal static void Main()
     {
-        var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
-        Console.WriteLine($"The antival is {antival}"); // the result is printed
-        antival.State = antival.State * 2; // We multiply by 2
-        antival.State = 10; // the start of the program
+        var antival = AntiVal.GetOrCreate<Double>();
+
+        Console.WriteLine($"The antival is {antival}");
+        var val = (antival + 1) % 3;
+        Console.WriteLine($"The value is {val}");
+        antival.State = val;
     }
 }

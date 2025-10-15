@@ -729,7 +729,7 @@ namespace PositronicVariables.Tests
                 Console.WriteLine($"The temperature in c is {temp}");
                 temp.Assign(temp + 1);
                 temp.Assign(temp + 1);
-                temp.State = 10;
+                temp.Scalar = 10;
             });
 
             // Assert
@@ -760,7 +760,7 @@ namespace PositronicVariables.Tests
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
                 antival.State = antival.State + 1;               // forward mutation
-                antival.State = 10;                              // overwrite / "start of program"
+                antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
 
@@ -789,6 +789,183 @@ namespace PositronicVariables.Tests
 
             // And with reverse-time propagation, 10 back through (+1) gives 11 at the print site.
             Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(11)"));
+
+        }
+
+        [Test]
+        public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_9()
+        {
+            // Clean world so previous tests don’t leak state
+            PositronicAmbient.PanicAndReset();
+
+            // Program body mirroring the console example
+            static void ProgramBody()
+            {
+                var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+                Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
+                antival.State = antival.State - 2;               // forward mutation
+                antival.Assign(10);                              // overwrite / "start of program"
+                var probe = PositronicVariable<int>.GetOrCreate("antival");
+            }
+
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+
+            try
+            {
+                Console.SetOut(sw);
+
+                // "Normal" run (outside the convergence loop) — this mimics how the console app executes Main initially
+                ProgramBody();
+
+                // Engine run (inside the convergence loop) — this mimics what the runtime does on ProcessExit
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
+
+            // And with reverse-time propagation, 10 back through (-2) gives 8 at the print site.
+            Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(8)"));
+
+        }
+
+        [Test]
+        public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_multiplication()
+        {
+            // Clean world so previous tests don’t leak state
+            PositronicAmbient.PanicAndReset();
+
+            // Program body mirroring the console example
+            static void ProgramBody()
+            {
+                var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+                Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
+                antival.State = antival.State * 2;               // forward mutation
+                antival.Assign(10);                              // overwrite / "start of program"
+                var probe = PositronicVariable<int>.GetOrCreate("antival");
+            }
+
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+
+            try
+            {
+                Console.SetOut(sw);
+
+                // "Normal" run (outside the convergence loop) — this mimics how the console app executes Main initially
+                ProgramBody();
+
+                // Engine run (inside the convergence loop) — this mimics what the runtime does on ProcessExit
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
+
+            // And with reverse-time propagation, 10 back through (*2) gives 20 at the print site.
+            Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(20)"));
+
+        }
+
+
+        [Test]
+        public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_Division()
+        {
+            // Clean world so previous tests don’t leak state
+            PositronicAmbient.PanicAndReset();
+
+            // Program body mirroring the console example
+            static void ProgramBody()
+            {
+                var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+                Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
+                antival.State = antival.State / 2;               // forward division
+                antival.Assign(10);                              // overwrite / "start of program"
+                var probe = PositronicVariable<int>.GetOrCreate("antival");
+            }
+
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+
+            try
+            {
+                Console.SetOut(sw);
+
+                // "Normal" run (outside the convergence loop) — this mimics how the console app executes Main initially
+                ProgramBody();
+
+                // Engine run (inside the convergence loop) — this mimics what the runtime does on ProcessExit
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
+
+            // And with reverse-time propagation, 10 back through (/2) gives 5 at the print site.
+            Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(5)"));
+
+        }
+
+        [Test]
+        public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_Mod()
+        {
+            // Clean world so previous tests don’t leak state
+            PositronicAmbient.PanicAndReset();
+
+            // Program body mirroring the console example
+            static void ProgramBody()
+            {
+                var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+                Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
+                antival.State = antival.State % 4;               // forward mod
+                antival.Assign(10);                              // overwrite / "start of program"
+                var probe = PositronicVariable<int>.GetOrCreate("antival");
+            }
+
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+
+            try
+            {
+                Console.SetOut(sw);
+
+                // "Normal" run (outside the convergence loop) — this mimics how the console app executes Main initially
+                ProgramBody();
+
+                // Engine run (inside the convergence loop) — this mimics what the runtime does on ProcessExit
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+            var lastAntivalLine = lines.Last(l => l.StartsWith("The antival is"));
+
+            // And with reverse-time propagation, 10 back through (%4) gives 2 at the print site.
+            Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(2)"));
 
         }
 
@@ -1112,7 +1289,7 @@ namespace PositronicVariables.Tests
                 Console.WriteLine($"The result will be {val}");
                 val.Assign(val + 2);
                 val.Assign(val + 2);
-                val.State = 10;
+                val.Scalar = 10;
             });
 
             Assert.That(output.ToString().Trim(), Is.EqualTo("The result will be any(14)"));

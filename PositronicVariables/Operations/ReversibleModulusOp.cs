@@ -42,18 +42,18 @@ namespace PositronicVariables.Operations
         /// <summary>
         /// Inverse:   x % d  ->  (x // d) * d + (x % d)   (i.e. reconstruct the original value)
         /// </summary>
-        /// <param name="remainder"></param>
+        /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T remainder)
-           => Arithmetic.Add(Arithmetic.Multiply(_quotient, _divisor), remainder);
+        public T ApplyForward(T value)
+           => Arithmetic.Modulus(value, _divisor);
 
         /// <summary>
         /// Forward:   x  ->  x % d
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyInverse(T value)
-            => Arithmetic.Modulus(value, _divisor);
+        public T ApplyInverse(T remainder)
+            => Arithmetic.Add(Arithmetic.Multiply(_quotient, _divisor), remainder);
 
         /// <summary>
         /// Undoing a modulus operation is a bit like trying to un bake a cake.
