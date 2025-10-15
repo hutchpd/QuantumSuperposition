@@ -41,7 +41,8 @@ namespace PositronicVariables.Variables
         // - 1+  : each invocation of RunConvergenceLoop increments this per-T epoch
         private static int s_CurrentEpoch = 0;
         private readonly List<int> _sliceEpochs = new();
-        private bool _hasWrittenInitialForward = false;
+
+        private bool _sawStateReadThisForward = false;
         internal void NotifyFirstAppend() => bootstrapSuperseded = true;
 
         internal static bool InConvergenceLoop => _loopDepth > 0;
@@ -111,7 +112,6 @@ namespace PositronicVariables.Variables
             _temporalRecords.OverwriteBootstrap(this, qb);
             _sliceEpochs.Clear();
             _sliceEpochs.Add(0);
-            _hasWrittenInitialForward = true;
 
             _domain.Add(initialValue);
             _runtime.Registry.Add(this);
@@ -170,7 +170,7 @@ namespace PositronicVariables.Variables
 
             // If we're inside the convergence loop and this is the first pathetic attempt at a forward write,
             // we may be able to guess whether you meant to increment or decrement by 1. Which is adorable.
-            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1)
+            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1 && _sawStateReadThisForward)
             {
                 // Make sure we didn't already log this as an addition,
                 // because double-logging is how timelines split and universes cry.
@@ -190,10 +190,8 @@ namespace PositronicVariables.Variables
 
                             // Only allow increments/decrements of 1.
                             // This is not a fan fiction generator for chaotic state changes
-                            if (delta == 1 || delta == -1)
-                            {
+                            if (delta != 0)
                                 QuantumLedgerOfRegret.Record(new AdditionOperation<T>(this, (T)delta, _runtime));
-                            }
                         }
                         catch
                         {
@@ -202,6 +200,12 @@ namespace PositronicVariables.Variables
                         }
                     }
                 }
+                // consume the read marker so it cannot leak to subsequent writes
+                _sawStateReadThisForward = false;
+            }
+            else
+            {
+                _sawStateReadThisForward = false;
             }
 
             // And now we quietly overwrite or merge, as though time is a spreadsheet.
@@ -844,7 +848,16 @@ namespace PositronicVariables.Variables
         public static QuBit<T> operator -(PositronicVariable<T> value)
         {
             var qb = value.GetCurrentQBit();
-            var negatedValues = qb.ToCollapsedValues().Select(v => (T)(-(dynamic)v)).ToArray();
+
+            var negatedValues = qb
+                .ToCollapsedValues()
+                .Select(v =>
+                {
+                    dynamic dv = v;
+                    return (T)(-dv);
+                })
+                .ToArray();
+
             var negatedQb = new QuBit<T>(negatedValues);
             negatedQb.Any();
             if (value._runtime.Entropy >= 0)
@@ -857,7 +870,43 @@ namespace PositronicVariables.Variables
         // --- Multiplication Overloads ---
         public static QuBit<T> operator *(PositronicVariable<T> left, T right)
         {
-            var resultQB = left.GetCurrentQBit() * right;
+
+            QuBit<T> sourceQB;
+            if (InConvergenceLoop && left._runtime.Entropy < 0)
+            {
+                bool isNegationFactor = false;
+                try { isNegationFactor = Math.Abs(Convert.ToDouble(right) + 1.0) < 1e-12; } catch { }
+                if (isNegationFactor && left.timeline.Count >= 1)
+                {
+                    var known = left.timeline.SelectMany(q => q.ToCollapsedValues())
+                                            .Distinct()
+                                            .ToArray();
+                    var symm = new HashSet<T>(known);
+                    foreach (var v in known)
+                    {
+                        try
+                        {
+                            dynamic dv = v;
+                            symm.Add((T)(-dv));
+                        }
+                        catch
+                        {
+                            // non-numeric T: ignore, fall back to merged only
+                        }
+                    }
+                    sourceQB = new QuBit<T>(symm.ToArray()); sourceQB.Any();
+                }
+                else
+                {
+                    sourceQB = left.GetCurrentQBit();
+                }
+            }
+            else
+            {
+                sourceQB = left.GetCurrentQBit();
+            }
+
+            var resultQB = sourceQB * right;
             resultQB.Any();
             if (left._runtime.Entropy >= 0)
             {
@@ -868,7 +917,43 @@ namespace PositronicVariables.Variables
 
         public static QuBit<T> operator *(T left, PositronicVariable<T> right)
         {
-            var resultQB = right.GetCurrentQBit() * left;
+            QuBit<T> sourceQB;
+            if (InConvergenceLoop && right._runtime.Entropy < 0)
+            {
+                bool isNegationFactor = false;
+                try { isNegationFactor = Math.Abs(Convert.ToDouble(left) + 1.0) < 1e-12; } catch { }
+                if (isNegationFactor && right.timeline.Count >= 1)
+                {
+                   var known = right.timeline.SelectMany(q => q.ToCollapsedValues())
+                                             .Distinct()
+                                             .ToArray();
+                   var symm = new HashSet<T>(known);
+                   foreach (var v in known)
+
+                    {
+                        try
+                        {
+                            dynamic dv = v;
+                            symm.Add((T)(-dv));
+                        }
+                        catch
+                        {
+                            // non-numeric T: ignore, fall back to merged only
+                        }
+                    }
+                    sourceQB = new QuBit<T>(symm.ToArray()); sourceQB.Any();
+                }
+                else
+                {
+                    sourceQB = right.GetCurrentQBit();
+                }
+            }
+            else
+            {
+                sourceQB = right.GetCurrentQBit();
+            }
+
+            var resultQB = sourceQB * left;
             resultQB.Any();
             if (right._runtime.Entropy >= 0)
             {
@@ -1121,7 +1206,13 @@ namespace PositronicVariables.Variables
         /// </summary>
         public QuBit<T> State
         {
-            get => GetCurrentQBit();
+            get
+            {
+                // Mark that this forward half-cycle read `.State`, so a subsequent `.State = ...`
+                // can safely infer deltas (only inside the loop, forward direction).
+                if (InConvergenceLoop && _runtime.Entropy > 0) _sawStateReadThisForward = true;
+                return GetCurrentQBit();
+            }
             set => Assign(value);
         }
 

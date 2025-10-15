@@ -1,7 +1,6 @@
 ﻿#region Using directives
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using NUnit.Framework.Legacy;
 using PositronicVariables.Attributes;
 using PositronicVariables.DependencyInjection;
 using PositronicVariables.Engine.Logging;
@@ -550,6 +549,83 @@ namespace PositronicVariables.Tests
             Assert.That(full.ElementAtOrDefault(0), Does.Contain("The antival is any(0, 1, 2)"));
             Assert.That(full.ElementAtOrDefault(1), Does.Contain("The value is any(1, 2, 0)"));
         }
+
+        [Test]
+        public void Program_NegateAntival_Integration_PrintsBothStates()
+        {
+            // Arrange: capture console
+            var originalOut = Console.Out;
+            var sw = new StringWriter();
+            Console.SetOut(sw);
+
+            try
+            {
+                // Act: run the "program body" once inside the convergence loop
+                PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
+                {
+                    var antival = PositronicVariable<int>.GetOrCreate("antival", -1, _runtime);
+
+                    Console.WriteLine($"The antival is {antival}");
+
+                    var val = -1 * antival;
+
+                    Console.WriteLine($"The value is {val}");
+
+                    // feed back to force the bi-state
+                    antival.Assign(val);
+                });
+            }
+            finally
+            {
+                // Restore console
+                Console.SetOut(originalOut);
+            }
+
+            // Assert: parse the two lines and ensure both -1 and 1 are present in each union
+            var lines = sw.ToString()
+                          .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.That(lines.Length, Is.GreaterThanOrEqualTo(2), "Expected two printed lines.");
+
+            var antivalLine = lines[0];
+            var valueLine = lines[1];
+
+            Assert.That(antivalLine, Does.StartWith("The antival is any("));
+            Assert.That(antivalLine, Does.Contain("-1"));
+            Assert.That(antivalLine, Does.Contain("1"));
+
+            Assert.That(valueLine, Does.StartWith("The value is any("));
+            Assert.That(valueLine, Does.Contain("-1"));
+            Assert.That(valueLine, Does.Contain("1"));
+        }
+
+        [Test]
+        public void Program_NegateAntival_Integration_StateContainsBothMinus1And1()
+        {
+            // Arrange: ensure a fresh antival
+            var antival = PositronicVariable<int>.GetOrCreate("antival", -1, _runtime);
+
+            // Act: run once to let reverse replay/feedback establish the bi-state
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
+            {
+                // re-acquire inside loop (same variable)
+                var a = PositronicVariable<int>.GetOrCreate("antival", -1, _runtime);
+
+                // "program body"
+                var _ = a.ToString();          // print site equivalent (touch current slice)
+                var val = -1 * a;
+                a.Assign(val);                 // feed back
+            });
+
+            // Assert: after convergence, both antival and the derived value should show {-1, 1}
+            var antivalStates = antival.ToValues().OrderBy(x => x).ToArray();
+            Assert.That(antivalStates, Is.EquivalentTo(new[] { -1, 1 }));
+
+            // Recompute val from the converged antival and check its union too
+            var valStates = (-1 * antival).ToCollapsedValues().OrderBy(x => x).ToArray();
+            Assert.That(valStates, Is.EquivalentTo(new[] { -1, 1 }));
+        }
+
 
         [Test]
         public void ModPlusModulus_Reversal_Should_Restore_Original_Value()
