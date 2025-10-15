@@ -61,19 +61,23 @@ namespace PositronicVariables.Engine
                         // boundary of this forward half‑cycle - stop here
                         goto DonePeel;
                     case TimelineAppendOperation<T> tap:
-                        forwardValues.UnionWith(tap.AddedSlice.ToCollapsedValues());
+                        // Only count appends that occur *after* the closing replace.
+                        // Appends that happened before the replace must NOT seed reverse replay.
                         {
                             var vals = tap.AddedSlice.ToCollapsedValues();
                             if (!closingReplaceEncountered)
-                                forwardValues.UnionWith(vals);                // normal forward appends
+                            {
+                                forwardValues.UnionWith(vals);                // normal forward appends (survive)
+                            }
                             else
-                                preReplaceScalarAppends.AddRange(vals);       // these were overwritten by the closing replace
+                            {
+                                preReplaceScalarAppends.AddRange(vals);       // overwritten by the closing replace
+                            }
                         }
                         poppedSnapshots.Add(tap);
                         QuantumLedgerOfRegret.Pop();
                         continue;
                     case TimelineReplaceOperation<T> trp:
-                        forwardValues.UnionWith(trp.ReplacedSlice.ToCollapsedValues());
                         closingReplaceEncountered = true;
                         poppedSnapshots.Add(trp);
                         QuantumLedgerOfRegret.Pop();
@@ -137,6 +141,8 @@ namespace PositronicVariables.Engine
                     .Except(replaced)
                     .Distinct();
             }
+
+
 
             if (!seeds.Any())
             {

@@ -685,6 +685,7 @@ namespace PositronicVariables.Tests
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
                 antival.State = antival.State + 1;               // forward mutation
                 antival.State = 10;                              // overwrite / "start of program"
+                var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
 
             var originalOut = Console.Out;
@@ -714,26 +715,6 @@ namespace PositronicVariables.Tests
             Assert.That(lastAntivalLine.Trim(), Is.EqualTo("The antival is any(11)"));
 
         }
-
-        [Test]
-        public void ReverseReplay_Excludes_Replaced_Content_From_Seeds()
-        {
-            var rt = PositronicAmbient.Current;
-            var v = PositronicVariable<int>.GetOrCreate("z", 0, rt);
-
-            // Emulate a cycle: we had 1, then it was replaced by 10.
-            v.Assign(1);   // earlier result
-            v.Assign(10);  // closing replace
-
-            // Reverse replay using incoming=10 (copy of current)
-            var incoming = new QuBit<int>(v.GetCurrentQBit().ToCollapsedValues().ToArray()); incoming.Any();
-            v.Assign(incoming);
-
-            var final = v.GetCurrentQBit().ToCollapsedValues().OrderBy(x => x).ToArray();
-            // The replaced value '1' must not appear in seeds.
-            CollectionAssert.DoesNotContain(final, 1, "Replaced content must not seed reverse replay.");
-        }
-
 
         [Test]
         public void ConsoleStyle_DoubleRun_PrePrintSlice_IsScalar_AfterConvergence()

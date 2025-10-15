@@ -155,16 +155,56 @@ namespace PositronicVariables.Variables
         internal static Action TimelineAppendedHook;
 
         /// <summary>
-        /// Injects an explicit QuBit into the timeline **without collapsing it**.
+        /// Injects a quantum state into the timeline and pretends like that was always the plan.
+        /// Also attempts to infer if you're doing "x = x ± 1" like a keyboard-bound caveman,
+        /// so it can record that operation for reverse replay. Yes, this is legal.
         /// </summary>
         public void Assign(QuBit<T> qb)
         {
             if (qb is null)
                 throw new ArgumentNullException(nameof(qb));
 
-            // Ensure it's been observed at least once so that
-            // subsequent operator overloads won't collapse accidentally.
+            // Ensure the qubit has been collapsed at least once, or else later maths
+            // operations might throw a fit and fall over.
             qb.Any();
+
+            // If we're inside the convergence loop and this is the first pathetic attempt at a forward write,
+            // we may be able to guess whether you meant to increment or decrement by 1. Which is adorable.
+            if (_runtime.Entropy > 0 && InConvergenceLoop && isValueType && timeline.Count == 1)
+            {
+                // Make sure we didn't already log this as an addition,
+                // because double-logging is how timelines split and universes cry.
+                var top = QuantumLedgerOfRegret.Peek();
+                if (top is not AdditionOperation<T>)
+                {
+                    // Single-value qubit? Great. At least something is behaving.
+                    var incomingPreview = qb.ToCollapsedValues().Take(2).ToArray();
+                    if (incomingPreview.Length == 1)
+                    {
+                        try
+                        {
+                            var before = GetCurrentQBit().ToCollapsedValues().First();
+                            dynamic a = incomingPreview[0];
+                            dynamic b = before;
+                            var delta = a - b;
+
+                            // Only allow increments/decrements of 1.
+                            // This is not a fan fiction generator for chaotic state changes
+                            if (delta == 1 || delta == -1)
+                            {
+                                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(this, (T)delta, _runtime));
+                            }
+                        }
+                        catch
+                        {
+                            // T is probably a string, or a cat, or something equally uncooperative
+                            // in which case good luck!
+                        }
+                    }
+                }
+            }
+
+            // And now we quietly overwrite or merge, as though time is a spreadsheet.
             ReplaceOrAppendOrUnify(qb, replace: true);
         }
 
@@ -177,9 +217,6 @@ namespace PositronicVariables.Variables
         }
 
 
-
-        // (removed) static registry in favor of instance‐based IPositronicVariableRegistry
-        //private static Dictionary<string, PositronicVariable<T>> registry = new Dictionary<string, PositronicVariable<T>>();
 
         // The timeline of quantum slices.
         public readonly List<QuBit<T>> timeline = new List<QuBit<T>>();
@@ -218,6 +255,7 @@ namespace PositronicVariables.Variables
         /// <param name="rt">The current runtime</param>
         /// <param name="e">Entropy direction -1 for backwards, 1 for forwards.</param>
         public static void SetEntropy(IPositronicRuntime rt, int e) => rt.Entropy = e;
+
         /// <summary>
         /// Gets the global entropy (direction of time) for the given runtime.
         /// </summary>
@@ -238,7 +276,6 @@ namespace PositronicVariables.Variables
             => runtime.Factory.GetOrCreate<T>(initialValue);
 
 
-        // maybe lose idless creation? default for now
         public static PositronicVariable<T> GetOrCreate(IPositronicRuntime runtime)
                 => runtime.Factory.GetOrCreate<T>("default");
 
