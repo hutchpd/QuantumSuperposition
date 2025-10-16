@@ -551,52 +551,73 @@ namespace PositronicVariables.Tests
         }
 
         [Test]
+        public void SelfFeedback_Negation_AppendsAcrossCycles()
+        {
+            var rt = PositronicAmbient.Current;
+            var a = PositronicVariable<int>.GetOrCreate("antival", -1, rt);
+
+            PositronicVariable<int>.RunConvergenceLoop(rt, () =>
+            {
+                var x = -1 * a;     // QExpr.Source == a
+                a.Assign(x);        // feedback, should APPEND even for scalar
+            });
+
+            Assert.That(a.ToValues().OrderBy(v => v), Is.EquivalentTo(new[] { -1, 1 }));
+        }
+
+
+        [Test]
         public void Program_NegateAntival_Integration_PrintsBothStates()
         {
-            // Arrange: capture console
-            var originalOut = Console.Out;
-            var sw = new StringWriter();
-            Console.SetOut(sw);
+            // DON'T call PanicAndReset() - SetUp() already gave us a fresh runtime
+            // Clear the buffer instead
+            AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
 
-            try
+            // Ensure writes go to the convergence buffer
+            Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
+
+            // Act: run the "program body" inside the convergence loop
+            PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
             {
-                // Act: run the "program body" once inside the convergence loop
-                PositronicVariable<int>.RunConvergenceLoop(_runtime, () =>
-                {
-                    var antival = PositronicVariable<int>.GetOrCreate("antival", -1, _runtime);
+                var antival = PositronicVariable<int>.GetOrCreate("antival", -1, _runtime);
+                Console.WriteLine($"The antival is {antival}");
+                var val = -1 * antival;
+                Console.WriteLine($"The value is {val}");
+                antival.Assign(val);  // feedback
+            });
 
-                    Console.WriteLine($"The antival is {antival}");
-
-                    var val = -1 * antival;
-
-                    Console.WriteLine($"The value is {val}");
-
-                    // feed back to force the bi-state
-                    antival.Assign(val);
-                });
-            }
-            finally
-            {
-                // Restore console
-                Console.SetOut(originalOut);
-            }
-
-            // Assert: parse the two lines and ensure both -1 and 1 are present in each union
-            var lines = sw.ToString()
-                          .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            // Get the FINAL converged output (not intermediate iterations)
+            var lines = AethericRedirectionGrid.ImprobabilityDrive
+                .ToString()
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
             Assert.That(lines.Length, Is.GreaterThanOrEqualTo(2), "Expected two printed lines.");
 
             var antivalLine = lines[0];
             var valueLine = lines[1];
 
+            // Both lines should be unions containing exactly {-1, 1} in any order
             Assert.That(antivalLine, Does.StartWith("The antival is any("));
-            Assert.That(antivalLine, Does.Contain("-1"));
-            Assert.That(antivalLine, Does.Contain("1"));
+            Assert.That(ParseAnyValues(antivalLine), Is.EquivalentTo(new[] { -1, 1 }));
 
             Assert.That(valueLine, Does.StartWith("The value is any("));
-            Assert.That(valueLine, Does.Contain("-1"));
-            Assert.That(valueLine, Does.Contain("1"));
+            Assert.That(ParseAnyValues(valueLine), Is.EquivalentTo(new[] { -1, 1 }));
+        }
+
+        private static int[] ParseAnyValues(string line)
+        {
+            var open = line.IndexOf('(');
+            var close = line.LastIndexOf(')');
+            Assert.That(open, Is.GreaterThanOrEqualTo(0), "Missing '(' in line: " + line);
+            Assert.That(close, Is.GreaterThan(open), "Missing ')' in line: " + line);
+
+            var inner = line.Substring(open + 1, close - open - 1);
+            return inner
+                .Split(',')
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .Select(int.Parse)
+                .ToArray();
         }
 
         [Test]
@@ -694,7 +715,10 @@ namespace PositronicVariables.Tests
             var domain = (ICollection<double>)typeof(PositronicVariable<double>)
                 .GetField("_domain", BindingFlags.NonPublic | BindingFlags.Instance)
                 .GetValue(v);
-            Assert.That(domain, Is.EquivalentTo(new[] { v.ToValues().Single() }));
+
+            // Domain should match the current slice exactly (may be 1+ values)
+            Assert.That(domain.OrderBy(x => x),
+                        Is.EquivalentTo(v.ToValues().OrderBy(x => x)));
         }
 
         #endregion

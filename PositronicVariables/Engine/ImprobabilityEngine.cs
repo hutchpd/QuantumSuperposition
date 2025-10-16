@@ -160,6 +160,22 @@ namespace PositronicVariables.Engine
 
                 _runtime.Converged = true;
             }
+            else if (runFinalIteration && !_runtime.Converged && unifyOnConvergence)
+            {
+                // Fallback: we didn't hit the "converged on reverse" condition,
+                // but we still want console-style programs to print the unified result.
+                _timelineArchivist.ClearSnapshots();
+                foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime)
+                                                       .OfType<PositronicVariable<T>>())
+                    v.UnifyAll();
+
+                _runtime.Entropy = 1;
+                _runtime.Converged = false;
+                _ops.UndoLastForwardCycle();
+                AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
+                code();                     // one last forward pass purely to emit output
+                _runtime.Converged = true;
+            }
 
             _ops.Clear();
 

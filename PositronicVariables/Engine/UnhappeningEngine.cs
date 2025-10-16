@@ -113,6 +113,8 @@ namespace PositronicVariables.Engine
             IEnumerable<T> seeds;
 
             var incomingVals = incoming.ToCollapsedValues();
+            bool noForwardAppends = !poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any();
+
             if (!scalarWriteDetected)
             {
                 // Trim bootstrap *only* in the degenerate case where no arithmetic happened.
@@ -128,18 +130,28 @@ namespace PositronicVariables.Engine
             }
             else
             {
-                // Scalar overwrite close: rebuild only from the “new scalar(s)” carried by incoming,
-                // but exclude the replaced slice and the bootstrap.
+                // Scalar overwrite close: rebuild from incoming, but handle feedback-from-self specially
                 var bootstrap = variable.timeline[0].ToCollapsedValues();
 
                 var replaced = poppedSnapshots
                     .OfType<TimelineReplaceOperation<T>>()
                     .SelectMany(op => op.ReplacedSlice.ToCollapsedValues());
 
-                seeds = incomingVals
-                    .Except(bootstrap)
-                    .Except(replaced)
-                    .Distinct();
+                // Detect feedback-from-self: no forward appends means this is a pure replace cycle
+                bool noForwardAppendslocal = !poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any();
+
+                if (noForwardAppendslocal && hasArithmetic)
+                {
+                    seeds = incomingVals.Union(replaced).Distinct();
+                }
+                else
+                {
+                    // Normal scalar close: exclude bootstrap and replaced (they're "before" this cycle)
+                    seeds = incomingVals
+                        .Except(bootstrap)
+                        .Except(replaced)
+                        .Distinct();
+                }
             }
 
 
@@ -161,7 +173,9 @@ namespace PositronicVariables.Engine
             // This matches the fixed‑point intuition of the demo program and keeps the set tight.
             var addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
             var modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
-            if (addOp is not null && modOp is not null)
+            bool usedResidueClass = addOp is not null && modOp is not null;
+
+            if (usedResidueClass)
             {
                 int d = Convert.ToInt32(modOp.Divisor);
                 for (int i = 0; i < d; i++)
@@ -187,6 +201,8 @@ namespace PositronicVariables.Engine
                 var excludeBootstrap = bootstrap.Count() == 1;
                 rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
             }
+
+
 
             // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
             var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
