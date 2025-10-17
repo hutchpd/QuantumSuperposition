@@ -11,23 +11,13 @@ namespace PositronicVariables.Operations
     /// Timey-wimey stuff. Multiplication in one direction becomes division in the other.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class MultiplicationOperation<T> : IReversibleSnapshotOperation<T>
+    public class MultiplicationOperation<T>(PositronicVariable<T> variable, T multiplier) : IReversibleSnapshotOperation<T>
         where T : IComparable<T>
     {
-        public PositronicVariable<T> Variable { get; }
-        private readonly T _multiplier;
-        private readonly IPositronicRuntime _rt;
-        public T Original { get; }
+        public PositronicVariable<T> Variable { get; } = variable;
+        public T Original { get; } = variable.GetCurrentQBit().ToCollapsedValues().First();
 
-        public string OperationName => $"Multiplication by {_multiplier}";
-
-        public MultiplicationOperation(PositronicVariable<T> variable, T multiplier, IPositronicRuntime rt)
-        {
-            Variable = variable;
-            _multiplier = multiplier;
-            Original = variable.GetCurrentQBit().ToCollapsedValues().First();
-            _rt = rt;
-        }
+        public string OperationName => $"Multiplication by {multiplier}";
 
         /// <summary>
         /// When time goes backwards the multiplication becomes a division.
@@ -36,7 +26,7 @@ namespace PositronicVariables.Operations
         /// <returns></returns>
         public T ApplyInverse(T result)
         {
-            return Arithmetic.Divide(result, _multiplier);
+            return Arithmetic.Divide(result, multiplier);
         }
 
         /// <summary>
@@ -46,7 +36,7 @@ namespace PositronicVariables.Operations
         /// <returns></returns>
         public T ApplyForward(T value)
         {
-            return Arithmetic.Multiply(value, _multiplier);
+            return Arithmetic.Multiply(value, multiplier);
         }
     }
 }

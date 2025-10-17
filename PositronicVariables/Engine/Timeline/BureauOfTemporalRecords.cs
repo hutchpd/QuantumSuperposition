@@ -36,9 +36,7 @@ namespace PositronicVariables.Engine.Timeline
             lock (_syncRoot)
             {
                 // snapshot the current incarnation of the variable, before we accidentally turn it into a lizard or a toaster
-                List<QuBit<T>> copy = variable.timeline
-                                   .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
-                                   .ToList();
+                List<QuBit<T>> copy = [.. variable.timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
                 _snapshots.Push((variable, copy));
 
                 // append the new qubit
@@ -72,9 +70,7 @@ namespace PositronicVariables.Engine.Timeline
         {
             lock (_syncRoot)
             {
-                List<QuBit<T>> backup = variable.timeline
-                                            .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
-                                            .ToList();
+                List<QuBit<T>> backup = [.. variable.timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
                 QuantumLedgerOfRegret.Record(new TimelineReplaceOperation<T>(variable, backup));
 
                 variable.timeline[^1] = mergedSlice;

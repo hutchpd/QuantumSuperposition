@@ -509,11 +509,7 @@ namespace PositronicVariables.Tests
         public void OutputRedirector_Restores_And_Flushes()
         {
             // arrange: create a fresh runtime & redirector
-            var rt = new DefaultPositronicRuntime(
-                new ScopedPositronicVariableFactory(
-                    new ServiceCollection().BuildServiceProvider()),
-                new ScopedPositronicVariableFactory(
-                    new ServiceCollection().BuildServiceProvider()));
+            var rt = new DefaultPositronicRuntime();
             var redirector = new SubEthaOutputTransponder(rt);
 
             // arrange: capture anything written to Console.Out
@@ -998,11 +994,7 @@ namespace PositronicVariables.Tests
         public void ConsoleStyle_DoubleRun_PrePrintSlice_IsScalar_AfterConvergence()
         {
             // Arrange
-            var rt = new DefaultPositronicRuntime(
-                new ScopedPositronicVariableFactory(
-                    new ServiceCollection().BuildServiceProvider()),
-                new ScopedPositronicVariableFactory(
-                    new ServiceCollection().BuildServiceProvider()));
+            var rt = new DefaultPositronicRuntime();
             var antival = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("antival", 0, rt);
 
             var prePrintSnapshots = new List<int[]>();

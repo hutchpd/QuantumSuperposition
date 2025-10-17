@@ -22,7 +22,7 @@ namespace PositronicVariables.Runtime
         public IPositronicVariableRegistry Registry { get; }
 
 
-        public DefaultPositronicRuntime(IPositronicVariableFactory factory, IPositronicVariableRegistry registry)
+        public DefaultPositronicRuntime()
         {
             Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
 
@@ -38,19 +38,12 @@ namespace PositronicVariables.Runtime
             PositronicAmbient.Current = this;
         }
 
-        private class FallbackServiceProvider : IServiceProvider
+        private class FallbackServiceProvider(IPositronicRuntime runtime) : IServiceProvider
         {
-            private readonly IPositronicRuntime _runtime;
-
-            public FallbackServiceProvider(IPositronicRuntime runtime)
-            {
-                _runtime = runtime;
-            }
-
             public object GetService(Type serviceType)
             {
                 return serviceType == typeof(IPositronicRuntime)
-                    ? (object)_runtime
+                    ? (object)runtime
                     : throw new InvalidOperationException($"Service {serviceType.Name} not available in fallback provider.");
             }
         }

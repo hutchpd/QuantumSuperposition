@@ -6,20 +6,13 @@ using System.Linq;
 
 namespace PositronicVariables.Operations
 {
-    public class AssignOperation<T> : IReversibleSnapshotOperation<T>
+    public class AssignOperation<T>(PositronicVariable<T> variable, T assigned) : IReversibleSnapshotOperation<T>
         where T : IComparable<T>
     {
-        public PositronicVariable<T> Variable { get; }
-        public T Original { get; }
-        private readonly T _assigned;
-        public string OperationName => $"Assign {_assigned}";
+        public PositronicVariable<T> Variable { get; } = variable;
+        public T Original { get; } = variable.GetCurrentQBit().ToCollapsedValues().First();
 
-        public AssignOperation(PositronicVariable<T> variable, T assigned, IPositronicRuntime rt)
-        {
-            Variable = variable;
-            Original = variable.GetCurrentQBit().ToCollapsedValues().First();
-            _assigned = assigned;
-        }
+        public string OperationName => $"Assign {assigned}";
 
         /// <summary>
         /// Go back to whatever was once there after we started going forwards the first time
@@ -38,7 +31,7 @@ namespace PositronicVariables.Operations
         /// <returns></returns>
         public T ApplyForward(T value)
         {
-            return _assigned;
+            return assigned;
         }
     }
 

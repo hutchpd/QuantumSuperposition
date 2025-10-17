@@ -34,7 +34,7 @@ namespace PositronicVariables.Variables
         private readonly bool isValueType = typeof(T).IsValueType;
         private readonly HashSet<T> _domain = [];
         private static bool _reverseReplayStarted;
-        public static int _loopDepth;
+        private static int s_LoopDepth;
         private readonly IPositronicRuntime _runtime;
         private readonly List<int> _sliceEpochs = [];
         private bool _sawStateReadThisForward = false;
@@ -54,7 +54,7 @@ namespace PositronicVariables.Variables
             bootstrapSuperseded = true;
         }
 
-        internal static bool InConvergenceLoop => _loopDepth > 0;
+        internal static bool InConvergenceLoop => System.Threading.Volatile.Read(ref s_LoopDepth) > 0;
         private readonly UnhappeningEngine<T> _reverseReplay;
         private readonly IOperationLogHandler<T> _ops;
 
@@ -123,7 +123,7 @@ namespace PositronicVariables.Variables
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
 
             _temporalRecords = timelineArchivist ?? new BureauOfTemporalRecords<T>();
-            QuBit<T> qb = new(new[] { initialValue });
+            QuBit<T> qb = new([initialValue]);
             
             _temporalRecords.OverwriteBootstrap(this, qb);
             _sliceEpochs.Clear();
@@ -179,12 +179,7 @@ namespace PositronicVariables.Variables
         /// </summary>
         public void Assign(QuBit<T> qb)
         {
-            if (qb is null)
-            {
-                throw new ArgumentNullException(nameof(qb));
-            }
-
-            
+            ArgumentNullException.ThrowIfNull(qb);
 
             ReplaceOrAppendOrUnify(qb, replace: true);
             _sawStateReadThisForward = false;
@@ -195,7 +190,7 @@ namespace PositronicVariables.Variables
         /// </summary>
         public void Assign(T scalarValue)
         {
-            Assign(new[] { scalarValue });
+            Assign([scalarValue]);
         }
 
         /// <summary>
@@ -368,12 +363,12 @@ namespace PositronicVariables.Variables
             try
             {
                 // mark "we're inside the loop" so the fast-path is disabled
-                _loopDepth++;
+                s_LoopDepth++;
                 engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
             }
             finally
             {
-                _loopDepth--;
+                s_LoopDepth--;
                 // After the engine finishes (including the final iteration),
                 // clear the op log and re-seed domains from the *current* slice.
                 if (runtime.Converged)
@@ -493,11 +488,10 @@ namespace PositronicVariables.Variables
                into a single union slice, but **keep** slice 0 untouched so
                callers can still see the original seed when they ask for it. */
 
-            T[] mergedStates = timeline
+            T[] mergedStates = [.. timeline
                                 .Skip(1)   // ignore bootstrap
                                 .SelectMany(q => q.ToCollapsedValues())
-                                .Distinct()
-                                .ToArray();
+                                .Distinct()];
 
             QuBit<T> unified = new(mergedStates);
             unified.Any();
@@ -544,11 +538,10 @@ namespace PositronicVariables.Variables
             }
 
             int start = timeline.Count - count;
-            List<T> merged = timeline
+            List<T> merged = [.. timeline
                 .Skip(start)
                 .SelectMany(qb => qb.ToCollapsedValues())
-                .Distinct()
-                .ToList();
+                .Distinct()];
 
             timeline.RemoveRange(start, count);
 
@@ -648,13 +641,13 @@ namespace PositronicVariables.Variables
                     && !_ops.SawForwardWrite
                     && !_sawStateReadThisForward)
                 {
-                    T[] incoming = qb.ToCollapsedValues().ToArray();
-                    T[] last = timeline[^1].ToCollapsedValues().ToArray();
+                    T[] incoming = [.. qb.ToCollapsedValues()];
+                    T[] last = [.. timeline[^1].ToCollapsedValues()];
 
                     bool bothScalar = incoming.Length == 1 && last.Length == 1;
                     if (bothScalar)
                     {
-                        T[] unionValues = last.Union(incoming).Distinct().ToArray();
+                        T[] unionValues = [.. last.Union(incoming).Distinct()];
                         QuBit<T> unionQb = new(unionValues); unionQb.Any();
 
                         if (timeline.Count == 1)
@@ -677,15 +670,14 @@ namespace PositronicVariables.Variables
                 // Self-feedback subsequent writes (union growth)
                 if (replace && isFeedbackFromSelf && timeline.Count > 0 && _ops.SawForwardWrite)
                 {
-                    T[] incoming = qb.ToCollapsedValues().ToArray();
+                    T[] incoming = [.. qb.ToCollapsedValues()];
                     bool lastIsNonScalar = timeline[^1].ToCollapsedValues().Skip(1).Any();
 
                     if (lastIsNonScalar)
                     {
-                        T[] unionValues = timeline[^1].ToCollapsedValues()
+                        T[] unionValues = [.. timeline[^1].ToCollapsedValues()
                                          .Union(incoming)
-                                         .Distinct()
-                                         .ToArray();
+                                         .Distinct()];
                         QuBit<T> unionQb = new(unionValues); unionQb.Any();
 
                         _temporalRecords.ReplaceLastSlice(this, unionQb);
@@ -710,7 +702,7 @@ namespace PositronicVariables.Variables
                 // Normal append/replace for non-scalar writes
                 if (replace)
                 {
-                    T[] incoming = qb.ToCollapsedValues().ToArray();
+                    T[] incoming = [.. qb.ToCollapsedValues()];
                     bool secondPlusScalar = incoming.Length == 1 && _ops.SawForwardWrite;
                     bool shouldAppend = !secondPlusScalar || isFeedbackFromSelf;
 
@@ -742,7 +734,7 @@ namespace PositronicVariables.Variables
                     StampAppendCurrentEpoch();
                 }
 
-                T[] valsForBaseline = qb.ToCollapsedValues().Take(2).ToArray();
+                T[] valsForBaseline = [.. qb.ToCollapsedValues().Take(2)];
                 if (valsForBaseline.Length == 1 && crossSource is null)
                 {
                     _forwardScalarBaseline = valsForBaseline[0];
@@ -771,8 +763,8 @@ namespace PositronicVariables.Variables
                         return;
                     }
 
-                    T[] incomingVals = qb.ToCollapsedValues().ToArray();
-                    T[] srcVals = crossSource.GetCurrentQBit().ToCollapsedValues().ToArray();
+                    T[] incomingVals = [.. qb.ToCollapsedValues()];
+                    T[] srcVals = [.. crossSource.GetCurrentQBit().ToCollapsedValues()];
 
                     QuBit<T> rebuilt;
                     if (incomingVals.Length == 1 && srcVals.Length == 1)
@@ -789,14 +781,14 @@ namespace PositronicVariables.Variables
                         }
                         else
                         {
-                            T[] lastTargetVals = timeline.Count > 0 ? timeline[^1].ToCollapsedValues().ToArray() : Array.Empty<T>();
+                            T[] lastTargetVals = timeline.Count > 0 ? [.. timeline[^1].ToCollapsedValues()] : [];
                             baseVal = lastTargetVals.Length == 1 ? lastTargetVals[0] : default;
                         }
 
                         try
                         {
                             T shifted = (T)(baseVal + k);
-                            QuBit<T> q = new(new[] { shifted }); q.Any();
+                            QuBit<T> q = new([shifted]); q.Any();
                             rebuilt = q;
                         }
                         catch
@@ -832,10 +824,9 @@ namespace PositronicVariables.Variables
 
                 if (isFeedbackFromSelf && timeline.Count > 0)
                 {
-                    T[] union = rebuiltSelf.ToCollapsedValues()
+                    T[] union = [.. rebuiltSelf.ToCollapsedValues()
                                        .Union(timeline[^1].ToCollapsedValues())
-                                       .Distinct()
-                                       .ToArray();
+                                       .Distinct()];
                     rebuiltSelf = new QuBit<T>(union);
                     rebuiltSelf.Any();
                 }
@@ -860,13 +851,12 @@ namespace PositronicVariables.Variables
                 if (!replace)
                 {
                     IEnumerable<T> lastStates = timeline[^1].ToCollapsedValues();
-                    T[] merged = lastStates
+                    T[] merged = [.. lastStates
                            .Union(qb.ToCollapsedValues())
                            // Only pull the bootstrap into the union when the last slice
                            // still represents a single scalar   (guarantees _pure_ scalar sequence)
-                           .Union(lastStates.Count() == 1 ? timeline[0].ToCollapsedValues() : Array.Empty<T>())
-                           .Distinct()
-                           .ToArray();
+                           .Union(lastStates.Count() == 1 ? timeline[0].ToCollapsedValues() : [])
+                           .Distinct()];
                     QuBit<T> mergedQb = new(merged); mergedQb.Any();
                     _temporalRecords.ReplaceLastSlice(this, mergedQb);
                     StampReplaceCurrentEpoch();
@@ -899,9 +889,9 @@ namespace PositronicVariables.Variables
                 // This prevents mutating the source and avoids duplicate slices.
                 if (crossSource is not null && !isFeedbackFromSelf)
                 {
-                    T[] incomingVals = qb.ToCollapsedValues().ToArray();
-                    T[] srcVals = crossSource.GetCurrentQBit().ToCollapsedValues().ToArray();
-                    T[] lastTargetVals = timeline.Count > 0 ? timeline[^1].ToCollapsedValues().ToArray() : Array.Empty<T>();
+                    T[] incomingVals = [.. qb.ToCollapsedValues()];
+                    T[] srcVals = [.. crossSource.GetCurrentQBit().ToCollapsedValues()];
+                    T[] lastTargetVals = timeline.Count > 0 ? [.. timeline[^1].ToCollapsedValues()] : [];
 
                     QuBit<T> rebuilt;
                     if (incomingVals.Length == 1 && srcVals.Length == 1 && lastTargetVals.Length == 1)
@@ -914,7 +904,7 @@ namespace PositronicVariables.Variables
                         try
                         {
                             T shifted = (T)(last + k);
-                            QuBit<T> q = new(new[] { shifted }); q.Any();
+                            QuBit<T> q = new([shifted]); q.Any();
                             rebuilt = q;
                         }
                         catch
@@ -971,11 +961,10 @@ namespace PositronicVariables.Variables
                 // — overwrite (merge) if this is the very first forward write
                 if (replace && !_ops.SawForwardWrite)
                 {
-                    T[] merged = timeline[^1]
+                    T[] merged = [.. timeline[^1]
                        .ToCollapsedValues()
                        .Union(qb.ToCollapsedValues())
-                       .Distinct()
-                       .ToArray();
+                       .Distinct()];
                     QuBit<T> mergedQb = new(merged);
                     mergedQb.Any();
                     _temporalRecords.ReplaceLastSlice(this, mergedQb);
@@ -994,11 +983,10 @@ namespace PositronicVariables.Variables
                 else
                 {
                     // merge into the last slice if it's a duplicate scalar write
-                    T[] merged = timeline[^1]
+                    T[] merged = [.. timeline[^1]
                                           .ToCollapsedValues()
                                           .Union(qb.ToCollapsedValues())
-                                          .Distinct()
-                                          .ToArray();
+                                          .Distinct()];
                     QuBit<T> mergedQb = new(merged);
                     mergedQb.Any();
                     _temporalRecords.ReplaceLastSlice(this, mergedQb);
@@ -1108,20 +1096,19 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> qb = value.GetCurrentQBit();
 
-            T[] negatedValues = qb
+            T[] negatedValues = [.. qb
                 .ToCollapsedValues()
                 .Select(v =>
                 {
                     dynamic dv = v;
                     return (T)(-dv);
-                })
-                .ToArray();
+                })];
 
             QuBit<T> negatedQb = new(negatedValues);
             negatedQb.Any();
             if (value._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new NegationOperation<T>(value, value._runtime));
+                QuantumLedgerOfRegret.Record(new NegationOperation<T>(value));
             }
             return new QExpr(value, negatedQb);
         }
@@ -1143,8 +1130,8 @@ namespace PositronicVariables.Variables
             {
                 QuantumLedgerOfRegret.Record(
                 IsMinus1(right)
-                               ? new NegationOperation<T>(left, left._runtime)
-                               : new MultiplicationOperation<T>(left, right, left._runtime));
+                               ? new NegationOperation<T>(left)
+                               : new MultiplicationOperation<T>(left, right));
             }
 
             return new QExpr(left, lazy);
@@ -1157,7 +1144,7 @@ namespace PositronicVariables.Variables
             {
                 QuBit<T> srcQB = right.GetCurrentQBit();
                 srcQB.Any();
-                T[] multiplied = srcQB
+                T[] multiplied = [.. srcQB
                     .ToCollapsedValues()
                     .Select(v =>
                     {
@@ -1165,8 +1152,7 @@ namespace PositronicVariables.Variables
                         dynamic dv = v;
                         return (T)(dl * dv);
                     })
-                    .Distinct()
-                    .ToArray();
+                    .Distinct()];
 
                 QuBit<T> resultQB = new(multiplied);
                 resultQB.Any();
@@ -1177,8 +1163,8 @@ namespace PositronicVariables.Variables
             {
                 QuantumLedgerOfRegret.Record(
                     IsMinus1(left)
-                        ? new NegationOperation<T>(right, right._runtime)
-                        : new MultiplicationOperation<T>(right, left, right._runtime));
+                        ? new NegationOperation<T>(right)
+                        : new MultiplicationOperation<T>(right, left));
             }
 
             return new QExpr(right, lazy);
@@ -1193,11 +1179,11 @@ namespace PositronicVariables.Variables
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 if (IsMinus1(operand))
                 {
-                    QuantumLedgerOfRegret.Record(new NegationOperation<T>(left, left._runtime));
+                    QuantumLedgerOfRegret.Record(new NegationOperation<T>(left));
                 }
                 else
                 {
-                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand, left._runtime));
+                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand));
                 }
             }
             return new QExpr(left, resultQB);
@@ -1242,7 +1228,6 @@ namespace PositronicVariables.Variables
         // --- Modulus Overloads ---
         public static QExpr operator %(PositronicVariable<T> left, T right)
         {
-            left.GetCurrentQBit().ToCollapsedValues().First();
             QuBit<T> resultQB = left.GetCurrentQBit() % right;
             resultQB.Any();
             if (left._runtime.Entropy >= 0)
@@ -1255,7 +1240,6 @@ namespace PositronicVariables.Variables
 
         public static QExpr operator %(T left, PositronicVariable<T> right)
         {
-            right.GetCurrentQBit().ToCollapsedValues().First();
             QuBit<T> resultQB = right.GetCurrentQBit() % left;
             resultQB.Any();
             if (right._runtime.Entropy >= 0)
@@ -1268,7 +1252,6 @@ namespace PositronicVariables.Variables
 
         public static QExpr operator %(PositronicVariable<T> left, PositronicVariable<T> right)
         {
-            left.GetCurrentQBit().ToCollapsedValues().First();
             T divisor = right.GetCurrentQBit().ToCollapsedValues().First();
             QuBit<T> resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
             resultQB.Any();
@@ -1352,20 +1335,6 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Applies a binary function across two positronic variables, combining every possible future.
-        /// </summary>
-        [Obsolete]
-        public static PositronicVariable<T> Apply(Func<T, T, T> op, PositronicVariable<T> left, PositronicVariable<T> right, IPositronicRuntime runtime)
-        {
-            IEnumerable<T> leftValues = left.ToValues();
-            IEnumerable<T> rightValues = right.ToValues();
-            T[] results = leftValues.SelectMany(l => rightValues, (l, r) => op(l, r)).Distinct().ToArray();
-            QuBit<T> newQB = new(results);
-            newQB.Any();
-            return new PositronicVariable<T>(newQB, runtime);
-        }
-
-        /// <summary>
         /// Retrieves a specific slice from the timeline.
         /// </summary>
         public QuBit<T> GetSlice(int stepsBack)
@@ -1390,7 +1359,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> last = timeline.Last();
             T baseline = last.ToCollapsedValues().First();
-            QuBit<T> collapsedQB = new(new[] { baseline });
+            QuBit<T> collapsedQB = new([baseline]);
             collapsedQB.Any();
             timeline.Clear();
             timeline.Add(collapsedQB);
@@ -1404,7 +1373,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> last = timeline.Last();
             T chosenValue = strategy(last.ToCollapsedValues());
-            QuBit<T> collapsedQB = new(new[] { chosenValue });
+            QuBit<T> collapsedQB = new([chosenValue]);
             collapsedQB.Any();
             timeline.Clear();
             timeline.Add(collapsedQB);
@@ -1412,12 +1381,12 @@ namespace PositronicVariables.Variables
         }
 
         // --- Built-in collapse strategies ---
-        public static Func<IEnumerable<T>, T> CollapseMin = values => values.Min();
-        public static Func<IEnumerable<T>, T> CollapseMax = values => values.Max();
-        public static Func<IEnumerable<T>, T> CollapseFirst = values => values.First();
-        public static Func<IEnumerable<T>, T> CollapseRandom = values =>
+        public Func<IEnumerable<T>, T> CollapseMin = values => values.Min();
+        public Func<IEnumerable<T>, T> CollapseMax = values => values.Max();
+        public Func<IEnumerable<T>, T> CollapseFirst = values => values.First();
+        public Func<IEnumerable<T>, T> CollapseRandom = values =>
         {
-            List<T> list = values.ToList();
+            List<T> list = [.. values];
             Random rnd = new();
             return list[rnd.Next(list.Count)];
         };
@@ -1425,7 +1394,6 @@ namespace PositronicVariables.Variables
         /// <summary>
         /// Creates a new branch by forking the timeline.
         /// </summary>
-        [Obsolete]
         public PositronicVariable<T> Fork(IPositronicRuntime runtime)
         {
             List<QuBit<T>> forkedTimeline = timeline.Select(qb =>
@@ -1444,7 +1412,6 @@ namespace PositronicVariables.Variables
         /// <summary>
         /// Forks the timeline and applies a transformation to the final slice.
         /// </summary>
-        [Obsolete]
         public PositronicVariable<T> Fork(Func<T, T> transform, IPositronicRuntime runtime)
         {
             PositronicVariable<T> forked = Fork(runtime);
@@ -1773,7 +1740,7 @@ namespace PositronicVariables.Variables
 
                 if (left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left.Source, right, left.Source._runtime));
+                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left.Source, right));
                 }
 
                 return new QExpr(left.Source, lazy);
