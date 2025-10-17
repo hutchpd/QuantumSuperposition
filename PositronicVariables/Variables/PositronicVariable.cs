@@ -21,8 +21,8 @@ using System.Threading.Tasks;
 namespace PositronicVariables.Variables
 {
     /// <summary>
-    /// A "positronic" variable that stores a timeline of QuBit&lt;T&gt; states.
-    /// Supports negative-time convergence, partial unification, etc.
+    /// A "positronic" variable that remembers everything it's ever been, and a few things it hasn't.
+    /// If Schrödinger and Asimov had a baby, this would be its teething ring.
     /// </summary>
     /// <typeparam name="T">A type that implements IComparable.</typeparam>
     public class PositronicVariable<T> : IPositronicVariable
@@ -120,7 +120,6 @@ namespace PositronicVariables.Variables
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
 
-            // seed the timeline exactly once
             _temporalRecords = timelineArchivist ?? new BureauOfTemporalRecords<T>();
             var qb = new QuBit<T>(new[] { initialValue });
             qb.Any();
@@ -161,11 +160,12 @@ namespace PositronicVariables.Variables
 
         internal static void ResetReverseReplayFlag()
         {
-            _reverseReplayStarted = false;           // called each time the direction flips
+            _reverseReplayStarted = false;           // Trying to keep track of when we turn around violently in time.
         }
 
         /// <summary>
-        /// Secret lever that fires whenever a new timeline twig is grafted on
+        /// Fires when a new timeline is stitched onto this unfortunate beast,
+        /// like bolting a new memory onto Frankenstein's hippocampus.
         /// </summary>
         internal static Action TimelineAppendedHook;
 
@@ -184,7 +184,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Forcefully injects a single scalar value into the timeline.
+        /// Kicks a lone scalar through the event horizon and hopes the timeline doesn't notice.
         /// </summary>
         public void Assign(T scalarValue)
         {
@@ -192,7 +192,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Forcefully injects scalar value(s) into the timeline.
+        /// Kicks a set of scalar values through the event horizon and hopes the timeline doesn't notice.
         /// </summary>
         public void Assign(params T[] scalarValues)
         {
@@ -204,7 +204,7 @@ namespace PositronicVariables.Variables
             ReplaceOrAppendOrUnify(qb, replace: !isValueType);
         }
 
-        // Automatically enable simulation on first use.
+        // Simulation is enabled by default, like a toddler with a vivid imagination.
         private static readonly bool _ = EnableSimulation();
         private static bool EnableSimulation()
         {
@@ -246,14 +246,15 @@ namespace PositronicVariables.Variables
         public int TimelineLength => timeline.Count;
 
         /// <summary>
-        /// Sets the global entropy (direction of time) for the given runtime.
+        /// Politely asks the universe which way time is flowing today.
+        /// It rarely answers. Just pretends it's forward.
         /// </summary>
         /// <param name="rt">The current runtime</param>
         /// <param name="e">Entropy direction -1 for backwards, 1 for forwards.</param>
         public static void SetEntropy(IPositronicRuntime rt, int e) => rt.Entropy = e;
 
         /// <summary>
-        /// Gets the global entropy (direction of time) for the given runtime.
+        /// Attempts to read the universal vibe setting. Forward? Backward? Existential spiral?
         /// </summary>
         /// <param name="rt"></param>
         /// <returns></returns>
@@ -276,7 +277,7 @@ namespace PositronicVariables.Variables
                 => runtime.Factory.GetOrCreate<T>("default");
 
         /// <summary>
-        /// Returns true if all registered positronic variables have converged.
+        /// Returns true if all variables have achieved spiritual enlightenment or just got tired of diverging.
         /// </summary>
         public static bool AllConverged(IPositronicRuntime rt)
         {
@@ -286,10 +287,13 @@ namespace PositronicVariables.Variables
             return all;
         }
 
+        /// <summary>
+        /// Fetches every poor soul currently pretending to be a variable in this runtime.
+        /// </summary>
         public static IEnumerable<IPositronicVariable> GetAllVariables(IPositronicRuntime rt) => rt.Registry;
 
         /// <summary>
-        /// Runs your code in a convergence loop until all variables have settled.
+        /// Forces reality to stabilize, through brute repetition and caffeine.
         /// </summary>
         public static void RunConvergenceLoop(
             IPositronicRuntime rt,
@@ -390,7 +394,7 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Audits the quantum history to see if all timelines are finally tired of arguing and want to go home.
+        /// Scans the quantum scrapbook to check if all possible futures have stopped bickering like caffeinated otters in a time loop.
         /// </summary>
         public int Converged()
         {
@@ -524,6 +528,9 @@ namespace PositronicVariables.Variables
             ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf, expr.Source);
             _sawStateReadThisForward = false;
         }
+        /// <summary>
+        /// Detects if we've accidentally invented time travel by repeating ourselves.
+        /// </summary>
         private void DetectAndUnifySmallCycle()
         {
             for (int cycle = 2; cycle <= 20; cycle++)
@@ -805,7 +812,7 @@ namespace PositronicVariables.Variables
                 return;
             }
 
-            // If we've already converged, do nothing.
+            // If we've already reached enlightenment, stop messing with the timeline.
             if (_runtime.Converged)
                 return;
 
@@ -1350,7 +1357,8 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Outputs the history of this variable's midlife crises in a human-readable format.
+        /// Emits a readable account of all the timeline's identity crises.
+        /// Good for debugging. Also good for therapists.
         /// </summary>
         public string ToTimelineString()
         {
@@ -1359,7 +1367,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Serializes the timeline to JSON.
+        /// Serializes the timeline to JSON, why would you not? Good for debugging, but not good for your therapist bill.
         /// </summary>
         public string ExportToJson()
         {
@@ -1368,7 +1376,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// A convenient wrapper to expose the current quantum values.
+        /// Exposes the current quantum values like a flasher in the multiverse.
         /// </summary>
         public PositronicValueWrapper Value => new PositronicValueWrapper(GetCurrentQBit());
 
@@ -1400,7 +1408,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Gets or sets the current scalar value, collapsing if necessary.
+        /// Does it exist or not? Schrödinger would be proud.
         /// </summary>
         public T Scalar
         {
@@ -1410,7 +1418,8 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Collapses the current quantum cloud into discrete values.
+        /// Forces the quantum superposition to pick a side.
+        /// Like asking a cat to choose a political party.
         /// </summary>
         public IEnumerable<T> ToValues() => GetCurrentQBit().ToCollapsedValues();
 
@@ -1426,11 +1435,11 @@ namespace PositronicVariables.Variables
                 throw new InvalidOperationException("Timeline is empty.");
 
             if (!InConvergenceLoop)
-                return timeline[^1];                  // legacy outside-loop semantics
+                return timeline[^1];
 
-            // Inside the loop: prefer the freshest slice from the current epoch.
+            // Inside convergence loop: Where are we in the epochs? Who are we today? When is now? How do i work this? Where is my large automobile? This is not my beautiful house! This is not my beautiful wife!
             var epoch = CurrentEpoch;
-            // Defensive: keep index in bounds even if something goes off the rails.
+            // Defensive: keeps us from yeeting ourselves off the end of the timeline
             int lastStamped = Math.Min(timeline.Count, _sliceEpochs.Count) - 1;
             for (int i = lastStamped; i >= 0; i--)
             {
@@ -1444,7 +1453,7 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Checks whether two QuBits represent the same state.
+        /// Compares two quantum blobs to see if they're secretly the same blob in a hat.
         /// </summary>
         private bool SameStates(QuBit<T> a, QuBit<T> b)
         {
@@ -1486,8 +1495,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// (Called by the engine after convergence)
-        /// Wipe out the internal _domain and re-seed it from the current QBit alone.
+        /// Flushes the existential junk drawer and repopulates it with what we *currently* believe to be true.
         /// </summary>
         internal void ResetDomainToCurrent()
         {
@@ -1509,16 +1517,17 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// A helper struct to enable chained operations without immediate collapse.
+        /// A sentient wrapper that delays reality itself.
+        /// Useful for pretending your math is correct until it's too late to stop it.
         /// </summary>
         public readonly struct QExpr
         {
             internal readonly PositronicVariable<T> Source;
 
-            // Eager result (old behavior)
+            // Eager result
             internal readonly QuBit<T> Q;
 
-            // Lazy materializer (new behavior) – when present, we build the QuBit at use-time
+            // Lazy materializer – when present, we build the QuBit at use-time
             private readonly Func<QuBit<T>> _lazy;
             private readonly bool _isLazy;
 
@@ -1531,7 +1540,7 @@ namespace PositronicVariables.Variables
                 _isLazy = false;
             }
 
-            // New ctor: build on demand from the Source's *current* qubit
+            // ctor: build on demand from the Source's *current* qubit
             internal QExpr(PositronicVariable<T> src, Func<QuBit<T>> lazy)
             {
                 Source = src;
