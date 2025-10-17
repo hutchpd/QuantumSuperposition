@@ -665,13 +665,20 @@ namespace PositronicVariables.Variables
                     _temporalRecords.SnapshotAppend(this, qb);
                     StampAppendCurrentEpoch();
                 }
+
+                var valsForBaseline = qb.ToCollapsedValues().Take(2).ToArray();
+                if (valsForBaseline.Length == 1 && crossSource is null)
+                {
+                    _forwardScalarBaseline = valsForBaseline[0];
+                    _hasForwardScalarBaseline = true;
+                }
+
                 _ops.SawForwardWrite = true;
                 DetectAndUnifySmallCycle();
                 return;
             }
 
 
-            // ---------- Reverse, in-loop ----------
             // ---------- Reverse, in-loop ----------
             if (runtime.Entropy < 0 && InConvergenceLoop)
             {
@@ -686,42 +693,45 @@ namespace PositronicVariables.Variables
                     if (alreadyRebuiltThisEpoch)
                         return;
 
-                    // If we already have a slice stamped for this epoch, replace it; else append.
                     bool hasEpochSlice = _sliceEpochs.Count > 0 && _sliceEpochs[^1] == CurrentEpoch && timeline.Count == _sliceEpochs.Count;
-
-                    // Try to derive an additive constant: k = incoming - source
-                    // Then shift this variable's last scalar by k.
-                    QuBit<T> rebuilt = qb;
 
                     var incomingVals = qb.ToCollapsedValues().ToArray();
                     var srcVals = crossSource.GetCurrentQBit().ToCollapsedValues().ToArray();
-                    var lastTargetVals = timeline.Count > 0 ? timeline[^1].ToCollapsedValues().ToArray() : Array.Empty<T>();
 
-                    if (incomingVals.Length == 1 && srcVals.Length == 1 && lastTargetVals.Length == 1)
+                    QuBit<T> rebuilt = qb;
+
+                    if (incomingVals.Length == 1 && srcVals.Length == 1)
                     {
                         dynamic incoming = incomingVals[0];
                         dynamic src = srcVals[0];
-                        dynamic last = lastTargetVals[0];
-
-                        // k = incoming - src (handles +k and -k equivalently on integers)
                         dynamic k = incoming - src;
+
+                        // NEW: prefer the target’s forward scalar baseline if present; otherwise use last scalar
+                        dynamic baseVal;
+                        if (_hasForwardScalarBaseline)
+                        {
+                            baseVal = _forwardScalarBaseline;
+                        }
+                        else
+                        {
+                            var lastTargetVals = timeline.Count > 0 ? timeline[^1].ToCollapsedValues().ToArray() : Array.Empty<T>();
+                            baseVal = lastTargetVals.Length == 1 ? lastTargetVals[0] : default(T);
+                        }
 
                         try
                         {
-                            T shifted = (T)(last + k);
+                            T shifted = (T)(baseVal + k);
                             var q = new QuBit<T>(new[] { shifted }); q.Any();
                             rebuilt = q;
                         }
                         catch
                         {
-                            // fallback to incoming as-is if types don't support +/-
                             var q = new QuBit<T>(incomingVals); q.Any();
                             rebuilt = q;
                         }
                     }
                     else
                     {
-                        // fallback: use the computed incoming as-is
                         var q = new QuBit<T>(incomingVals); q.Any();
                         rebuilt = q;
                     }
