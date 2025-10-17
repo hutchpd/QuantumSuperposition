@@ -693,8 +693,6 @@ namespace PositronicVariables.Variables
                     if (alreadyRebuiltThisEpoch)
                         return;
 
-                    bool hasEpochSlice = _sliceEpochs.Count > 0 && _sliceEpochs[^1] == CurrentEpoch && timeline.Count == _sliceEpochs.Count;
-
                     var incomingVals = qb.ToCollapsedValues().ToArray();
                     var srcVals = crossSource.GetCurrentQBit().ToCollapsedValues().ToArray();
 
@@ -706,7 +704,7 @@ namespace PositronicVariables.Variables
                         dynamic src = srcVals[0];
                         dynamic k = incoming - src;
 
-                        // NEW: prefer the target’s forward scalar baseline if present; otherwise use last scalar
+                        // Prefer the target’s forward scalar baseline if present; otherwise fall back to last scalar.
                         dynamic baseVal;
                         if (_hasForwardScalarBaseline)
                         {
@@ -736,11 +734,8 @@ namespace PositronicVariables.Variables
                         rebuilt = q;
                     }
 
-                    if (hasEpochSlice)
-                        ReplaceLastFromReverse(rebuilt);
-                    else
-                        AppendFromReverse(rebuilt);
-
+                    // Key fix: keep only the latest reconstructed state beyond bootstrap.
+                    ReplaceForwardHistoryWith(rebuilt);
                     return;
                 }
 
