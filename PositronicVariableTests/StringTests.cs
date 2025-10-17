@@ -1,11 +1,8 @@
-﻿using NUnit.Framework;
-using System.Collections.Generic;
-using System.Linq;
-using QuantumSuperposition.Core;
-using QuantumSuperposition.QuantumSoup;
+﻿using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
+using QuantumSuperposition.QuantumSoup;
 
-namespace QuantumMathTests
+namespace QuantumSoupTester
 {
     [TestFixture]
     public class QuantumMathStringTests
@@ -16,8 +13,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_AllNonDefault_ReturnsTrue_String()
         {
-            var qubit = new QuBit<string>(
-                new List<string> { "Alpha", "Beta", "Gamma" },
+            QuBit<string> qubit = new(
+                ["Alpha", "Beta", "Gamma"],
                 stringOps
             );
 
@@ -28,8 +25,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_ContainsDefault_ReturnsFalse_String()
         {
-            var qubit = new QuBit<string>(
-                new List<string> { "Alpha", null, "Gamma" },
+            QuBit<string> qubit = new(
+                ["Alpha", null, "Gamma"],
                 stringOps
             );
 
@@ -42,14 +39,14 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubit = new QuBit<string>(
-                new List<string> { "Hello", "World" },
+            QuBit<string> qubit = new(
+                ["Hello", "World"],
                 stringOps
             );
-            var scalar = "!";
+            string scalar = "!";
             // Expect the addition operator to perform concatenation.
-            var result = (qubit + scalar).States.ToList();
-            var expected = new List<string> { "Hello!", "World!" };
+            List<string> result = (qubit + scalar).States.ToList();
+            List<string> expected = ["Hello!", "World!"];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -59,21 +56,21 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubitA = new QuBit<string>(
-                new List<string> { "Quantum", "Super" },
+            QuBit<string> qubitA = new(
+                ["Quantum", "Super"],
                 stringOps
             );
-            var qubitB = new QuBit<string>(
-                new List<string> { "Math", "Test" },
+            QuBit<string> qubitB = new(
+                ["Math", "Test"],
                 stringOps
             );
 
             // Expect the addition operator to produce every combination.
-            var result = (qubitA + qubitB).States.ToList();
-            var expected = new List<string>
-            {
+            List<string> result = (qubitA + qubitB).States.ToList();
+            List<string> expected =
+            [
                 "QuantumMath", "QuantumTest", "SuperMath", "SuperTest"
-            };
+            ];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }

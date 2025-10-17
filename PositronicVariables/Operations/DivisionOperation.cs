@@ -29,13 +29,19 @@ namespace PositronicVariables.Operations
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public T ApplyInverse(T result) => Arithmetic.Multiply(result, _divisor);
+        public T ApplyInverse(T result)
+        {
+            return Arithmetic.Multiply(result, _divisor);
+        }
+
         /// <summary>
         /// Otherwise we try and remember what long division was like, something to do with shifting one column to the right and then I get confused.
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T value) => Arithmetic.Divide(value, _divisor);
-
+        public T ApplyForward(T value)
+        {
+            return Arithmetic.Divide(value, _divisor);
+        }
     }
 }

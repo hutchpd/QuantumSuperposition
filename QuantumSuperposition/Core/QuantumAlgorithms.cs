@@ -1,6 +1,5 @@
-﻿using System;
+﻿using QuantumSuperposition.Systems;
 using System.Numerics;
-using QuantumSuperposition.Systems;
 
 namespace QuantumSuperposition.Core
 {
@@ -43,7 +42,7 @@ namespace QuantumSuperposition.Core
             int iterations = (int)Math.Floor(Math.PI / 4 * Math.Sqrt(Math.Pow(2, n)));
 
             // Step 1: Create an equal superposition over all basis states.
-            foreach (var qubit in qubits)
+            foreach (int qubit in qubits)
             {
                 system.ApplySingleQubitGate(qubit, QuantumGates.Hadamard, "H");
             }
@@ -65,7 +64,7 @@ namespace QuantumSuperposition.Core
         {
             int n = qubits.Length;
             int dim = 1 << n;
-            var oracleMatrix = new Complex[dim, dim];
+            Complex[,] oracleMatrix = new Complex[dim, dim];
             for (int i = 0; i < dim; i++)
             {
                 int[] basis = IndexToBits(i, n);
@@ -91,19 +90,19 @@ namespace QuantumSuperposition.Core
             int dim = 1 << n;
 
             // Hadamard on all qubits.
-            foreach (var qubit in qubits)
+            foreach (int qubit in qubits)
             {
                 system.ApplySingleQubitGate(qubit, QuantumGates.Hadamard, "H");
             }
 
             // Pauli-X on all qubits.
-            foreach (var qubit in qubits)
+            foreach (int qubit in qubits)
             {
                 system.ApplySingleQubitGate(qubit, QuantumGates.PauliX, "X");
             }
 
             // Multi-controlled Z gate: flip the phase of |0...0⟩.
-            var mcz = new Complex[dim, dim];
+            Complex[,] mcz = new Complex[dim, dim];
             for (int i = 0; i < dim; i++)
             {
                 // Only state |0...0⟩ (i==0) gets a phase of –1.
@@ -112,11 +111,11 @@ namespace QuantumSuperposition.Core
             system.ApplyMultiQubitGate(qubits, mcz, "MCZ");
 
             // Undo the previous X and H layers.
-            foreach (var qubit in qubits)
+            foreach (int qubit in qubits)
             {
                 system.ApplySingleQubitGate(qubit, QuantumGates.PauliX, "X");
             }
-            foreach (var qubit in qubits)
+            foreach (int qubit in qubits)
             {
                 system.ApplySingleQubitGate(qubit, QuantumGates.Hadamard, "H");
             }

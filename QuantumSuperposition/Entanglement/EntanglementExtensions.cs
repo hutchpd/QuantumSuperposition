@@ -1,5 +1,5 @@
-﻿using QuantumSuperposition.Systems;
-using QuantumSuperposition.QuantumSoup;
+﻿using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Systems;
 
 namespace QuantumSuperposition.Entanglement
 {
@@ -15,9 +15,11 @@ namespace QuantumSuperposition.Entanglement
         public static void Entangle<T>(this QuantumSystem system, string groupLabel, params QuBit<T>[] qubits)
         {
             // Use the updated Link method with the provided label.
-            var groupId = system.Entanglement.Link(groupLabel, qubits);
-            foreach (var q in qubits)
+            Guid groupId = system.Entanglement.Link(groupLabel, qubits);
+            foreach (QuBit<T> q in qubits)
+            {
                 q.SetEntanglementGroup(groupId);
+            }
         }
 
     }
@@ -26,7 +28,7 @@ namespace QuantumSuperposition.Entanglement
     {
         public Guid GroupId { get; init; }
         public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-        public List<IQuantumReference> Members { get; init; } = new();
+        public List<IQuantumReference> Members { get; init; } = [];
         public string? ReasonForChange { get; init; }
     }
 }

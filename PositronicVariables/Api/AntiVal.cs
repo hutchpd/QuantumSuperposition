@@ -19,13 +19,15 @@ public static class AntiVal
             InitialiseDefaultRuntime();
         }
 
-        var v = PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
+        PositronicVariable<T> v = PositronicVariable<T>.GetOrCreate(PositronicAmbient.Current);
 
         return v;
     }
 
     private static bool PositronicAmbientIsUninitialized()
-        => PositronicAmbient.Current == null;
+    {
+        return PositronicAmbient.Current == null;
+    }
 
     /// <summary>
     /// If the runtime hasn't been initialized, we gently whisper it into existence like a haunted lullaby. 
@@ -33,8 +35,11 @@ public static class AntiVal
     private static void InitialiseDefaultRuntime()
     {
         if (PositronicAmbient.IsInitialized)
+        {
             return;
-        var hostBuilder = Host.CreateDefaultBuilder()
+        }
+
+        IHostBuilder hostBuilder = Host.CreateDefaultBuilder()
             .ConfigureServices(services => services.AddPositronicRuntime());
         PositronicAmbient.InitialiseWith(hostBuilder);
     }

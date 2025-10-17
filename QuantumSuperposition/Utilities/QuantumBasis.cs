@@ -1,6 +1,6 @@
 ﻿
-using System.Numerics;
 using QuantumSuperposition.Core;
+using System.Numerics;
 
 namespace QuantumSuperposition.Utilities
 {
@@ -82,10 +82,9 @@ namespace QuantumSuperposition.Utilities
             // If mock collapse is active, just return forced value:
             if (qubit.MockCollapseEnabled)
             {
-                if (qubit.MockCollapseValue is null)
-                    throw new InvalidOperationException("Mock collapse enabled but no mock value set.");
-
-                return qubit.MockCollapseValue;
+                return qubit.MockCollapseValue is null
+                    ? throw new InvalidOperationException("Mock collapse enabled but no mock value set.")
+                    : qubit.MockCollapseValue;
             }
 
             // If already collapsed, do nothing:
@@ -96,9 +95,11 @@ namespace QuantumSuperposition.Utilities
 
             // Otherwise, sample from the superposition:
             if (qubit.States.Count == 0)
+            {
                 throw new InvalidOperationException("No states available to collapse.");
+            }
 
-            var picked = qubit.SampleOneValue(rng);
+            T? picked = qubit.SampleOneValue(rng);
 
             // Enforce 'no default(T)' policy if requested:
             if (qubit.ForbidDefault && EqualityComparer<T>.Default.Equals(picked, default!))
@@ -112,7 +113,9 @@ namespace QuantumSuperposition.Utilities
 
             // Make the qubit's Weights reflect the single outcome:
             if (qubit.Weights != null)
+            {
                 qubit.Weights = new Dictionary<T, Complex> { { picked, Complex.One } };
+            }
 
             qubit.MarkCollapsed();
             return picked;
@@ -204,7 +207,7 @@ namespace QuantumSuperposition.Utilities
             this IQuantumArithmeticSource<T> a,
             IQuantumArithmeticSource<T> b)
         {
-            return DoArithmetic(a, b, (x, y) => a.Operators.Add(x, y));
+            return DoArithmetic(a, b, a.Operators.Add);
         }
 
         /// <summary>
@@ -214,7 +217,7 @@ namespace QuantumSuperposition.Utilities
             this IQuantumArithmeticSource<T> a,
             IQuantumArithmeticSource<T> b)
         {
-            return DoArithmetic(a, b, (x, y) => a.Operators.Multiply(x, y));
+            return DoArithmetic(a, b, a.Operators.Multiply);
         }
 
         /// <summary>
@@ -224,7 +227,7 @@ namespace QuantumSuperposition.Utilities
             this IQuantumArithmeticSource<T> a,
             IQuantumArithmeticSource<T> b)
         {
-            return DoArithmetic(a, b, (x, y) => a.Operators.Subtract(x, y));
+            return DoArithmetic(a, b, a.Operators.Subtract);
         }
 
         /// <summary>
@@ -234,7 +237,7 @@ namespace QuantumSuperposition.Utilities
             this IQuantumArithmeticSource<T> a,
             IQuantumArithmeticSource<T> b)
         {
-            return DoArithmetic(a, b, (x, y) => a.Operators.Divide(x, y));
+            return DoArithmetic(a, b, a.Operators.Divide);
         }
 
         /// <summary>
@@ -244,7 +247,7 @@ namespace QuantumSuperposition.Utilities
             this IQuantumArithmeticSource<T> a,
             IQuantumArithmeticSource<T> b)
         {
-            return DoArithmetic(a, b, (x, y) => a.Operators.Mod(x, y));
+            return DoArithmetic(a, b, a.Operators.Mod);
         }
 
 
@@ -257,23 +260,26 @@ namespace QuantumSuperposition.Utilities
             IQuantumArithmeticSource<T> b,
             Func<T, T, T> operation)
         {
-            var newStatesList = new List<T>();
+            List<T> newStatesList = [];
             Dictionary<T, Complex>? newWeights = null;
 
             // If either side is weighted, result is definitely weighted.
-            bool isWeighted = (a.Weights != null || b.Weights != null);
-            if (isWeighted) newWeights = new Dictionary<T, Complex>();
+            bool isWeighted = a.Weights != null || b.Weights != null;
+            if (isWeighted)
+            {
+                newWeights = [];
+            }
 
-            foreach (var aState in a.States)
+            foreach (T? aState in a.States)
             {
                 // amplitude of aState
-                Complex aAmp = (a.Weights != null && a.Weights.TryGetValue(aState, out var xAmp))
+                Complex aAmp = (a.Weights != null && a.Weights.TryGetValue(aState, out Complex xAmp))
                     ? xAmp : Complex.One;
 
-                foreach (var bState in b.States)
+                foreach (T? bState in b.States)
                 {
                     // amplitude of bState
-                    Complex bAmp = (b.Weights != null && b.Weights.TryGetValue(bState, out var yAmp))
+                    Complex bAmp = (b.Weights != null && b.Weights.TryGetValue(bState, out Complex yAmp))
                         ? yAmp : Complex.One;
 
                     // combine values
@@ -283,9 +289,12 @@ namespace QuantumSuperposition.Utilities
                     // multiply amplitudes if weighted
                     if (newWeights != null)
                     {
-                        var combined = aAmp * bAmp;
+                        Complex combined = aAmp * bAmp;
                         if (!newWeights.ContainsKey(newVal))
+                        {
                             newWeights[newVal] = Complex.Zero;
+                        }
+
                         newWeights[newVal] += combined;
                     }
                 }

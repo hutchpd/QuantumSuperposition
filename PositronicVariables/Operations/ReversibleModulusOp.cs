@@ -1,11 +1,11 @@
 ﻿using PositronicVariables.Engine.Logging;
 using PositronicVariables.Maths;
 using PositronicVariables.Operations.Interfaces;
+using PositronicVariables.Runtime;
+using PositronicVariables.Variables;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Linq;
-using PositronicVariables.Runtime;
-using PositronicVariables.Variables;
 
 namespace PositronicVariables.Operations
 {
@@ -18,18 +18,17 @@ namespace PositronicVariables.Operations
     {
         private readonly IPositronicRuntime _runtime;
         public PositronicVariable<T> Variable { get; }
-        private readonly T _divisor;
-        public T Divisor => _divisor;
+        public T Divisor { get; }
         private readonly T _quotient;
 
         public T Original { get; }
 
-        public string OperationName => $"Modulus by {_divisor}";
+        public string OperationName => $"Modulus by {Divisor}";
 
         public ReversibleModulusOp(PositronicVariable<T> variable, T divisor, IPositronicRuntime runtime)
         {
             Variable = variable;
-            _divisor = divisor;
+            Divisor = divisor;
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
 
             // snapshot the value *before* the %
@@ -45,7 +44,9 @@ namespace PositronicVariables.Operations
         /// <param name="value"></param>
         /// <returns></returns>
         public T ApplyForward(T value)
-           => Arithmetic.Modulus(value, _divisor);
+        {
+            return Arithmetic.Modulus(value, Divisor);
+        }
 
         /// <summary>
         /// Forward:   x  ->  x % d
@@ -53,7 +54,9 @@ namespace PositronicVariables.Operations
         /// <param name="value"></param>
         /// <returns></returns>
         public T ApplyInverse(T remainder)
-            => Arithmetic.Add(Arithmetic.Multiply(_quotient, _divisor), remainder);
+        {
+            return Arithmetic.Add(Arithmetic.Multiply(_quotient, Divisor), remainder);
+        }
 
         /// <summary>
         /// Undoing a modulus operation is a bit like trying to un bake a cake.
@@ -61,8 +64,8 @@ namespace PositronicVariables.Operations
         void IOperation.Undo()
         {
             // jam the original quantum sandwich back into the timeline like nothing ever happened
-            var qb = new QuBit<T>(new[] { Original });
-            qb.Any();
+            QuBit<T> qb = new(new[] { Original });
+            _ = qb.Any();
             Variable.timeline[^1] = qb;
 
             // Tell the convergence loop we're done

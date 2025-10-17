@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PositronicVariables.Variables
+﻿namespace PositronicVariables.Variables
 {
     /// <summary>
     /// Direction of time: +1 for forward, -1 for reverse, this time machine only has two gears.

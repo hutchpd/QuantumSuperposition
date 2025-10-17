@@ -1,5 +1,5 @@
-﻿using System.Numerics;
-using QuantumSuperposition.Utilities;
+﻿using QuantumSuperposition.Utilities;
+using System.Numerics;
 
 namespace QuantumSuperposition.Core
 {
@@ -26,13 +26,13 @@ namespace QuantumSuperposition.Core
             int thisRows = Matrix.GetLength(0);
             int thisCols = Matrix.GetLength(1);
             int nextRows = nextGate.Matrix.GetLength(0);
-            int nextCols = nextGate.Matrix.GetLength(1);
+            _ = nextGate.Matrix.GetLength(1);
             if (thisCols != nextRows)
             {
                 throw new InvalidOperationException("Cannot compose gates: dimensions do not match.");
             }
 
-            var result = new Complex[nextRows, thisRows];
+            Complex[,] result = new Complex[nextRows, thisRows];
             // Compose in the proper order: if you have a state vector ψ,
             // applying this then nextGate gives: nextGate.Matrix * (this.Matrix * ψ) 
             // so the composite matrix is nextGate.Matrix * this.Matrix.
@@ -53,10 +53,16 @@ namespace QuantumSuperposition.Core
         }
 
         // Allow implicit conversion from a Complex[,] to a QuantumGate for convenience.
-        public static implicit operator QuantumGate(Complex[,] m) => new QuantumGate(m);
+        public static implicit operator QuantumGate(Complex[,] m)
+        {
+            return new QuantumGate(m);
+        }
 
         // And an implicit conversion so QuantumGate can be used when a Complex[,] is expected.
-        public static implicit operator Complex[,](QuantumGate gate) => gate.Matrix;
+        public static implicit operator Complex[,](QuantumGate gate)
+        {
+            return gate.Matrix;
+        }
     }
 
     /// <summary>
@@ -66,7 +72,7 @@ namespace QuantumSuperposition.Core
     public static class QuantumGates
     {
         // Hadamard gate – creates an equal superposition.
-        public static QuantumGate Hadamard => new QuantumGate(new Complex[,]
+        public static QuantumGate Hadamard => new(new Complex[,]
         {
                 { 1/Math.Sqrt(2), 1/Math.Sqrt(2) },
                 { 1/Math.Sqrt(2), -1/Math.Sqrt(2) }
@@ -127,11 +133,14 @@ namespace QuantumSuperposition.Core
         public static Complex[,] RootNotInverse => QuantumGateTools.InvertGate(RootNot);
 
         // =A phase gate that rotates by a given angle theta.
-        public static Complex[,] Phase(double theta) => new QuantumGate(new Complex[,]
+        public static Complex[,] Phase(double theta)
+        {
+            return new QuantumGate(new Complex[,]
         {
                 { 1, 0 },
                 { 0, Complex.Exp(Complex.ImaginaryOne * theta) }
         });
+        }
 
         public static Complex[,] T => new QuantumGate(new Complex[,]
 {
@@ -140,7 +149,7 @@ namespace QuantumSuperposition.Core
 });
 
         // CNOT gate (a 4×4 matrix)
-        public static QuantumGate CNOT => new QuantumGate(new Complex[,]
+        public static QuantumGate CNOT => new(new Complex[,]
         {
                 {1, 0, 0, 0},
                 {0, 1, 0, 0},

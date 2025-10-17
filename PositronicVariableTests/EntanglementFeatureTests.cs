@@ -1,11 +1,11 @@
-﻿using System.Numerics;
+﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Entanglement;
+using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Systems;
 using QuantumSuperposition.Utilities;
-using QuantumSuperposition.Entanglement;
-using QuantumSuperposition.Core;
-using QuantumSuperposition.QuantumSoup;
+using System.Numerics;
 
-namespace QuantumMathTests
+namespace QuantumSoupTester
 {
     [TestFixture]
     public class EntanglementFeatureTests
@@ -26,8 +26,8 @@ namespace QuantumMathTests
         public void EntangledVariableLinking_CanLinkTwoQubitsInSameSystem_ReturnsSingleGroup()
         {
             // Two lonely qubits meet in a bar. The bar is a quantum system.
-            var qubitA = new QuBit<int>(_system, new[] { 0 });
-            var qubitB = new QuBit<int>(_system, new[] { 1 });
+            QuBit<int> qubitA = new(_system, new[] { 0 });
+            QuBit<int> qubitB = new(_system, new[] { 1 });
 
             _system.Entangle("BellPair_A", qubitA, qubitB);
 
@@ -44,16 +44,15 @@ namespace QuantumMathTests
         public void CollapsePropagation_CollapsingOneQubitNotifiesOthersInGroup()
         {
             // We entangle two qubits. Then we collapse one. Drama ensues.
-            var qubitA = new QuBit<int>(_system, new[] { 0 });
-            var qubitB = new QuBit<int>(_system, new[] { 1 });
+            QuBit<int> qubitA = new(_system, new[] { 0 });
+            QuBit<int> qubitB = new(_system, new[] { 1 });
 
-            qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
-            qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
+            _ = qubitA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
+            _ = qubitB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
             _system.Entangle("MyGroup", qubitA, qubitB);
             _system.SetFromTensorProduct(true, qubitA, qubitB);
             QuantumConfig.ForbidDefaultOnCollapse = false;
-
-            var observedA = qubitA.Observe();
+            _ = qubitA.Observe();
 
             // If A collapses in the forest, B hears it scream.
             Assert.That(qubitA.IsCollapsed, Is.True);
@@ -68,14 +67,14 @@ namespace QuantumMathTests
         public void TensorProductExpansion_CombinesWeightedStatesCorrectly()
         {
             // Creating all the parallel universes a 2-qubit sitcom can support.
-            var qubit1 = new QuBit<int>(new[] { (0, new Complex(1, 0)), (1, new Complex(1, 0)) });
-            var qubit2 = new QuBit<int>(new[] { (0, new Complex(2, 0)), (1, new Complex(0, 2)) });
+            QuBit<int> qubit1 = new(new[] { (0, new Complex(1, 0)), (1, new Complex(1, 0)) });
+            QuBit<int> qubit2 = new(new[] { (0, new Complex(2, 0)), (1, new Complex(0, 2)) });
 
-            var productDict = QuantumMathUtility<int>.TensorProduct(qubit1, qubit2);
+            Dictionary<int[], Complex> productDict = QuantumMathUtility<int>.TensorProduct(qubit1, qubit2);
 
             Assert.That(productDict.Count, Is.EqualTo(4));
-            var zeroZero = productDict.Keys.FirstOrDefault(arr => arr[0] == 0 && arr[1] == 0);
-            var amplitude00 = productDict[zeroZero];
+            int[]? zeroZero = productDict.Keys.FirstOrDefault(arr => arr[0] == 0 && arr[1] == 0);
+            Complex amplitude00 = productDict[zeroZero];
 
             // Confirm the amplitudes are mathematically sound and spiritually fulfilling.
             Assert.That(amplitude00, Is.EqualTo(new Complex(2, 0)));
@@ -87,9 +86,9 @@ namespace QuantumMathTests
         public void EntangledGroupMutation_ChangingOneQubitsWeights_UpdatesSystemForOthers()
         {
             // One qubit decides to "work on itself" — the whole group needs therapy.
-            var qubitA = new QuBit<int>(_system, new[] { 0 })
+            QuBit<int> qubitA = new QuBit<int>(_system, new[] { 0 })
                 .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
-            var qubitB = new QuBit<int>(_system, new[] { 1 })
+            QuBit<int> qubitB = new QuBit<int>(_system, new[] { 1 })
                 .WithWeights(new Dictionary<int, Complex> { { 0, 2.0 }, { 1, 3.0 } }, autoNormalise: true);
 
             _system.Entangle("MutationGroup", qubitA, qubitB);
@@ -108,11 +107,11 @@ namespace QuantumMathTests
         public void EntanglementGroupVersioning_RecordsChangesInHistory()
         {
             // We create a love triangle, but only two commit.
-            var qubitA = new QuBit<int>(_system, new[] { 0 });
-            var qubitB = new QuBit<int>(_system, new[] { 1 });
-            var qubitC = new QuBit<int>(_system, new[] { 2 });
+            QuBit<int> qubitA = new(_system, new[] { 0 });
+            QuBit<int> qubitB = new(_system, new[] { 1 });
+            _ = new QuBit<int>(_system, new[] { 2 });
 
-            var groupId = _manager.Link("FirstPair", qubitA, qubitB);
+            Guid groupId = _manager.Link("FirstPair", qubitA, qubitB);
 
             // We expect the group label to reflect their original love story.
             Assert.That(_manager.GetGroupLabel(groupId), Is.EqualTo("FirstPair"));
@@ -124,26 +123,26 @@ namespace QuantumMathTests
         [Test]
         public void EntanglementGuardrails_LinkQubitsFromDifferentSystems_ThrowsException()
         {
-            var secondSystem = new QuantumSystem();
+            QuantumSystem secondSystem = new();
 
-            var qubitInFirst = new QuBit<bool>(_system, new[] { 0 });
-            var qubitInSecond = new QuBit<bool>(secondSystem, new[] { 0 });
+            QuBit<bool> qubitInFirst = new(_system, new[] { 0 });
+            QuBit<bool> qubitInSecond = new(secondSystem, new[] { 0 });
 
-            Assert.Throws<InvalidOperationException>(() =>
+            _ = Assert.Throws<InvalidOperationException>(() =>
             {
-                _manager.Link("ContradictionGroup", qubitInFirst, qubitInSecond);
+                _ = _manager.Link("ContradictionGroup", qubitInFirst, qubitInSecond);
             }, "Linking across timelines is not just rude — it's forbidden.");
         }
 
         [Test]
         public void EntanglementGuardrails_LinkSingleQubitToItself_ThrowsException()
         {
-            var qubit = new QuBit<int>(_system, new[] { 0 });
+            QuBit<int> qubit = new(_system, new[] { 0 });
 
             Assert.DoesNotThrow(() =>
             {
                 // Either a philosophical crisis or just a self-aware test case.
-                _manager.Link("SelfLink?", qubit);
+                _ = _manager.Link("SelfLink?", qubit);
             }, "If self-linking is wrong, update this test to throw existential errors.");
         }
         #endregion
@@ -152,16 +151,15 @@ namespace QuantumMathTests
         [Test]
         public void MultiPartyCollapse_SameObservationFromAllQubitsInGroup()
         {
-            var qubitX = new QuBit<int>(_system, new[] { 0 })
+            QuBit<int> qubitX = new QuBit<int>(_system, new[] { 0 })
                 .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalise: true);
-            var qubitY = new QuBit<int>(_system, new[] { 1 })
+            QuBit<int> qubitY = new QuBit<int>(_system, new[] { 1 })
                 .WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 2.0 } }, autoNormalise: true);
 
             _system.Entangle("MultiPartyGroup", qubitX, qubitY);
             _system.SetFromTensorProduct(true, qubitX, qubitY);
-
-            var valueX = qubitX.Observe(1234);
-            var valueY = qubitY.GetObservedValue();
+            _ = qubitX.Observe(1234);
+            object? valueY = qubitY.GetObservedValue();
 
             Assert.That(valueY, Is.Not.Null);
             Assert.That(qubitY.IsCollapsed, Is.True);
@@ -173,16 +171,16 @@ namespace QuantumMathTests
         [Test]
         public void EntanglementLocking_FreezesQubitDuringCriticalOperation_ThrowsIfModified()
         {
-            var qubitA = new QuBit<int>(_system, new[] { 0 });
-            var groupId = _manager.Link("LockTestGroup", qubitA);
+            QuBit<int> qubitA = new(_system, new[] { 0 });
+            Guid groupId = _manager.Link("LockTestGroup", qubitA);
 
             qubitA.Lock(); // Schrödinger's DO NOT DISTURB sign
 
             if (qubitA.IsLocked)
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                _ = Assert.Throws<InvalidOperationException>(() =>
                 {
-                    qubitA.Append(42); // Sir, this is a locked multiverse
+                    _ = qubitA.Append(42); // Sir, this is a locked multiverse
                 });
             }
             else
@@ -196,12 +194,12 @@ namespace QuantumMathTests
         [Test]
         public void EntanglementGroupTagging_CanAssignAndRetrieveCustomLabel()
         {
-            var qubitA = new QuBit<bool>(_system, new[] { 0 });
-            var qubitB = new QuBit<bool>(_system, new[] { 1 });
+            QuBit<bool> qubitA = new(_system, new[] { 0 });
+            QuBit<bool> qubitB = new(_system, new[] { 1 });
 
-            var groupId = _manager.Link("BellPair_A", qubitA, qubitB);
+            Guid groupId = _manager.Link("BellPair_A", qubitA, qubitB);
 
-            var label = _manager.GetGroupLabel(groupId);
+            string label = _manager.GetGroupLabel(groupId);
             Assert.That(label, Is.EqualTo("BellPair_A"), "The naming ceremony was successful.");
         }
         #endregion
@@ -210,15 +208,15 @@ namespace QuantumMathTests
         [Test]
         public void PartialCollapseStaging_ObserveFirstQubitThenSecondQubit_StillConsistent()
         {
-            var qubit1 = new QuBit<bool>(_system, new[] { 0 })
+            QuBit<bool> qubit1 = new QuBit<bool>(_system, new[] { 0 })
                 .WithWeights(new Dictionary<bool, Complex> { { false, 1.0 }, { true, 1.0 } }, autoNormalise: true);
-            var qubit2 = new QuBit<bool>(_system, new[] { 1 })
+            QuBit<bool> qubit2 = new QuBit<bool>(_system, new[] { 1 })
                 .WithWeights(new Dictionary<bool, Complex> { { false, 2.0 }, { true, 1.0 } }, autoNormalise: true);
 
             _system.Entangle("PartialCollapse", qubit1, qubit2);
             _system.SetFromTensorProduct(false, qubit1, qubit2);
 
-            var outcomeQ1 = _system.PartialObserve(new[] { 0 }, new Random(42));
+            int[] outcomeQ1 = _system.PartialObserve(new[] { 0 }, new Random(42));
             bool observedQ1 = outcomeQ1[0] != 0;
 
             // Qubit1 should have collapsed.
@@ -231,7 +229,7 @@ namespace QuantumMathTests
             Assert.That(qubit2.GetObservedValue(), Is.Null);
 
             // Now trigger an explicit collapse on qubit2.
-            qubit2.Observe(100);
+            _ = qubit2.Observe(100);
             Assert.That(qubit2.IsCollapsed, Is.True, "Qubit2 finally made up its mind.");
         }
 
@@ -241,17 +239,14 @@ namespace QuantumMathTests
         [Test]
         public void EntanglementGraphDiagnostics_PrintsStatsWithoutError()
         {
-            var qA = new QuBit<int>(_system, new[] { 0 });
-            var qB = new QuBit<int>(_system, new[] { 1 });
-            var qC = new QuBit<int>(_system, new[] { 2 });
+            QuBit<int> qA = new(_system, new[] { 0 });
+            QuBit<int> qB = new(_system, new[] { 1 });
+            QuBit<int> qC = new(_system, new[] { 2 });
 
-            _manager.Link("GroupA", qA);
-            _manager.Link("GroupB", qB, qC);
+            _ = _manager.Link("GroupA", qA);
+            _ = _manager.Link("GroupB", qB, qC);
 
-            Assert.DoesNotThrow(() =>
-            {
-                _manager.PrintEntanglementStats(); // Should print a cosmic diagnostic, not a stack trace.
-            });
+            Assert.DoesNotThrow(_manager.PrintEntanglementStats);
         }
         #endregion
     }

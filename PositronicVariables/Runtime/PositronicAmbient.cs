@@ -1,11 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Runtime
 {
@@ -48,9 +44,11 @@ namespace PositronicVariables.Runtime
         public static void InitialiseWith(IHostBuilder hostBuilder)
         {
             if (IsInitialized)
+            {
                 throw new InvalidOperationException("Positronic runtime already initialised.");
+            }
 
-            var host = hostBuilder.Build();
+            IHost host = hostBuilder.Build();
             Services = host.Services;                   // jam the services into the ambient pocket universe so everything stops throwing tantrums
             Current = host.Services.GetRequiredService<IPositronicRuntime>();
 

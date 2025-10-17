@@ -3,9 +3,6 @@ using PositronicVariables.Runtime;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Variables.Factory
 {
@@ -15,7 +12,7 @@ namespace PositronicVariables.Variables.Factory
         private IPositronicRuntime Runtime => _provider.GetRequiredService<IPositronicRuntime>();
 
         private readonly Dictionary<(Type, string), IPositronicVariable> _multiverseIndex
-            = new();
+            = [];
 
         public ScopedPositronicVariableFactory(IServiceProvider provider)
         {
@@ -25,11 +22,13 @@ namespace PositronicVariables.Variables.Factory
         public PositronicVariable<T> GetOrCreate<T>(string id, T initialValue)
             where T : IComparable<T>
         {
-            var key = (typeof(T), id);
-            if (_multiverseIndex.TryGetValue(key, out var existing))
+            (Type, string id) key = (typeof(T), id);
+            if (_multiverseIndex.TryGetValue(key, out IPositronicVariable existing))
+            {
                 return (PositronicVariable<T>)existing;
+            }
 
-            var created = new PositronicVariable<T>(initialValue, Runtime);
+            PositronicVariable<T> created = new(initialValue, Runtime);
             _multiverseIndex[key] = created;
             return created;
         }
@@ -37,10 +36,13 @@ namespace PositronicVariables.Variables.Factory
         public PositronicVariable<T> GetOrCreate<T>(string id)
             where T : IComparable<T>
         {
-            var key = (typeof(T), id);
-            if (_multiverseIndex.TryGetValue(key, out var existing))
+            (Type, string id) key = (typeof(T), id);
+            if (_multiverseIndex.TryGetValue(key, out IPositronicVariable existing))
+            {
                 return (PositronicVariable<T>)existing;
-            var created = new PositronicVariable<T>(default, Runtime);
+            }
+
+            PositronicVariable<T> created = new(default, Runtime);
             _multiverseIndex[key] = created;
             return created;
         }
@@ -48,10 +50,13 @@ namespace PositronicVariables.Variables.Factory
         public PositronicVariable<T> GetOrCreate<T>(T initialValue)
             where T : IComparable<T>
         {
-            var key = (typeof(T), "default");
-            if (_multiverseIndex.TryGetValue(key, out var existing))
+            (Type, string) key = (typeof(T), "default");
+            if (_multiverseIndex.TryGetValue(key, out IPositronicVariable existing))
+            {
                 return (PositronicVariable<T>)existing;
-            var created = new PositronicVariable<T>(initialValue, Runtime);
+            }
+
+            PositronicVariable<T> created = new(initialValue, Runtime);
             _multiverseIndex[key] = created;
             return created;
         }
@@ -59,17 +64,24 @@ namespace PositronicVariables.Variables.Factory
         void IPositronicVariableRegistry.Add(IPositronicVariable v)
         {
             // pry T out of PositronicVariable<T> with reflection—a technique so eldritch even your toaster fears it
-            var t = v.GetType().GetGenericArguments()[0];
-            var key = (t, Guid.NewGuid().ToString());
+            Type t = v.GetType().GetGenericArguments()[0];
+            (Type t, string) key = (t, Guid.NewGuid().ToString());
             _multiverseIndex[key] = v;
         }
 
         void IPositronicVariableRegistry.Clear()
-                => _multiverseIndex.Clear();
+        {
+            _multiverseIndex.Clear();
+        }
 
         public IEnumerator<IPositronicVariable> GetEnumerator()
-            => _multiverseIndex.Values.GetEnumerator();
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        {
+            return _multiverseIndex.Values.GetEnumerator();
+        }
 
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
     }
 }

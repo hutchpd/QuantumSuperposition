@@ -1,9 +1,4 @@
 ﻿using PositronicVariables.Engine.Transponder;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Initialisation
 {
@@ -18,7 +13,7 @@ namespace PositronicVariables.Initialisation
         /// </summary>
         public static void AutoEnable()
         {
-            var dummy = AethericRedirectionGrid.Initialised;
+            _ = AethericRedirectionGrid.Initialised;
         }
     }
 }

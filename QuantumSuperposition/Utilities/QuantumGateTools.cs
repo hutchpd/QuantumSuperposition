@@ -9,11 +9,15 @@ namespace QuantumSuperposition.Utilities
         {
             int rows = matrix.GetLength(0);
             int cols = matrix.GetLength(1);
-            var result = new Complex[cols, rows]; // transpose shape
+            Complex[,] result = new Complex[cols, rows]; // transpose shape
 
             for (int i = 0; i < rows; i++)
+            {
                 for (int j = 0; j < cols; j++)
+                {
                     result[j, i] = Complex.Conjugate(matrix[i, j]);
+                }
+            }
 
             return result;
         }

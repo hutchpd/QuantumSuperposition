@@ -80,7 +80,10 @@ namespace PositronicVariables.Engine
                     // peel-back is painfully precise; it must not overshoot or undershoot.
                     // just ask a slugblaster.
                     if (_entropy.Entropy > 0)
+                    {
                         QuantumLedgerOfRegret.Record(new MerlinFroMarker());
+                    }
+
                     code();
                 }
                 else
@@ -89,7 +92,9 @@ namespace PositronicVariables.Engine
                 }
 
                 if (_entropy.Entropy > 0)
+                {
                     hadForwardCycle = true;
+                }
 
                 if (bailOnFirstReverseWhenIdle
                     && _entropy.Entropy < 0
@@ -105,8 +110,10 @@ namespace PositronicVariables.Engine
 
                     if (unifyOnConvergence)
                     {
-                        foreach (var pv in PositronicVariable<T>.GetAllVariables(_runtime))
+                        foreach (IPositronicVariable pv in PositronicVariable<T>.GetAllVariables(_runtime))
+                        {
                             pv.UnifyAll();
+                        }
                     }
 
                     _runtime.Converged = true;
@@ -123,12 +130,12 @@ namespace PositronicVariables.Engine
                 // It's like borrowing your toothbrush from a parallel universe—things get weird very fast.
                 if (_entropy.Entropy < 0)
                 {
-                    foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime))
+                    foreach (IPositronicVariable v in PositronicVariable<T>.GetAllVariables(_runtime))
                     {
-                        var pv = (PositronicVariable<T>)v;
-                        var last = pv.GetCurrentQBit();
-                        var copy = new QuBit<T>(last.ToCollapsedValues().ToArray());
-                        copy.Any();
+                        PositronicVariable<T> pv = (PositronicVariable<T>)v;
+                        QuBit<T> last = pv.GetCurrentQBit();
+                        QuBit<T> copy = new(last.ToCollapsedValues().ToArray());
+                        _ = copy.Any();
                         pv.Assign(copy);
                     }
                 }
@@ -142,8 +149,10 @@ namespace PositronicVariables.Engine
                 if (unifyOnConvergence)
                 {
                     _timelineArchivist.ClearSnapshots();
-                    foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime).OfType<PositronicVariable<T>>())
-                        ((PositronicVariable<T>)v).UnifyAll();
+                    foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(_runtime).OfType<PositronicVariable<T>>())
+                    {
+                        v.UnifyAll();
+                    }
                 }
                 // This is the quantum equivalent of nodding politely after the universe finishes talking.
                 _runtime.Entropy = 1;
@@ -154,7 +163,7 @@ namespace PositronicVariables.Engine
                 _ops.UndoLastForwardCycle();
 
                 // Trim the timelines, purge any stray Loki variants.
-                AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
+                _ = AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
 
                 code();
 
@@ -165,14 +174,16 @@ namespace PositronicVariables.Engine
                 // Fallback: we didn't hit the "converged on reverse" condition,
                 // but we still want console-style programs to print the unified result.
                 _timelineArchivist.ClearSnapshots();
-                foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime)
+                foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(_runtime)
                                                        .OfType<PositronicVariable<T>>())
+                {
                     v.UnifyAll();
+                }
 
                 _runtime.Entropy = 1;
                 _runtime.Converged = false;
                 _ops.UndoLastForwardCycle();
-                AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
+                _ = AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
                 code();                     // one last forward pass purely to emit output
                 _runtime.Converged = true;
             }
@@ -181,13 +192,15 @@ namespace PositronicVariables.Engine
 
             _timelineArchivist.ClearSnapshots();
             // re-align each universe's timeline so the current state is the only state
-            foreach (var v in PositronicVariable<T>.GetAllVariables(_runtime)
+            foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(_runtime)
                                                    .OfType<PositronicVariable<T>>())
             {
                 v.ResetDomainToCurrent();
 
                 if (unifyOnConvergence && v.timeline.Count > 1)
+                {
                     v.UnifyAll();   // Every alternate reality now agrees to disagree quietly.
+                }
             }
 
             // This is the portal home back to our reference universe.

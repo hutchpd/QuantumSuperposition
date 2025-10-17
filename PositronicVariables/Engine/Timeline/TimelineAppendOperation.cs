@@ -4,8 +4,6 @@ using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Engine.Timeline
 {
@@ -15,16 +13,15 @@ namespace PositronicVariables.Engine.Timeline
     public class TimelineAppendOperation<T> : IOperation
         where T : IComparable<T>
     {
-        private readonly PositronicVariable<T> _variable;
         private readonly List<QuBit<T>> _backupTimeline;
-        public PositronicVariable<T> Variable => _variable;
+        public PositronicVariable<T> Variable { get; }
         public QuBit<T> AddedSlice { get; }
 
         public string OperationName => "TimelineAppend";
 
         public TimelineAppendOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline, QuBit<T> added)
         {
-            _variable = variable;
+            Variable = variable;
             // Make a safe copy so we can fully restore:
             _backupTimeline = backupTimeline
                 .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
@@ -35,8 +32,8 @@ namespace PositronicVariables.Engine.Timeline
 
         public void Undo()
         {
-            _variable.timeline.Clear();
-            _variable.timeline.AddRange(_backupTimeline);
+            Variable.timeline.Clear();
+            Variable.timeline.AddRange(_backupTimeline);
         }
     }
 }

@@ -21,27 +21,29 @@ internal static class Program
         for (int i = 1; i <= 100; i++)
         {
             // Build a quantum state of all potential divisors.
-            var divisors = new QuBit<int>(Enumerable.Range(2, i > 2 ? i - 2 : 1), intOps);
+            QuBit<int> divisors = new(Enumerable.Range(2, i > 2 ? i - 2 : 1), intOps);
 
             // Collapse the quantum result of (i % all divisors), and check for zeros.
             // If all outcomes were non-zero, then 'i' has no divisors and is prime.
             if ((i % divisors).EvaluateAll())
+            {
                 Console.WriteLine($"{i} is prime!");
+            }
         }
 
         // We extract the factors of 10 by projecting the modulo result (10 % x)
         // across all integers 1 to 10, and filtering the ones where result == 0.
         //
         // This is equivalent to asking the multiverse: "Which of you evenly divide 10?"
-        var factors = Factors(10);
+        Eigenstates<int> factors = Factors(10);
         Console.WriteLine("Factors: " + factors.ToString());
 
         // Using quantum comparison operators to find the minimum of multiple values
         // without sorting or iteration. It’s a logic circuit built from reality checks.
-        Console.WriteLine("min value of 3, 5, 8 is " + MinValue(new[] { 3, 5, 8 }));
+        Console.WriteLine("min value of 3, 5, 8 is " + MinValue([3, 5, 8]));
 
         Console.WriteLine("Press any key to close...");
-        Console.ReadKey();
+        _ = Console.ReadKey();
     }
 
     /// <summary>
@@ -53,7 +55,7 @@ internal static class Program
     public static Eigenstates<int> Factors(int v)
     {
         // Use the new projection constructor.
-        var candidates = new Eigenstates<int>(Enumerable.Range(1, v), x => v % x, intOps);
+        Eigenstates<int> candidates = new(Enumerable.Range(1, v), x => v % x, intOps);
         // Filter for keys whose projected value equals 0.
         return candidates == 0;
     }
@@ -66,9 +68,9 @@ internal static class Program
     /// <returns></returns>
     public static int MinValue(IEnumerable<int> range)
     {
-        var values = new Eigenstates<int>(range, intOps);
+        Eigenstates<int> values = new(range, intOps);
         // Combine filtering operators.
-        var filtered = values.Any() <= values.All();
+        Eigenstates<int> filtered = values.Any() <= values.All();
         return filtered.ToValues().First();
     }
 }

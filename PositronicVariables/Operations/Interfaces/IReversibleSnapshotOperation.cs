@@ -12,10 +12,10 @@ namespace PositronicVariables.Operations.Interfaces
         T Original { get; }
         void IOperation.Undo()
         {
-            var qb = new QuBit<T>(new[] { Original });
-            qb.Any();
+            QuBit<T> qb = new(new[] { Original });
+            _ = qb.Any();
             // Magically swap out the latest cosmic crumb for something more fitting of this reality
-            Variable.timeline[Variable.timeline.Count - 1] = qb;
+            Variable.timeline[^1] = qb;
         }
     }
 }

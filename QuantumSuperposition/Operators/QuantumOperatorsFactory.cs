@@ -1,7 +1,6 @@
-﻿using System;
+﻿using QuantumSuperposition.Core;
 using System.Collections.Concurrent;
 using System.Numerics;
-using QuantumSuperposition.Core;
 
 namespace QuantumSuperposition.Operators
 {
@@ -41,9 +40,9 @@ namespace QuantumSuperposition.Operators
 
         public static IQuantumOperators<T> GetOperators<T>()
         {
-            if (_cache.TryGetValue(typeof(T), out var factoryObj))
+            if (_cache.TryGetValue(typeof(T), out object? factoryObj))
             {
-                var factory = (Func<IQuantumOperators<T>>)(factoryObj);
+                Func<IQuantumOperators<T>> factory = (Func<IQuantumOperators<T>>)factoryObj;
                 return factory();
             }
 

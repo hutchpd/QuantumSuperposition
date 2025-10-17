@@ -3,10 +3,7 @@ using PositronicVariables.Operations.Interfaces;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Operations
 {
@@ -38,13 +35,19 @@ namespace PositronicVariables.Operations
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public T ApplyInverse(T result) => Arithmetic.Subtract(_minuend, result);
+        public T ApplyInverse(T result)
+        {
+            return Arithmetic.Subtract(_minuend, result);
+        }
+
         /// <summary>
         /// And going forwards is just the regular old subtraction we all know and love.
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T value) => Arithmetic.Subtract(_minuend, value);
-
+        public T ApplyForward(T value)
+        {
+            return Arithmetic.Subtract(_minuend, value);
+        }
     }
 }

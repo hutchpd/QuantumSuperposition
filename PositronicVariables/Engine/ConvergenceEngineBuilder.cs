@@ -1,15 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Engine
 {
     public class ConvergenceEngineBuilder<T>
         where T : IComparable<T>
     {
-        private readonly List<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>> _middlewares = new();
+        private readonly List<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>> _middlewares = [];
 
         /// <summary>
         /// Bolts a new questionable device onto the engine. Nobody asked what it does, and it's too late to stop now.
@@ -26,7 +24,7 @@ namespace PositronicVariables.Engine
         public IImprobabilityEngine<T> Build(IImprobabilityEngine<T> core)
         {
             IImprobabilityEngine<T> engine = core;
-            foreach (var middleware in _middlewares.Reverse<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>>())
+            foreach (Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>> middleware in _middlewares.Reverse<Func<IImprobabilityEngine<T>, IImprobabilityEngine<T>>>())
             {
                 engine = middleware(engine);
             }

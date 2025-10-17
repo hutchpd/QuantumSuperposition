@@ -26,13 +26,20 @@ namespace PositronicVariables.Operations
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public T ApplyInverse(T result) => Original;
+        public T ApplyInverse(T result)
+        {
+            return Original;
+        }
+
         /// <summary>
         /// Time travel as we know it on a day to day basis
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T value) => _assigned;
+        public T ApplyForward(T value)
+        {
+            return _assigned;
+        }
     }
 
 }

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace PositronicVariables.Engine.Logging
 {
@@ -11,7 +7,7 @@ namespace PositronicVariables.Engine.Logging
     /// </summary>
     public static class QuantumLedgerOfRegret
     {
-        private static readonly Stack<IOperation> _log = new Stack<IOperation>();
+        private static readonly Stack<IOperation> _log = new();
 
         public static void Record(IOperation op)
         {
@@ -27,7 +23,7 @@ namespace PositronicVariables.Engine.Logging
         {
             while (_log.Count > 0)
             {
-                var op = _log.Pop();
+                IOperation op = _log.Pop();
                 op.Undo();
             }
         }
@@ -36,9 +32,14 @@ namespace PositronicVariables.Engine.Logging
         public static void Pop()
         {
             if (_log.Count > 0)
-                _log.Pop();
+            {
+                _ = _log.Pop();
+            }
         }
 
-        public static void Clear() => _log.Clear();
+        public static void Clear()
+        {
+            _log.Clear();
+        }
     }
 }

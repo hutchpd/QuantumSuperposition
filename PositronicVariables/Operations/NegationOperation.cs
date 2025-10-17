@@ -1,9 +1,9 @@
 ﻿using PositronicVariables.Maths;
 using PositronicVariables.Operations.Interfaces;
-using System;
-using System.Linq;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables;
+using System;
+using System.Linq;
 
 namespace PositronicVariables.Operations
 {
@@ -28,13 +28,19 @@ namespace PositronicVariables.Operations
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public T ApplyInverse(T result) => Arithmetic.Negate(result);
+        public T ApplyInverse(T result)
+        {
+            return Arithmetic.Negate(result);
+        }
+
         /// <summary>
         /// And going forwards is just the regular old negation.
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T value) => Arithmetic.Negate(value);
-
+        public T ApplyForward(T value)
+        {
+            return Arithmetic.Negate(value);
+        }
     }
 }

@@ -1,11 +1,7 @@
 ﻿using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Variables.Factory;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Runtime
 {
@@ -31,8 +27,8 @@ namespace PositronicVariables.Runtime
             Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
 
             // Create a minimal fake IServiceProvider
-            var provider = new FallbackServiceProvider(this);
-            var scoped = new ScopedPositronicVariableFactory(provider);
+            FallbackServiceProvider provider = new(this);
+            ScopedPositronicVariableFactory scoped = new(provider);
 
             Factory = scoped;
             Variables = scoped;
@@ -53,9 +49,9 @@ namespace PositronicVariables.Runtime
 
             public object GetService(Type serviceType)
             {
-                if (serviceType == typeof(IPositronicRuntime))
-                    return _runtime;
-                throw new InvalidOperationException($"Service {serviceType.Name} not available in fallback provider.");
+                return serviceType == typeof(IPositronicRuntime)
+                    ? (object)_runtime
+                    : throw new InvalidOperationException($"Service {serviceType.Name} not available in fallback provider.");
             }
         }
 
@@ -69,6 +65,9 @@ namespace PositronicVariables.Runtime
         }
 
         // Helper to invoke the global convergence event.
-        public void FireAllConverged() => OnAllConverged?.Invoke();
+        public void FireAllConverged()
+        {
+            OnAllConverged?.Invoke();
+        }
     }
 }

@@ -6,8 +6,6 @@ using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Neural
 {
@@ -17,7 +15,7 @@ namespace PositronicVariables.Neural
     /// </summary>
     public class NeuralNodule<T> where T : struct, IComparable<T>
     {
-        public List<PositronicVariable<T>> Inputs { get; } = new();
+        public List<PositronicVariable<T>> Inputs { get; } = [];
         public PositronicVariable<T> Output { get; }
         public Func<IEnumerable<T>, QuBit<T>> ActivationFunction { get; set; }
 
@@ -34,7 +32,7 @@ namespace PositronicVariables.Neural
                 {
                     if (!PositronicAmbient.IsInitialized)
                     {
-                        var hb = Host.CreateDefaultBuilder()
+                        IHostBuilder hb = Host.CreateDefaultBuilder()
                                      .ConfigureServices(s => s.AddPositronicRuntime());
                         PositronicAmbient.InitialiseWith(hb);
                     }
@@ -51,7 +49,7 @@ namespace PositronicVariables.Neural
         public NeuralNodule(Func<IEnumerable<T>, QuBit<T>> activation, IPositronicRuntime runtime)
         {
             ActivationFunction = activation;
-            Output = new PositronicVariable<T>(default(T), runtime);
+            Output = new PositronicVariable<T>(default, runtime);
         }
 
         /// <summary>
@@ -60,9 +58,9 @@ namespace PositronicVariables.Neural
         /// </summary>
         public void Fire()
         {
-            var inputValues = Inputs.SelectMany(i => i.ToValues());
-            var result = ActivationFunction(inputValues);
-            result.Any();
+            IEnumerable<T> inputValues = Inputs.SelectMany(i => i.ToValues());
+            QuBit<T> result = ActivationFunction(inputValues);
+            _ = result.Any();
             Output.Assign(result);
         }
 
@@ -76,8 +74,10 @@ namespace PositronicVariables.Neural
         {
             PositronicVariable<T>.RunConvergenceLoop(runtime, () =>
             {
-                foreach (var node in nodes)
+                foreach (NeuralNodule<T> node in nodes)
+                {
                     node.Fire();
+                }
             });
         }
     }

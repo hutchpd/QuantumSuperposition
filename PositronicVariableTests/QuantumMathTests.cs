@@ -1,11 +1,11 @@
 ﻿// QuantumMathComplexTests — Because reality isn't weird enough until it's imaginary.
 
-using System.Numerics;
 using QuantumSuperposition.Core;
-using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
+using QuantumSuperposition.QuantumSoup;
+using System.Numerics;
 
-namespace QuantumMathTests
+namespace QuantumSoupTester
 {
     [TestFixture]
     public class QuantumMathComplexTests
@@ -25,8 +25,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_AllNonDefault_ReturnsTrue_Complex()
         {
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), new Complex(2, 0), new Complex(0, 3) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 1), new Complex(2, 0), new Complex(0, 3)],
                 complexOps
             );
 
@@ -37,8 +37,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_ContainsDefault_ReturnsFalse_Complex()
         {
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), Complex.Zero, new Complex(0, 3) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 1), Complex.Zero, new Complex(0, 3)],
                 complexOps
             );
 
@@ -51,17 +51,19 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 2), new Complex(3, 4) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 2), new Complex(3, 4)],
                 complexOps
             );
-            var scalar = new Complex(1, 1);
-            var result = (qubit + scalar).States.ToList();
-            var expected = new List<Complex> { new Complex(2, 3), new Complex(4, 5) };
+            Complex scalar = new(1, 1);
+            List<Complex> result = (qubit + scalar).States.ToList();
+            List<Complex> expected = [new Complex(2, 3), new Complex(4, 5)];
 
             Assert.That(result.Count, Is.EqualTo(expected.Count));
             for (int i = 0; i < expected.Count; i++)
+            {
                 AssertComplexEqual(expected[i], result[i]);
+            }
         }
 
         [Test]
@@ -69,23 +71,23 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubitA = new QuBit<Complex>(
-                new List<Complex> { new Complex(2, 0), new Complex(1, 1) },
+            QuBit<Complex> qubitA = new(
+                [new Complex(2, 0), new Complex(1, 1)],
                 complexOps
             );
-            var qubitB = new QuBit<Complex>(
-                new List<Complex> { new Complex(3, 0), new Complex(0, 2) },
+            QuBit<Complex> qubitB = new(
+                [new Complex(3, 0), new Complex(0, 2)],
                 complexOps
             );
 
-            var result = (qubitA * qubitB).States.ToList();
-            var expected = new List<Complex>
-    {
+            List<Complex> result = (qubitA * qubitB).States.ToList();
+            List<Complex> expected =
+            [
         new Complex(6, 0),
         new Complex(0, 4),
         new Complex(3, 3),
         new Complex(-2, 2)
-    };
+    ];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -93,15 +95,15 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_Append_IncreasesWeight_Complex()
         {
-            var weightedItems = new[]
+            (Complex, Complex)[] weightedItems = new[]
             {
         (new Complex(1, 0), (Complex)0.5),
         (new Complex(2, 0), (Complex)1.0)
     };
-            var qubit = new QuBit<Complex>(weightedItems, complexOps);
-            qubit.Append(new Complex(1, 0));
+            QuBit<Complex> qubit = new(weightedItems, complexOps);
+            _ = qubit.Append(new Complex(1, 0));
 
-            var dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
+            Dictionary<Complex, Complex> dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
             Assert.That(dict[new Complex(1, 0)].Real, Is.EqualTo(1.5).Within(1e-12));
             Assert.That(dict[new Complex(2, 0)].Real, Is.EqualTo(1.0).Within(1e-12));
         }
@@ -109,15 +111,15 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_NormalizeWeights_MakesSumEqualOne_Complex()
         {
-            var weightedItems = new (Complex value, Complex weight)[]
+            (Complex value, Complex weight)[] weightedItems = new (Complex value, Complex weight)[]
             {
         (new Complex(1, 1), 0.3),
         (new Complex(2, 2), 0.7)
             };
-            var qubit = new QuBit<Complex>(weightedItems, complexOps);
+            QuBit<Complex> qubit = new(weightedItems, complexOps);
 
             qubit.NormaliseWeights();
-            var dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
+            Dictionary<Complex, Complex> dict = qubit.ToWeightedValues().ToDictionary(x => x.value, x => x.weight);
 
             double sumSq = dict.Values.Sum(w => w.Magnitude * w.Magnitude);
             Assert.That(sumSq, Is.EqualTo(1.0).Within(1e-12));
@@ -126,13 +128,13 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_Observe_WithSeed_IsDeterministic()
         {
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 1), new Complex(2, 0)],
                 complexOps
             );
 
-            var observed1 = qubit.Observe(42);
-            var observed2 = qubit.Observe(42);
+            Complex observed1 = qubit.Observe(42);
+            Complex observed2 = qubit.Observe(42);
 
             Assert.That(observed1, Is.EqualTo(observed2));
         }
@@ -140,28 +142,28 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_WithMockCollapse_ReturnsForcedValue()
         {
-            var forcedValue = new Complex(5, 5);
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+            Complex forcedValue = new(5, 5);
+            QuBit<Complex> qubit = new QuBit<Complex>(
+                [new Complex(1, 1), new Complex(2, 0)],
                 complexOps
             ).WithMockCollapse(forcedValue);
 
-            var observed = qubit.Observe();
+            Complex observed = qubit.Observe();
             Assert.That(observed, Is.EqualTo(forcedValue));
         }
 
         [Test]
         public void QuBit_ObserveInBasis_AppliesHadamardAndCollapses()
         {
-            var weightedStates = new List<(Complex value, Complex weight)>
-    {
+            List<(Complex value, Complex weight)> weightedStates =
+            [
         (new Complex(1, 0), new Complex(1, 0)),
         (new Complex(0, 1), new Complex(0, 1))
-    };
-            var qubit = new QuBit<Complex>(weightedStates, complexOps);
+    ];
+            QuBit<Complex> qubit = new(weightedStates, complexOps);
 
-            var observed = qubit.ObserveInBasis(QuantumGates.Hadamard);
-            var originalStates = weightedStates.Select(ws => ws.value).ToList();
+            Complex observed = qubit.ObserveInBasis(QuantumGates.Hadamard);
+            List<Complex> originalStates = weightedStates.Select(ws => ws.value).ToList();
 
             Assert.That(originalStates, Does.Contain(observed));
         }
@@ -169,11 +171,11 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_ModificationAfterCollapse_ThrowsException()
         {
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 1), new Complex(2, 0)],
                 complexOps
             );
-            var _ = qubit.Observe();
+            Complex _ = qubit.Observe();
 
             Assert.That(() => qubit.Append(new Complex(1, 1)), Throws.TypeOf<InvalidOperationException>());
         }
@@ -181,13 +183,13 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_CloneMutable_AllowsModificationsAfterCollapse()
         {
-            var qubit = new QuBit<Complex>(
-                new List<Complex> { new Complex(1, 1), new Complex(2, 0) },
+            QuBit<Complex> qubit = new(
+                [new Complex(1, 1), new Complex(2, 0)],
                 complexOps
             );
 
-            var mutableClone = (QuBit<Complex>)qubit.Clone();
-            var _ = qubit.Observe();
+            QuBit<Complex> mutableClone = (QuBit<Complex>)qubit.Clone();
+            Complex _ = qubit.Observe();
 
             Assert.That(() => mutableClone.Append(new Complex(3, 3)), Throws.Nothing);
         }
@@ -195,13 +197,13 @@ namespace QuantumMathTests
         [Test]
         public void Eigenstates_Equality_Checks()
         {
-            var weightedItems = new (Complex, Complex)[]
+            (Complex, Complex)[] weightedItems = new (Complex, Complex)[]
             {
         (new Complex(10, 0), 0.1),
         (new Complex(20, 0), 0.3)
             };
-            var eigenA = new Eigenstates<Complex>(weightedItems, complexOps);
-            var eigenB = new Eigenstates<Complex>(weightedItems, complexOps);
+            Eigenstates<Complex> eigenA = new(weightedItems, complexOps);
+            Eigenstates<Complex> eigenB = new(weightedItems, complexOps);
 
             Assert.That(eigenA.Equals(eigenB), Is.True);
             Assert.That(eigenA.StrictlyEquals(eigenB), Is.True);
@@ -229,13 +231,13 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubit = new QuBit<double>(
-                new List<double> { 1.0, 2.0 },
+            QuBit<double> qubit = new(
+                [1.0, 2.0],
                 doubleOps
             );
-            var scalar = 1.5;
-            var result = (qubit + scalar).States.ToList();
-            var expected = new List<double> { 2.5, 3.5 };
+            double scalar = 1.5;
+            List<double> result = (qubit + scalar).States.ToList();
+            List<double> expected = [2.5, 3.5];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -245,17 +247,17 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubitA = new QuBit<double>(
-                new List<double> { 2.0, 3.0 },
+            QuBit<double> qubitA = new(
+                [2.0, 3.0],
                 doubleOps
             );
-            var qubitB = new QuBit<double>(
-                new List<double> { 4.0, 5.0 },
+            QuBit<double> qubitB = new(
+                [4.0, 5.0],
                 doubleOps
             );
 
-            var result = (qubitA * qubitB).States.ToList();
-            var expected = new List<double> { 8.0, 10.0, 12.0, 15.0 };
+            List<double> result = (qubitA * qubitB).States.ToList();
+            List<double> expected = [8.0, 10.0, 12.0, 15.0];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -265,13 +267,13 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubit = new QuBit<double>(
-                new List<double> { 5.5, 7.0 },
+            QuBit<double> qubit = new(
+                [5.5, 7.0],
                 doubleOps
             );
-            var scalar = 3.0;
-            var result = (qubit % scalar).States.ToList();
-            var expected = new List<double> { 5.5 % 3.0, 7.0 % 3.0 };
+            double scalar = 3.0;
+            List<double> result = (qubit % scalar).States.ToList();
+            List<double> expected = [5.5 % 3.0, 7.0 % 3.0];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -281,23 +283,23 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubitA = new QuBit<double>(
-                new List<double> { 10.5, 12.0 },
+            QuBit<double> qubitA = new(
+                [10.5, 12.0],
                 doubleOps
             );
-            var qubitB = new QuBit<double>(
-                new List<double> { 2.0, 3.0 },
+            QuBit<double> qubitB = new(
+                [2.0, 3.0],
                 doubleOps
             );
 
-            var result = (qubitA % qubitB).States.ToList();
-            var expected = new List<double>
-            {
+            List<double> result = (qubitA % qubitB).States.ToList();
+            List<double> expected =
+            [
                 10.5 % 2.0,
                 10.5 % 3.0,
                 12.0 % 2.0,
                 12.0 % 3.0
-            };
+            ];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -307,13 +309,13 @@ namespace QuantumMathTests
         {
             QuantumConfig.EnableNonObservationalArithmetic = true;
 
-            var qubit = new QuBit<double>(
-                new List<double> { 8.0, 6.0 },
+            QuBit<double> qubit = new(
+                [8.0, 6.0],
                 doubleOps
             );
-            var scalar = 2.0;
-            var result = (qubit / scalar).States.ToList();
-            var expected = new List<double> { 4.0, 3.0 };
+            double scalar = 2.0;
+            List<double> result = (qubit / scalar).States.ToList();
+            List<double> expected = [4.0, 3.0];
 
             Assert.That(result, Is.EquivalentTo(expected));
         }
@@ -321,8 +323,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_AllPositive_ReturnsTrue_Double()
         {
-            var qubit = new QuBit<double>(
-                new List<double> { 1.0, 2.0, 3.0 },
+            QuBit<double> qubit = new(
+                [1.0, 2.0, 3.0],
                 doubleOps
             );
 
@@ -333,8 +335,8 @@ namespace QuantumMathTests
         [Test]
         public void QuBit_EvaluateAll_ContainsZero_ReturnsFalse_Double()
         {
-            var qubit = new QuBit<double>(
-                new List<double> { 0.0, 2.0 },
+            QuBit<double> qubit = new(
+                [0.0, 2.0],
                 doubleOps
             );
 
@@ -345,7 +347,7 @@ namespace QuantumMathTests
         [Test]
         public void DoubleOperators_Modulus_Works()
         {
-            var ops = new DoubleOperators();
+            DoubleOperators ops = new();
 
             double a = 10.5;
             double b = 3.0;
@@ -357,7 +359,7 @@ namespace QuantumMathTests
         [Test]
         public void DoubleOperators_Divide_Works()
         {
-            var ops = new DoubleOperators();
+            DoubleOperators ops = new();
             double a = 10.0;
             double b = 2.5;
             double result = ops.Divide(a, b);

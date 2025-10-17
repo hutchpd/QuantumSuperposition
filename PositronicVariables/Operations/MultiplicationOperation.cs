@@ -1,9 +1,9 @@
 ﻿using PositronicVariables.Maths;
 using PositronicVariables.Operations.Interfaces;
-using System;
-using System.Linq;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables;
+using System;
+using System.Linq;
 
 namespace PositronicVariables.Operations
 {
@@ -34,13 +34,19 @@ namespace PositronicVariables.Operations
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public T ApplyInverse(T result) => Arithmetic.Divide(result, _multiplier);
+        public T ApplyInverse(T result)
+        {
+            return Arithmetic.Divide(result, _multiplier);
+        }
+
         /// <summary>
         /// Otherwise we get out the multiplication table.
         /// </summary>
         /// <param name="value"></param>
         /// <returns></returns>
-        public T ApplyForward(T value) => Arithmetic.Multiply(value, _multiplier);
-
+        public T ApplyForward(T value)
+        {
+            return Arithmetic.Multiply(value, _multiplier);
+        }
     }
 }

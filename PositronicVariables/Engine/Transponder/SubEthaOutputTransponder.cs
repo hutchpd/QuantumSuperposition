@@ -4,13 +4,9 @@ using System.IO;
 
 namespace PositronicVariables.Engine.Transponder
 {
-    public class SubEthaOutputTransponder : ISubEthaTransponder
+    public class SubEthaOutputTransponder(IPositronicRuntime runtime) : ISubEthaTransponder
     {
-        private readonly IPositronicRuntime _runtime;
         private TextWriter _originalOut;
-
-        public SubEthaOutputTransponder(IPositronicRuntime runtime)
-            => _runtime = runtime;
 
         public void Redirect()
         {
@@ -20,12 +16,12 @@ namespace PositronicVariables.Engine.Transponder
                 : Console.Out;
             // Hijack the console output like a space-time parasite.
             Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
-            _runtime.Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
+            runtime.Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
         }
         public void Restore()
         {
 
-            var bufferText = AethericRedirectionGrid.ImprobabilityDrive.ToString();
+            string bufferText = AethericRedirectionGrid.ImprobabilityDrive.ToString();
             if (!AethericRedirectionGrid.AtTheRestaurant)
             {
                 _originalOut.Write(bufferText);

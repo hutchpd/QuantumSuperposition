@@ -13,17 +13,16 @@ namespace PositronicVariables.Engine.Timeline
     public class TimelineReplaceOperation<T> : IOperation
         where T : IComparable<T>
     {
-        private readonly PositronicVariable<T> _variable;
         private readonly List<QuBit<T>> _backupTimeline;
 
-        public PositronicVariable<T> Variable => _variable;
+        public PositronicVariable<T> Variable { get; }
         internal QuBit<T> ReplacedSlice => _backupTimeline[^1];
 
         public string OperationName => "TimelineReplace";
 
         public TimelineReplaceOperation(PositronicVariable<T> variable, List<QuBit<T>> backupTimeline)
         {
-            _variable = variable;
+            Variable = variable;
             _backupTimeline = backupTimeline
                 .Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))
                 .ToList();
@@ -31,8 +30,8 @@ namespace PositronicVariables.Engine.Timeline
 
         public void Undo()
         {
-            _variable.timeline.Clear();
-            _variable.timeline.AddRange(_backupTimeline);
+            Variable.timeline.Clear();
+            Variable.timeline.AddRange(_backupTimeline);
         }
     }
 }

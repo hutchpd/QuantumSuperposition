@@ -1,6 +1,6 @@
-﻿using System.Numerics;
+﻿using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
-using QuantumSuperposition.Core;
+using System.Numerics;
 
 namespace QuantumSuperposition.QuantumSoup
 {
@@ -22,7 +22,11 @@ namespace QuantumSuperposition.QuantumSoup
         public Eigenstates(IEnumerable<T> Items, IQuantumOperators<T> ops)
         {
             // same weight, then the waveform should collapse to the same value
-            if (Items == null) throw new ArgumentNullException(nameof(Items));
+            if (Items == null)
+            {
+                throw new ArgumentNullException(nameof(Items));
+            }
+
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
             _qDict = Items.Distinct().ToDictionary(x => x, x => x);
         }
@@ -34,8 +38,16 @@ namespace QuantumSuperposition.QuantumSoup
 
         public Eigenstates(IEnumerable<T> inputValues, Func<T, T> projection, IQuantumOperators<T> ops)
         {
-            if (inputValues == null) throw new ArgumentNullException(nameof(inputValues));
-            if (projection == null) throw new ArgumentNullException(nameof(projection));
+            if (inputValues == null)
+            {
+                throw new ArgumentNullException(nameof(inputValues));
+            }
+
+            if (projection == null)
+            {
+                throw new ArgumentNullException(nameof(projection));
+            }
+
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
 
             _qDict = inputValues.ToDictionary(x => x, projection);
@@ -48,14 +60,21 @@ namespace QuantumSuperposition.QuantumSoup
 
         public Eigenstates(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops)
         {
-            if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
+            if (weightedItems == null)
+            {
+                throw new ArgumentNullException(nameof(weightedItems));
+            }
+
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
 
-            var dict = new Dictionary<T, Complex>();
-            foreach (var (val, w) in weightedItems)
+            Dictionary<T, Complex> dict = [];
+            foreach ((T val, Complex w) in weightedItems)
             {
                 if (!dict.ContainsKey(val))
+                {
                     dict[val] = 0.0;
+                }
+
                 dict[val] += w;
             }
 
@@ -102,24 +121,24 @@ namespace QuantumSuperposition.QuantumSoup
         private Eigenstates<T> Do_oper_type(Eigenstates<T> a, Eigenstates<T> b, Func<T, T, T> op)
         {
             // Use a dictionary to accumulate combined weights keyed by the computed result value.
-            var newWeights = new Dictionary<T, Complex>();
+            Dictionary<T, Complex> newWeights = [];
 
             // Loop through all weighted values from both operands.
-            foreach (var (valA, wA) in a.ToMappedWeightedValues())
+            foreach ((T valA, Complex wA) in a.ToMappedWeightedValues())
             {
-                foreach (var (valB, wB) in b.ToMappedWeightedValues())
+                foreach ((T valB, Complex wB) in b.ToMappedWeightedValues())
                 {
-                    var newValue = op(valA, valB);
+                    T? newValue = op(valA, valB);
                     Complex combinedWeight = wA * wB;
-                    newWeights[newValue] = newWeights.TryGetValue(newValue, out var existing)
+                    newWeights[newValue] = newWeights.TryGetValue(newValue, out Complex existing)
                         ? existing + combinedWeight
                         : combinedWeight;
                 }
             }
 
             // Create a new key->value mapping where each key maps to itself.
-            var newDict = newWeights.Keys.ToDictionary(x => x, x => x);
-            var e = new Eigenstates<T>(newDict, a._ops)
+            Dictionary<T, T> newDict = newWeights.Keys.ToDictionary(x => x, x => x);
+            Eigenstates<T> e = new(newDict, a._ops)
             {
                 _weights = newWeights
             };
@@ -135,26 +154,30 @@ namespace QuantumSuperposition.QuantumSoup
         /// <returns></returns>
         private Eigenstates<T> Do_oper_type(Eigenstates<T> a, T b, Func<T, T, T> op)
         {
-            var result = new Dictionary<T, T>();
+            Dictionary<T, T> result = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (a._weights != null)
-                newWeights = new Dictionary<T, Complex>();
-
-            foreach (var kvp in a._qDict)
             {
-                var newVal = op(kvp.Value, b);
+                newWeights = [];
+            }
+
+            foreach (KeyValuePair<T, T> kvp in a._qDict)
+            {
+                T? newVal = op(kvp.Value, b);
                 result[kvp.Key] = newVal;  // retain original key, update value
 
                 if (newWeights != null)
                 {
-                    Complex wA = a._weights != null && a._weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
+                    Complex wA = a._weights != null && a._weights.TryGetValue(kvp.Key, out Complex aw) ? aw : 1.0;
                     newWeights[kvp.Key] = wA;  // use original key
                 }
             }
 
-            var e = new Eigenstates<T>(result, a._ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(result, a._ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
@@ -167,64 +190,108 @@ namespace QuantumSuperposition.QuantumSoup
         /// <returns></returns>
         private Eigenstates<T> Do_oper_type(T a, Eigenstates<T> b, Func<T, T, T> op)
         {
-            var result = new Dictionary<T, T>();
+            Dictionary<T, T> result = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (b._weights != null)
-                newWeights = new Dictionary<T, Complex>();
-
-            foreach (var kvp in b._qDict)
             {
-                var newVal = op(a, kvp.Value);
+                newWeights = [];
+            }
+
+            foreach (KeyValuePair<T, T> kvp in b._qDict)
+            {
+                T? newVal = op(a, kvp.Value);
                 result[kvp.Key] = newVal;  // retain original key, update value
 
                 if (newWeights != null)
                 {
-                    Complex wB = b._weights != null && b._weights.TryGetValue(kvp.Key, out var bw) ? bw : 1.0;
+                    Complex wB = b._weights != null && b._weights.TryGetValue(kvp.Key, out Complex bw) ? bw : 1.0;
                     newWeights[kvp.Key] = wB;  // use original key
                 }
             }
 
-            var e = new Eigenstates<T>(result, b._ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(result, b._ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
 
-        public static Eigenstates<T> operator %(T a, Eigenstates<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Mod(x, y));
-        public static Eigenstates<T> operator %(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Mod(x, y));
-        public static Eigenstates<T> operator %(Eigenstates<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Mod(x, y));
+        public static Eigenstates<T> operator %(T a, Eigenstates<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Mod);
+        }
 
-        public static Eigenstates<T> operator +(T a, Eigenstates<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Add(x, y));
-        public static Eigenstates<T> operator +(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Add(x, y));
-        public static Eigenstates<T> operator +(Eigenstates<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Add(x, y));
+        public static Eigenstates<T> operator %(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Mod);
+        }
 
-        public static Eigenstates<T> operator -(T a, Eigenstates<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Subtract(x, y));
-        public static Eigenstates<T> operator -(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Subtract(x, y));
-        public static Eigenstates<T> operator -(Eigenstates<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Subtract(x, y));
+        public static Eigenstates<T> operator %(Eigenstates<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Mod);
+        }
 
-        public static Eigenstates<T> operator *(T a, Eigenstates<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Multiply(x, y));
-        public static Eigenstates<T> operator *(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Multiply(x, y));
-        public static Eigenstates<T> operator *(Eigenstates<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Multiply(x, y));
+        public static Eigenstates<T> operator +(T a, Eigenstates<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Add);
+        }
 
-        public static Eigenstates<T> operator /(T a, Eigenstates<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Divide(x, y));
-        public static Eigenstates<T> operator /(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Divide(x, y));
-        public static Eigenstates<T> operator /(Eigenstates<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Divide(x, y));
+        public static Eigenstates<T> operator +(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Add);
+        }
+
+        public static Eigenstates<T> operator +(Eigenstates<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Add);
+        }
+
+        public static Eigenstates<T> operator -(T a, Eigenstates<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Subtract);
+        }
+
+        public static Eigenstates<T> operator -(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Subtract);
+        }
+
+        public static Eigenstates<T> operator -(Eigenstates<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Subtract);
+        }
+
+        public static Eigenstates<T> operator *(T a, Eigenstates<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Multiply);
+        }
+
+        public static Eigenstates<T> operator *(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Multiply);
+        }
+
+        public static Eigenstates<T> operator *(Eigenstates<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Multiply);
+        }
+
+        public static Eigenstates<T> operator /(T a, Eigenstates<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Divide);
+        }
+
+        public static Eigenstates<T> operator /(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Divide);
+        }
+
+        public static Eigenstates<T> operator /(Eigenstates<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Divide);
+        }
 
         #endregion
 
@@ -234,48 +301,54 @@ namespace QuantumSuperposition.QuantumSoup
 
         private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, T value)
         {
-            var result = new Dictionary<T, T>();
+            Dictionary<T, T> result = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (_weights != null)
-                newWeights = new Dictionary<T, Complex>();
+            {
+                newWeights = [];
+            }
 
-            foreach (var kvp in _qDict)
+            foreach (KeyValuePair<T, T> kvp in _qDict)
             {
                 if (condition(kvp.Value, value))
                 {
                     result[kvp.Key] = kvp.Value;
                     if (newWeights != null)
                     {
-                        Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
+                        Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out Complex aw) ? aw : 1.0;
                         newWeights[kvp.Key] = wA;
                     }
                 }
             }
-            var e = new Eigenstates<T>(result, _ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(result, _ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
         private Eigenstates<T> Do_condition_type(Func<T, T, bool> condition, Eigenstates<T> other)
         {
-            var result = new Dictionary<T, T>();
+            Dictionary<T, T> result = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (_weights != null || other._weights != null)
-                newWeights = new Dictionary<T, Complex>();
-
-            foreach (var kvp in _qDict)
             {
-                foreach (var kvp2 in other._qDict)
+                newWeights = [];
+            }
+
+            foreach (KeyValuePair<T, T> kvp in _qDict)
+            {
+                foreach (KeyValuePair<T, T> kvp2 in other._qDict)
                 {
                     if (condition(kvp.Value, kvp2.Value))
                     {
                         result[kvp.Key] = kvp.Value;
                         if (newWeights != null)
                         {
-                            Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out var aw) ? aw : 1.0;
-                            Complex wB = other._weights != null && other._weights.TryGetValue(kvp2.Key, out var bw) ? bw : 1.0;
+                            Complex wA = _weights != null && _weights.TryGetValue(kvp.Key, out Complex aw) ? aw : 1.0;
+                            Complex wB = other._weights != null && other._weights.TryGetValue(kvp2.Key, out Complex bw) ? bw : 1.0;
                             newWeights[kvp.Key] = wA * wB;
                         }
                         break; // break on first match
@@ -283,35 +356,72 @@ namespace QuantumSuperposition.QuantumSoup
                 }
             }
 
-            var e = new Eigenstates<T>(result, _ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(result, _ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
-        public static Eigenstates<T> operator <=(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.LessThanOrEqual(x, y), b);
-        public static Eigenstates<T> operator <=(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.LessThanOrEqual(x, y), b);
-        public static Eigenstates<T> operator >=(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.GreaterThanOrEqual(x, y), b);
-        public static Eigenstates<T> operator >=(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.GreaterThanOrEqual(x, y), b);
-        public static Eigenstates<T> operator <(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.LessThan(x, y), b);
-        public static Eigenstates<T> operator <(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.LessThan(x, y), b);
-        public static Eigenstates<T> operator >(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.GreaterThan(x, y), b);
-        public static Eigenstates<T> operator >(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.GreaterThan(x, y), b);
-        public static Eigenstates<T> operator ==(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.Equal(x, y), b);
-        public static Eigenstates<T> operator ==(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.Equal(x, y), b);
-        public static Eigenstates<T> operator !=(Eigenstates<T> a, T b) =>
-            a.Do_condition_type((x, y) => a._ops.NotEqual(x, y), b);
-        public static Eigenstates<T> operator !=(Eigenstates<T> a, Eigenstates<T> b) =>
-            a.Do_condition_type((x, y) => a._ops.NotEqual(x, y), b);
+        public static Eigenstates<T> operator <=(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.LessThanOrEqual, b);
+        }
+
+        public static Eigenstates<T> operator <=(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.LessThanOrEqual, b);
+        }
+
+        public static Eigenstates<T> operator >=(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.GreaterThanOrEqual, b);
+        }
+
+        public static Eigenstates<T> operator >=(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.GreaterThanOrEqual, b);
+        }
+
+        public static Eigenstates<T> operator <(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.LessThan, b);
+        }
+
+        public static Eigenstates<T> operator <(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.LessThan, b);
+        }
+
+        public static Eigenstates<T> operator >(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.GreaterThan, b);
+        }
+
+        public static Eigenstates<T> operator >(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.GreaterThan, b);
+        }
+
+        public static Eigenstates<T> operator ==(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.Equal, b);
+        }
+
+        public static Eigenstates<T> operator ==(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.Equal, b);
+        }
+
+        public static Eigenstates<T> operator !=(Eigenstates<T> a, T b)
+        {
+            return a.Do_condition_type(a._ops.NotEqual, b);
+        }
+
+        public static Eigenstates<T> operator !=(Eigenstates<T> a, Eigenstates<T> b)
+        {
+            return a.Do_condition_type(a._ops.NotEqual, b);
+        }
 
         #endregion
 
@@ -319,28 +429,30 @@ namespace QuantumSuperposition.QuantumSoup
         // The part where we pretend our quantum data is readable by humans.
         // Also provides debugging strings to impress people on code reviews.
 
-        public IEnumerable<T> ToValues() => _qDict.Keys;
+        public IEnumerable<T> ToValues()
+        {
+            return _qDict.Keys;
+        }
 
         /// <summary>
         /// Returns a string representation of the Eigenstates.
         /// </summary>
         /// <returns></returns>
-        public override string ToString()
+        public override string? ToString()
         {
-            var distinctKeys = _qDict.Keys.Distinct().ToList();
+            List<T> distinctKeys = _qDict.Keys.Distinct().ToList();
             if (_weights == null || AllWeightsEqual(_weights))
             {
                 // Return just the element if there is a single unique state
-                if (distinctKeys.Count == 1)
-                    return distinctKeys.First().ToString();
-
-                return _eType == QuantumStateType.SuperpositionAny
+                return distinctKeys.Count == 1
+                    ? distinctKeys.First().ToString()
+                    : _eType == QuantumStateType.SuperpositionAny
                     ? $"any({string.Join(", ", distinctKeys)})"
                     : $"all({string.Join(", ", distinctKeys)})";
             }
             else
             {
-                var pairs = ToMappedWeightedValues().Select(x => $"{x.value}:{x.weight}");
+                IEnumerable<string> pairs = ToMappedWeightedValues().Select(x => $"{x.value}:{x.weight}");
                 return _eType == QuantumStateType.SuperpositionAny
                     ? $"any({string.Join(", ", pairs)})"
                     : $"all({string.Join(", ", pairs)})";
@@ -355,13 +467,17 @@ namespace QuantumSuperposition.QuantumSoup
         {
             if (_weights == null)
             {
-                foreach (var k in _qDict.Keys.Distinct())
+                foreach (T? k in _qDict.Keys.Distinct())
+                {
                     yield return (_qDict[k], 1.0);
+                }
             }
             else
             {
-                foreach (var kvp in _weights)
+                foreach (KeyValuePair<T, Complex> kvp in _weights)
+                {
                     yield return (_qDict[kvp.Key], kvp.Value);
+                }
             }
         }
 
@@ -371,10 +487,14 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>
-        private bool AllWeightsEqual(Dictionary<T, Complex> dict)
+        private new bool AllWeightsEqual(Dictionary<T, Complex> dict)
         {
-            if (dict.Count <= 1) return true;
-            var first = dict.Values.First();
+            if (dict.Count <= 1)
+            {
+                return true;
+            }
+
+            Complex first = dict.Values.First();
             return dict.Values.Skip(1).All(w => Complex.Abs(w - first) < 1e-14);
         }
 
@@ -383,9 +503,12 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>
-        private bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
+        private new bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
         {
-            if (dict.Count <= 1) return true;
+            if (dict.Count <= 1)
+            {
+                return true;
+            }
 
             double firstProb = SquaredMagnitude(dict.Values.First());
 
@@ -394,7 +517,10 @@ namespace QuantumSuperposition.QuantumSoup
                 .All(w => Math.Abs(SquaredMagnitude(w) - firstProb) < 1e-14);
         }
 
-        private double SquaredMagnitude(Complex c) => c.Real * c.Real + c.Imaginary * c.Imaginary;
+        private double SquaredMagnitude(Complex c)
+        {
+            return (c.Real * c.Real) + (c.Imaginary * c.Imaginary);
+        }
 
         /// <summary>
         /// Returns a string representation of the Eigenstates,
@@ -403,20 +529,15 @@ namespace QuantumSuperposition.QuantumSoup
         /// <returns></returns>
         public string ToDebugString()
         {
-            if (_weights == null)
-            {
-                return string.Join(", ",
-                    _qDict.Select(kvp => $"{kvp.Key} => {kvp.Value}"));
-            }
-            else
-            {
-                return string.Join(", ",
+            return _weights == null
+                ? string.Join(", ",
+                    _qDict.Select(kvp => $"{kvp.Key} => {kvp.Value}"))
+                : string.Join(", ",
                     _qDict.Select(kvp =>
                     {
-                        Complex w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
+                        Complex w = _weights.TryGetValue(kvp.Key, out Complex val) ? val : 1.0;
                         return $"{kvp.Key} => {kvp.Value} (weight: {w})";
                     }));
-            }
         }
 
         #endregion
@@ -434,9 +555,9 @@ namespace QuantumSuperposition.QuantumSoup
         {
             if (_mockCollapseEnabled)
             {
-                if (_mockCollapseValue == null)
-                    throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
-                return _mockCollapseValue;
+                return _mockCollapseValue == null
+                    ? throw new InvalidOperationException("Mock collapse enabled but no mock value is set.")
+                    : _mockCollapseValue;
             }
 
             if (_isActuallyCollapsed && _collapsedValue != null && _eType == QuantumStateType.CollapsedResult)
@@ -458,7 +579,8 @@ namespace QuantumSuperposition.QuantumSoup
 
             _collapsedValue = picked;
             _isActuallyCollapsed = true;
-            var newDict = new Dictionary<T, T> { { picked, picked } };
+            Dictionary<T, T> newDict = new()
+            { { picked, picked } };
             _qDict = newDict;
             if (_weights != null)
             {
@@ -476,7 +598,7 @@ namespace QuantumSuperposition.QuantumSoup
         {
             _lastCollapseSeed = seed;
             _collapseHistoryId = Guid.NewGuid();
-            var rng = new Random(seed);
+            Random rng = new(seed);
             return Observe(rng);
         }
 
@@ -514,7 +636,7 @@ namespace QuantumSuperposition.QuantumSoup
         /// Indicates whether your states have developed opinions (i.e., weights).
         /// If false, they're blissfully indifferent.
         /// </summary>
-        public bool IsWeighted => _weights != null;
+        public new bool IsWeighted => _weights != null;
 
         public override IReadOnlyCollection<T> States => _qDict.Keys;
 
@@ -525,12 +647,16 @@ namespace QuantumSuperposition.QuantumSoup
         public IEnumerable<T> TopNByWeight(int n)
         {
             if (!States.Any() || n <= 0)
+            {
                 return Enumerable.Empty<T>();
+            }
 
             // If unweighted, each key is weight=1 => they are all "tied".
             // We'll just return them in natural order, limited to N.
             if (!IsWeighted)
+            {
                 return States.Take(n);
+            }
 
             // Weighted => sort descending by weight
             return _weights!
@@ -545,13 +671,13 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public Eigenstates<T> FilterByProbability(Func<Complex, bool> predicate)
         {
-            var newDict = new Dictionary<T, T>();
+            Dictionary<T, T> newDict = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (IsWeighted)
             {
-                newWeights = new Dictionary<T, Complex>();
-                foreach (var (key, wt) in _weights)
+                newWeights = [];
+                foreach ((T key, Complex wt) in _weights)
                 {
                     if (predicate(wt))
                     {
@@ -566,13 +692,17 @@ namespace QuantumSuperposition.QuantumSoup
                 bool keep = predicate(1.0);
                 if (keep)
                 {
-                    foreach (var key in _qDict.Keys)
+                    foreach (T? key in _qDict.Keys)
+                    {
                         newDict[key] = _qDict[key];
+                    }
                 }
             }
 
-            var e = new Eigenstates<T>(newDict, _ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(newDict, _ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
@@ -584,13 +714,13 @@ namespace QuantumSuperposition.QuantumSoup
         /// <returns>A filtered QuBit containing only states whose amplitude passes the test.</returns>
         public Eigenstates<T> FilterByAmplitude(Func<Complex, bool> amplitudePredicate)
         {
-            var newDict = new Dictionary<T, T>();
+            Dictionary<T, T> newDict = [];
             Dictionary<T, Complex>? newWeights = null;
 
             if (IsWeighted)
             {
-                newWeights = new Dictionary<T, Complex>();
-                foreach (var (key, amp) in _weights!)
+                newWeights = [];
+                foreach ((T key, Complex amp) in _weights!)
                 {
                     if (amplitudePredicate(amp))
                     {
@@ -605,13 +735,17 @@ namespace QuantumSuperposition.QuantumSoup
                 Complex defaultAmp = Complex.One;
                 if (amplitudePredicate(defaultAmp))
                 {
-                    foreach (var key in _qDict.Keys)
+                    foreach (T? key in _qDict.Keys)
+                    {
                         newDict[key] = _qDict[key];
+                    }
                 }
             }
 
-            var e = new Eigenstates<T>(newDict, _ops);
-            e._weights = newWeights;
+            Eigenstates<T> e = new(newDict, _ops)
+            {
+                _weights = newWeights
+            };
             return e;
         }
 
@@ -622,7 +756,9 @@ namespace QuantumSuperposition.QuantumSoup
         public T CollapseWeighted()
         {
             if (!States.Any())
+            {
                 throw new InvalidOperationException("No states available to collapse.");
+            }
 
             if (!IsWeighted)
             {
@@ -631,7 +767,7 @@ namespace QuantumSuperposition.QuantumSoup
             }
             else
             {
-                var key = _weights!.MaxBy(x => x.Value.Magnitude)!.Key;
+                T? key = _weights!.MaxBy(x => x.Value.Magnitude)!.Key;
                 return key;
             }
         }
@@ -645,13 +781,13 @@ namespace QuantumSuperposition.QuantumSoup
             {
                 int hash = 17;
 
-                foreach (var k in _qDict.Keys.OrderBy(x => x))
+                foreach (T? k in _qDict.Keys.OrderBy(x => x))
                 {
                     // Hash the key and its projected value
-                    hash = hash * 23 + (k?.GetHashCode() ?? 0);
-                    hash = hash * 23 + (_qDict[k]?.GetHashCode() ?? 0);
+                    hash = (hash * 23) + (k?.GetHashCode() ?? 0);
+                    hash = (hash * 23) + (_qDict[k]?.GetHashCode() ?? 0);
 
-                    if (IsWeighted && _weights != null && _weights.TryGetValue(k, out var amp))
+                    if (IsWeighted && _weights != null && _weights.TryGetValue(k, out Complex amp))
                     {
                         // Round both real and imaginary parts
                         double real = Math.Round(amp.Real, 12);
@@ -660,8 +796,8 @@ namespace QuantumSuperposition.QuantumSoup
                         long realBits = BitConverter.DoubleToInt64Bits(real);
                         long imagBits = BitConverter.DoubleToInt64Bits(imag);
 
-                        hash = hash * 23 + realBits.GetHashCode();
-                        hash = hash * 23 + imagBits.GetHashCode();
+                        hash = (hash * 23) + realBits.GetHashCode();
+                        hash = (hash * 23) + imagBits.GetHashCode();
                     }
                 }
 
@@ -674,9 +810,12 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public string WeightSummary()
         {
-            if (!IsWeighted) return "Weighted: false";
+            if (!IsWeighted)
+            {
+                return "Weighted: false";
+            }
 
-            var probs = _weights!.Values.Select(amp => amp.Magnitude * amp.Magnitude).ToList();
+            List<double> probs = _weights!.Values.Select(amp => amp.Magnitude * amp.Magnitude).ToList();
             double sum = probs.Sum();
             double max = probs.Max();
             double min = probs.Min();
@@ -690,20 +829,25 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public Eigenstates<T> WithWeights(Dictionary<T, Complex> weights)
         {
-            if (weights == null) throw new ArgumentNullException(nameof(weights));
+            if (weights == null)
+            {
+                throw new ArgumentNullException(nameof(weights));
+            }
 
-            var filtered = new Dictionary<T, Complex>();
-            foreach (var kvp in weights)
+            Dictionary<T, Complex> filtered = [];
+            foreach (KeyValuePair<T, Complex> kvp in weights)
             {
                 if (_qDict.ContainsKey(kvp.Key))
+                {
                     filtered[kvp.Key] = kvp.Value;
+                }
             }
 
             // Create a new instance with the same key->value map, same ops
-            var newEigen = new Eigenstates<T>(new Dictionary<T, T>(_qDict), _ops)
+            Eigenstates<T> newEigen = new(new Dictionary<T, T>(_qDict), _ops)
             {
                 _weights = filtered,
-                _eType = this._eType  // preserve the same quantum state type
+                _eType = _eType  // preserve the same quantum state type
             };
             return newEigen;
         }
@@ -713,17 +857,17 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public string ToDebugString(bool includeCollapseMetadata = false)
         {
-            var baseInfo = _weights == null
+            string baseInfo = _weights == null
                 ? string.Join(", ", _qDict.Select(kvp => $"{kvp.Key} => {kvp.Value}"))
                 : string.Join(", ", _qDict.Select(kvp =>
                 {
-                    Complex w = _weights.TryGetValue(kvp.Key, out var val) ? val : 1.0;
+                    Complex w = _weights.TryGetValue(kvp.Key, out Complex val) ? val : 1.0;
                     return $"{kvp.Key} => {kvp.Value} (weight: {w})";
                 }));
 
-            if (!includeCollapseMetadata) return baseInfo;
-
-            return $"{baseInfo}\nCollapsed: {_isActuallyCollapsed}, " +
+            return !includeCollapseMetadata
+                ? baseInfo
+                : $"{baseInfo}\nCollapsed: {_isActuallyCollapsed}, " +
                    $"Seed: {_lastCollapseSeed}, ID: {_collapseHistoryId}";
         }
 
@@ -734,7 +878,7 @@ namespace QuantumSuperposition.QuantumSoup
         public override QuantumSoup<T> Clone()
         {
             // Deep clone the key-to-value mapping.
-            var clonedDict = new Dictionary<T, T>(_qDict);
+            Dictionary<T, T> clonedDict = new(_qDict);
 
             // Clone the weights if available.
             Dictionary<T, Complex>? clonedWeights = null;
@@ -744,15 +888,15 @@ namespace QuantumSuperposition.QuantumSoup
             }
 
             // Create a new Eigenstates<T> instance with the cloned dictionary and operators.
-            var clone = new Eigenstates<T>(clonedDict, _ops)
+            Eigenstates<T> clone = new(clonedDict, _ops)
             {
                 _weights = clonedWeights,
-                _eType = this._eType,
+                _eType = _eType,
                 // Optionally, copy over collapse-related metadata.
-                _collapseHistoryId = this._collapseHistoryId,
-                _lastCollapseSeed = this._lastCollapseSeed,
-                _isActuallyCollapsed = this._isActuallyCollapsed,
-                _collapsedValue = this._collapsedValue
+                _collapseHistoryId = _collapseHistoryId,
+                _lastCollapseSeed = _lastCollapseSeed,
+                _isActuallyCollapsed = _isActuallyCollapsed,
+                _collapsedValue = _collapsedValue
             };
 
             return clone;
@@ -761,21 +905,23 @@ namespace QuantumSuperposition.QuantumSoup
         public Eigenstates<TResult> Select<TResult>(Func<T, TResult> selector)
         {
             if (selector == null)
+            {
                 throw new ArgumentNullException(nameof(selector));
+            }
 
             // New dictionary mapping the transformed (projected) values to themselves.
-            var newDict = new Dictionary<TResult, TResult>();
+            Dictionary<TResult, TResult> newDict = [];
 
             // If the current eigenstates has weights, prepare a new weight dictionary;
             // otherwise, we'll remain unweighted.
             Dictionary<TResult, Complex>? newWeights = null;
-            if (this.IsWeighted) // i.e. _weights != null
+            if (IsWeighted) // i.e. _weights != null
             {
-                newWeights = new Dictionary<TResult, Complex>();
+                newWeights = [];
             }
 
             // Iterate over each value and its associated weight.
-            foreach (var (value, weight) in this.ToMappedWeightedValues())
+            foreach ((T value, Complex weight) in ToMappedWeightedValues())
             {
                 TResult result = selector(value);
 
@@ -790,89 +936,96 @@ namespace QuantumSuperposition.QuantumSoup
                 else
                 {
                     newDict.Add(result, result);
-                    if (newWeights != null)
-                    {
-                        newWeights.Add(result, weight);
-                    }
+                    newWeights?.Add(result, weight);
                 }
             }
 
             // Construct a new Eigenstates<TResult> with the transformed dictionary.
             // We use QuantumOperatorsFactory to get the appropriate operators for TResult.
-            var eigen = new Eigenstates<TResult>(newDict, QuantumOperatorsFactory.GetOperators<TResult>())
+            Eigenstates<TResult> eigen = new(newDict, QuantumOperatorsFactory.GetOperators<TResult>())
             {
                 // Copy over the state type so that any "All" or "Any" marker persists.
-                _eType = this._eType
+                _eType = _eType,
+                // Set the new weights (if any)
+                _weights = newWeights
             };
-
-            // Set the new weights (if any)
-            eigen._weights = newWeights;
             return eigen;
         }
 
         public Eigenstates<T> Where(Func<T, bool> predicate)
         {
             if (predicate == null)
+            {
                 throw new ArgumentNullException(nameof(predicate));
+            }
 
-            var newDict = _qDict
+            Dictionary<T, T> newDict = _qDict
                 .Where(kvp => predicate(kvp.Key))
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
             Dictionary<T, Complex>? newWeights = null;
             if (_weights != null)
             {
-                newWeights = new Dictionary<T, Complex>();
-                foreach (var key in newDict.Keys)
+                newWeights = [];
+                foreach (T? key in newDict.Keys)
                 {
-                    if (_weights.TryGetValue(key, out var w))
+                    if (_weights.TryGetValue(key, out Complex w))
+                    {
                         newWeights[key] = w;
+                    }
                 }
             }
 
-            var eigen = new Eigenstates<T>(newDict, _ops)
+            Eigenstates<T> eigen = new(newDict, _ops)
             {
-                _eType = this._eType
+                _eType = _eType,
+                _weights = newWeights
             };
-            eigen._weights = newWeights;
             return eigen;
         }
 
 
         public override bool Equals(object obj)
         {
-            if (ReferenceEquals(this, obj))
-                return true;
-            if (obj is Eigenstates<T> other)
-                return Equals(other);
-            return false;
+            return ReferenceEquals(this, obj) || (obj is Eigenstates<T> other && Equals(other));
         }
         public bool Equals(Eigenstates<T> other)
         {
-            if (ReferenceEquals(other, null))
+            if (other is null)
+            {
                 return false;
+            }
+
             if (ReferenceEquals(this, other))
+            {
                 return true;
+            }
 
             // Compare the keys in _qDict (which holds the states) using set equality.
-            var thisKeys = new HashSet<T>(_qDict.Keys);
-            var otherKeys = new HashSet<T>(other._qDict.Keys);
+            HashSet<T> thisKeys = [.. _qDict.Keys];
+            HashSet<T> otherKeys = [.. other._qDict.Keys];
             if (!thisKeys.SetEquals(otherKeys))
+            {
                 return false;
+            }
 
             // If weights exist, compare them with the desired tolerance.
             if (IsWeighted || other.IsWeighted)
             {
                 // If one is weighted and the other isn't then they're not equal.
                 if ((IsWeighted && !other.IsWeighted) || (!IsWeighted && other.IsWeighted))
-                    return false;
-
-                foreach (var key in thisKeys)
                 {
-                    var w1 = _weights != null && _weights.TryGetValue(key, out var weight1) ? weight1 : Complex.One;
-                    var w2 = other._weights != null && other._weights.TryGetValue(key, out var weight2) ? weight2 : Complex.One;
+                    return false;
+                }
+
+                foreach (T? key in thisKeys)
+                {
+                    Complex w1 = _weights != null && _weights.TryGetValue(key, out Complex weight1) ? weight1 : Complex.One;
+                    Complex w2 = other._weights != null && other._weights.TryGetValue(key, out Complex weight2) ? weight2 : Complex.One;
                     if (Complex.Abs(w1 - w2) > 1e-14) // adjust tolerance as needed
+                    {
                         return false;
+                    }
                 }
             }
 

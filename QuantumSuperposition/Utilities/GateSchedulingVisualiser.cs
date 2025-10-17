@@ -1,5 +1,5 @@
-﻿using System.Text;
-using QuantumSuperposition.Systems;
+﻿using QuantumSuperposition.Systems;
+using System.Text;
 
 namespace QuantumSuperposition.Utilities
 {
@@ -14,7 +14,7 @@ namespace QuantumSuperposition.Utilities
         public static string Visualise(IEnumerable<QuantumSystem.GateOperation> gateOperations, int totalQubits)
         {
             // Determine how many time steps there are.
-            var opsList = gateOperations.ToList();
+            List<QuantumSystem.GateOperation> opsList = gateOperations.ToList();
             int timeSteps = opsList.Count;
             // Create a grid with one row per qubit and one column per time step.
             string[,] grid = new string[totalQubits, timeSteps];
@@ -30,7 +30,7 @@ namespace QuantumSuperposition.Utilities
 
             // Fill in the grid with gate labels.
             int col = 0;
-            foreach (var op in opsList)
+            foreach (QuantumSystem.GateOperation? op in opsList)
             {
                 if (op.OperationType == QuantumSystem.GateType.SingleQubit)
                 {
@@ -50,23 +50,27 @@ namespace QuantumSuperposition.Utilities
                     int start = Math.Min(qA, qB);
                     int end = Math.Max(qA, qB);
                     for (int i = start + 1; i < end; i++)
+                    {
                         grid[i, col] = " |  ";
+                    }
                 }
                 col++;
             }
 
             // Build the output diagram string.
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new();
             for (int i = 0; i < totalQubits; i++)
             {
-                sb.Append($"q{i}: ");
+                _ = sb.Append($"q{i}: ");
                 for (int j = 0; j < timeSteps; j++)
                 {
-                    sb.Append(grid[i, j]);
+                    _ = sb.Append(grid[i, j]);
                     if (j < timeSteps - 1)
-                        sb.Append("---");
+                    {
+                        _ = sb.Append("---");
+                    }
                 }
-                sb.AppendLine();
+                _ = sb.AppendLine();
             }
             return sb.ToString();
         }

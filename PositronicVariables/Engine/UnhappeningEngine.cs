@@ -8,22 +8,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PositronicVariables.Engine
 {
-    public class UnhappeningEngine<T>
+    public class UnhappeningEngine<T>(IOperationLogHandler<T> ops, ITimelineArchivist<T> versioningService)
         where T : IComparable<T>
     {
-        private readonly IOperationLogHandler<T> _ops;
-        private readonly ITimelineArchivist<T> _versioningService;
-
-        public UnhappeningEngine(IOperationLogHandler<T> ops, ITimelineArchivist<T> versioningService)
-        {
-            _ops = ops;
-            _versioningService = versioningService;
-        }
+        private readonly IOperationLogHandler<T> _ops = ops;
+        private readonly ITimelineArchivist<T> _versioningService = versioningService;
 
         /// <summary>
         /// Peel off the last forward half‑cycle, and rebuild every possible earlier state
@@ -41,12 +33,12 @@ namespace PositronicVariables.Engine
         public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
         {
             // Global peel newest→oldest; scope decisions to 'variable'.
-            var poppedSnapshots = new List<IOperation>();
-            var poppedReversibles = new List<IReversibleOperation<T>>();
+            List<IOperation> poppedSnapshots = [];
+            List<IReversibleOperation<T>> poppedReversibles = [];
 
             // Per-variable bookkeeping
-            var forwardValuesForThisVar = new HashSet<T>();
-            var preReplaceScalarAppendsForThisVar = new List<T>();
+            HashSet<T> forwardValuesForThisVar = [];
+            List<T> preReplaceScalarAppendsForThisVar = [];
 
             // IMPORTANT: this flips when we hit the FIRST snapshot (append or replace) for THIS variable.
             // From that point backward we collect reversible ops for THIS variable only.
@@ -54,7 +46,7 @@ namespace PositronicVariables.Engine
 
             while (true)
             {
-                var top = QuantumLedgerOfRegret.Peek();
+                IOperation top = QuantumLedgerOfRegret.Peek();
                 switch (top)
                 {
                     case null:
@@ -64,55 +56,57 @@ namespace PositronicVariables.Engine
                         goto DonePeel;
 
                     case TimelineAppendOperation<T> tap:
-                    {
-                        poppedSnapshots.Add(tap);
-
-                        if (BelongsToVariable(tap, variable))
                         {
-                            var vals = tap.AddedSlice.ToCollapsedValues();
+                            poppedSnapshots.Add(tap);
 
-                            if (!encounteredClosingSnapshotForThisVar)
+                            if (BelongsToVariable(tap, variable))
                             {
-                                // Appends more recent than the closing snapshot survive toward the print site.
-                                forwardValuesForThisVar.UnionWith(vals);
-                                // The first snapshot we meet for this var is its closing write (scalar-append close case).
-                                encounteredClosingSnapshotForThisVar = true;
+                                IEnumerable<T> vals = tap.AddedSlice.ToCollapsedValues();
+
+                                if (!encounteredClosingSnapshotForThisVar)
+                                {
+                                    // Appends more recent than the closing snapshot survive toward the print site.
+                                    forwardValuesForThisVar.UnionWith(vals);
+                                    // The first snapshot we meet for this var is its closing write (scalar-append close case).
+                                    encounteredClosingSnapshotForThisVar = true;
+                                }
+                                else
+                                {
+                                    // Older-than-close appends were overwritten by the closing write.
+                                    preReplaceScalarAppendsForThisVar.AddRange(vals);
+                                }
                             }
-                            else
-                            {
-                                // Older-than-close appends were overwritten by the closing write.
-                                preReplaceScalarAppendsForThisVar.AddRange(vals);
-                            }
+
+                            QuantumLedgerOfRegret.Pop();
+                            continue;
                         }
-
-                        QuantumLedgerOfRegret.Pop();
-                        continue;
-                    }
 
                     case TimelineReplaceOperation<T> trp:
-                    {
-                        poppedSnapshots.Add(trp);
-
-                        if (BelongsToVariable(trp, variable) && !encounteredClosingSnapshotForThisVar)
                         {
-                            // Replace is the closing write for this var.
-                            encounteredClosingSnapshotForThisVar = true;
+                            poppedSnapshots.Add(trp);
+
+                            if (BelongsToVariable(trp, variable) && !encounteredClosingSnapshotForThisVar)
+                            {
+                                // Replace is the closing write for this var.
+                                encounteredClosingSnapshotForThisVar = true;
+                            }
+
+                            QuantumLedgerOfRegret.Pop();
+                            continue;
                         }
 
-                        QuantumLedgerOfRegret.Pop();
-                        continue;
-                    }
-
                     case IReversibleOperation<T> rop:
-                    {
-                        // Only collect reversibles for THIS variable after we crossed its closing snapshot.
-                        if (BelongsToVariable(rop, variable) && encounteredClosingSnapshotForThisVar)
-                            poppedReversibles.Add(rop);
+                        {
+                            // Only collect reversibles for THIS variable after we crossed its closing snapshot.
+                            if (BelongsToVariable(rop, variable) && encounteredClosingSnapshotForThisVar)
+                            {
+                                poppedReversibles.Add(rop);
+                            }
 
-                        // Pop globally as before.
-                        QuantumLedgerOfRegret.Pop();
-                        continue;
-                    }
+                            // Pop globally as before.
+                            QuantumLedgerOfRegret.Pop();
+                            continue;
+                        }
 
                     default:
                         goto DonePeel;
@@ -122,11 +116,13 @@ namespace PositronicVariables.Engine
         DonePeel:
 
             // Undo all popped snapshots (global behavior preserved)
-            foreach (var op in poppedSnapshots.AsEnumerable().Reverse())
+            foreach (IOperation op in poppedSnapshots.AsEnumerable().Reverse())
+            {
                 op.Undo();
+            }
 
             // Compute “scalar close” strictly for THIS variable
-            var incomingVals = incoming.ToCollapsedValues();
+            IEnumerable<T> incomingVals = incoming.ToCollapsedValues();
 
             bool hasArithmeticForThisVar = poppedReversibles.Count > 0;
 
@@ -147,22 +143,22 @@ namespace PositronicVariables.Engine
             bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
             IEnumerable<T> seeds;
-            var bootstrap = variable.timeline[0].ToCollapsedValues();
+            IEnumerable<T> bootstrap = variable.timeline[0].ToCollapsedValues();
 
             if (!scalarWriteDetected)
             {
                 // In degenerate no-arithmetic case, drop bootstrap to avoid stale-union bleed.
                 bool excludeBootstrap = !hasArithmeticForThisVar && bootstrap.Count() == 1;
 
-                var fwd = excludeBootstrap ? forwardValuesForThisVar.Except(bootstrap) : forwardValuesForThisVar;
-                var inc = excludeBootstrap ? incomingVals.Except(bootstrap) : incomingVals;
+                IEnumerable<T> fwd = excludeBootstrap ? forwardValuesForThisVar.Except(bootstrap) : forwardValuesForThisVar;
+                IEnumerable<T> inc = excludeBootstrap ? incomingVals.Except(bootstrap) : incomingVals;
 
                 seeds = includeForward ? fwd.Union(inc).Distinct() : inc;
             }
             else
             {
                 // Scalar-close: rebuild from incoming; exclude pre-close history for this var
-                var replacedForThisVar = poppedSnapshots
+                IEnumerable<T> replacedForThisVar = poppedSnapshots
                     .OfType<TimelineReplaceOperation<T>>()
                     .Where(op => BelongsToVariable(op, variable))
                     .SelectMany(op => op.ReplacedSlice.ToCollapsedValues());
@@ -171,46 +167,50 @@ namespace PositronicVariables.Engine
                     .OfType<TimelineAppendOperation<T>>()
                     .Any(op => BelongsToVariable(op, variable));
 
-                if (noForwardAppendsForThisVar && hasArithmeticForThisVar)
-                {
-                    seeds = incomingVals.Union(replacedForThisVar).Distinct();
-                }
-                else
-                {
-                    seeds = incomingVals
+                seeds = noForwardAppendsForThisVar && hasArithmeticForThisVar
+                    ? incomingVals.Union(replacedForThisVar).Distinct()
+                    : incomingVals
                         .Except(bootstrap)
                         .Except(replacedForThisVar)
                         .Distinct();
-                }
             }
 
             if (!seeds.Any())
+            {
                 seeds = incomingVals;
+            }
 
-            var rebuiltSet = new HashSet<T>();
+            HashSet<T> rebuiltSet = [];
 
-            if (!poppedSnapshots.Any() && !poppedReversibles.Any())
+            if (poppedSnapshots.Count == 0 && poppedReversibles.Count == 0)
+            {
                 rebuiltSet.UnionWith(incomingVals);
+            }
 
             // Special-case: (+k) then %d → residue class
-            var addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
-            var modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
+            AdditionOperation<T> addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
+            ReversibleModulusOp<T> modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
             bool usedResidueClass = addOp is not null && modOp is not null;
 
             if (usedResidueClass)
             {
                 int d = Convert.ToInt32(modOp.Divisor);
                 for (int i = 0; i < d; i++)
-                    rebuiltSet.Add((T)Convert.ChangeType(i, typeof(T)));
+                {
+                    _ = rebuiltSet.Add((T)Convert.ChangeType(i, typeof(T)));
+                }
             }
             else
             {
-                foreach (var seed in seeds)
+                foreach (T seed in seeds)
                 {
-                    var v = seed;
+                    T v = seed;
                     for (int i = 0; i < poppedReversibles.Count; i++)
+                    {
                         v = poppedReversibles[i].ApplyForward(v);
-                    rebuiltSet.Add(v);
+                    }
+
+                    _ = rebuiltSet.Add(v);
                 }
             }
 
@@ -221,8 +221,8 @@ namespace PositronicVariables.Engine
             }
 
             // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
-            var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
-            rebuilt.Any();
+            QuBit<T> rebuilt = new(rebuiltSet.OrderBy(x => x).ToArray());
+            _ = rebuilt.Any();
 
             // Append vs replace for this variable’s timeline growth
             bool anyAppendsForThisVar = poppedSnapshots
@@ -232,16 +232,24 @@ namespace PositronicVariables.Engine
             if (scalarWriteDetected)
             {
                 if (variable.timeline.Count > 1)
+                {
                     variable.ReplaceForwardHistoryWith(rebuilt);
+                }
                 else
+                {
                     variable.AppendFromReverse(rebuilt);
+                }
             }
             else
             {
                 if (!anyAppendsForThisVar && variable.timeline.Count > 0)
+                {
                     variable.ReplaceLastFromReverse(rebuilt);
+                }
                 else
+                {
                     variable.AppendFromReverse(rebuilt);
+                }
             }
 
 
@@ -251,12 +259,14 @@ namespace PositronicVariables.Engine
         // Reflect to determine if an operation targets the given variable instance
         private static bool BelongsToVariable(object entry, PositronicVariable<T> variable)
         {
-            var fields = entry.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            foreach (var f in fields)
+            FieldInfo[] fields = entry.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (FieldInfo f in fields)
             {
-                var val = f.GetValue(entry);
+                object val = f.GetValue(entry);
                 if (ReferenceEquals(val, variable))
+                {
                     return true;
+                }
             }
             return false;
         }

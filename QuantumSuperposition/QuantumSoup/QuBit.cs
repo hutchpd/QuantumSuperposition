@@ -1,25 +1,26 @@
-﻿using System.Numerics;
-using System.Text.Json;
-using QuantumSuperposition.Systems;
-using QuantumSuperposition.Core;
+﻿using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
+using QuantumSuperposition.Systems;
 using QuantumSuperposition.Utilities;
+using System.Numerics;
+using System.Text.Json;
 
 namespace QuantumSuperposition.QuantumSoup
 {
     public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     {
-        private readonly Func<T, bool> _valueValidator;
+        private new readonly Func<T, bool> _valueValidator;
 
         private readonly int[] _qubitIndices;
-        private readonly QuantumSystem? _system;
         private bool _isCollapsedFromSystem;
         private object? _systemObservedValue;
-        public QuantumSystem? System => _system;
+        public QuantumSystem? System { get; }
 
-        private Guid? _entanglementGroupId;
-        public Guid? EntanglementGroupId => _entanglementGroupId;
-        public void SetEntanglementGroup(Guid id) => _entanglementGroupId = id;
+        public Guid? EntanglementGroupId { get; private set; }
+        public void SetEntanglementGroup(Guid id)
+        {
+            EntanglementGroupId = id;
+        }
 
         public bool IsInSuperposition => _eType == QuantumStateType.SuperpositionAny && !_isActuallyCollapsed;
 
@@ -37,14 +38,14 @@ namespace QuantumSuperposition.QuantumSoup
             // If T = (int,bool) then qubitIndices might be new[] {0,1}.
             // If T = int only, maybe qubitIndices = new[] {0}, etc.
 
-            _system = system;
+            System = system;
             _qubitIndices = qubitIndices ?? Array.Empty<int>();
             _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
 
             // I exist yelled the qubit, and the system is my parent! Daddy!!!
-            _system.Register(this);
+            System.Register(this);
 
-            _qList = new List<T> { (T)Convert.ChangeType(0, typeof(T)), (T)Convert.ChangeType(1, typeof(T)) };
+            _qList = [(T)Convert.ChangeType(0, typeof(T)), (T)Convert.ChangeType(1, typeof(T))];
 
             // This qubit is in superposition until a collapse occurs
             _eType = QuantumStateType.SuperpositionAny;
@@ -110,13 +111,13 @@ namespace QuantumSuperposition.QuantumSoup
             Func<QuBit<T>, QuBit<T>> ifTrue,
             Func<QuBit<T>, QuBit<T>> ifFalse)
         {
-            var newWeights = new Dictionary<T, Complex>();
-            var newStates = new List<T>();
+            Dictionary<T, Complex> newWeights = [];
+            List<T> newStates = [];
 
-            foreach (var (value, weight) in ToWeightedValues())
+            foreach ((T value, Complex weight) in ToWeightedValues())
             {
                 // Create a branch qubit for the current state with its weight
-                var branchQubit = new QuBit<T>(new[] { value }, this.Operators)
+                QuBit<T> branchQubit = new QuBit<T>(new[] { value }, Operators)
                                   .WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
 
                 // Use the weight-aware predicate to choose the branch function.
@@ -126,11 +127,13 @@ namespace QuantumSuperposition.QuantumSoup
                     : ifFalse(branchQubit);
 
                 // When recombining, multiply the original branch weight with the branch’s transformation weight.
-                foreach (var (mappedValue, mappedWeight) in mappedBranch.ToWeightedValues())
+                foreach ((T mappedValue, Complex mappedWeight) in mappedBranch.ToWeightedValues())
                 {
                     Complex combinedWeight = weight * mappedWeight;
                     if (newWeights.ContainsKey(mappedValue))
+                    {
                         newWeights[mappedValue] += combinedWeight;
+                    }
                     else
                     {
                         newWeights[mappedValue] = combinedWeight;
@@ -139,7 +142,7 @@ namespace QuantumSuperposition.QuantumSoup
                 }
             }
 
-            return new QuBit<T>(newStates, newWeights, this.Operators);
+            return new QuBit<T>(newStates, newWeights, Operators);
         }
 
         /// <summary>
@@ -165,15 +168,17 @@ namespace QuantumSuperposition.QuantumSoup
         public QuBit<TResult> Select<TResult>(Func<T, TResult> selector)
         {
             if (selector == null)
+            {
                 throw new ArgumentNullException(nameof(selector));
+            }
 
             // This is the quantum equivalent of "map", but without picking a side.
             // Each state gets passed through the selector, but their identity crisis (weight) stays intact.
-            var mappedWeightedValues = this.ToWeightedValues()
-                .Select(pair => (value: selector(pair.value), weight: pair.weight));
+            IEnumerable<(TResult value, Complex weight)> mappedWeightedValues = ToWeightedValues()
+                .Select(pair => (value: selector(pair.value), pair.weight));
 
             // The new qubit lives in a different type universe now, so we find its corresponding math handlers.
-            var newOps = QuantumOperatorsFactory.GetOperators<TResult>();
+            IQuantumOperators<TResult> newOps = QuantumOperatorsFactory.GetOperators<TResult>();
 
             // Create a new superposition in the new type space.
             // Note: nothing actually happens until someone observes this — classic quantum laziness.
@@ -201,18 +206,22 @@ namespace QuantumSuperposition.QuantumSoup
         public QuBit<TResult> SelectMany<TResult>(Func<T, QuBit<TResult>> selector)
         {
             if (selector == null)
+            {
                 throw new ArgumentNullException(nameof(selector));
+            }
 
             IEnumerable<(TResult value, Complex weight)> Combined()
             {
                 // For each weighted state in the current qubit...
-                foreach (var (outerValue, outerWeight) in ToWeightedValues())
+                foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
                 {
                     // ...get the resulting qubit from the selector.
-                    var innerQuBit = selector(outerValue);
+                    QuBit<TResult> innerQuBit = selector(outerValue);
                     // Multiply the outer weight by each inner weight.
-                    foreach (var (innerValue, innerWeight) in innerQuBit.ToWeightedValues())
+                    foreach ((TResult innerValue, Complex innerWeight) in innerQuBit.ToWeightedValues())
+                    {
                         yield return (innerValue, outerWeight * innerWeight);
+                    }
                 }
             }
 
@@ -246,16 +255,21 @@ namespace QuantumSuperposition.QuantumSoup
             Func<T, TResult, TResult2> resultSelector)
         {
             if (selector == null)
+            {
                 throw new ArgumentNullException(nameof(selector));
+            }
+
             if (resultSelector == null)
+            {
                 throw new ArgumentNullException(nameof(resultSelector));
+            }
 
             IEnumerable<(TResult2 value, Complex weight)> Combined()
             {
-                foreach (var (outerValue, outerWeight) in ToWeightedValues())
+                foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
                 {
-                    var innerQuBit = selector(outerValue);
-                    foreach (var (innerValue, innerWeight) in innerQuBit.ToWeightedValues())
+                    QuBit<TResult> innerQuBit = selector(outerValue);
+                    foreach ((TResult innerValue, Complex innerWeight) in innerQuBit.ToWeightedValues())
                     {
                         // Combine the outer and inner values via the result selector.
                         yield return (resultSelector(outerValue, innerValue), outerWeight * innerWeight);
@@ -282,43 +296,51 @@ namespace QuantumSuperposition.QuantumSoup
         public QuBit<T> Where(Func<T, bool> predicate)
         {
             if (predicate == null)
+            {
                 throw new ArgumentNullException(nameof(predicate));
+            }
 
             // Lazy iterator filtering the weighted states:
             IEnumerable<(T value, Complex weight)> Filter()
             {
-                foreach (var (value, weight) in this.ToWeightedValues())
+                foreach ((T value, Complex weight) in ToWeightedValues())
                 {
                     if (predicate(value))
+                    {
                         yield return (value, weight);
+                    }
                 }
             }
 
-            return new QuBit<T>(Filter(), this.Operators);
+            return new QuBit<T>(Filter(), Operators);
         }
 
 
         public static QuBit<T> Superposed(IEnumerable<T> states)
         {
-            var qubit = new QuBit<T>(states);
-            var distinctCount = qubit.States.Distinct().Count();
+            QuBit<T> qubit = new(states);
+            int distinctCount = qubit.States.Distinct().Count();
             if (distinctCount > 1)
+            {
                 qubit._eType = QuantumStateType.SuperpositionAny;
+            }
+
             return qubit;
         }
 
         // Main constructor for unweighted items (local useage)
         public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
         {
-            if (Items == null) throw new ArgumentNullException(nameof(Items));
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
-            _qList = Items;
+            _qList = Items ?? throw new ArgumentNullException(nameof(Items));
 
             if (_qList.Distinct().Count() > 1)
+            {
                 _eType = QuantumStateType.SuperpositionAny;
+            }
 
             // no system
-            _system = null;
+            System = null;
             _qubitIndices = Array.Empty<int>();
             _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
         }
@@ -334,24 +356,33 @@ namespace QuantumSuperposition.QuantumSoup
 
         public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops)
         {
-            if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
+            if (weightedItems == null)
+            {
+                throw new ArgumentNullException(nameof(weightedItems));
+            }
+
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
 
-            var dict = new Dictionary<T, Complex>();
-            foreach (var (val, w) in weightedItems)
+            Dictionary<T, Complex> dict = [];
+            foreach ((T val, Complex w) in weightedItems)
             {
                 if (!dict.ContainsKey(val))
+                {
                     dict[val] = Complex.Zero;
+                }
+
                 dict[val] += w;
             }
             _weights = dict;
             _qList = dict.Keys; // keep a fallback list of keys
 
             if (_weights.Count > 1)
+            {
                 SetType(QuantumStateType.SuperpositionAny);
+            }
 
             // no system
-            _system = null;
+            System = null;
             _qubitIndices = Array.Empty<int>();
             _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
         }
@@ -363,10 +394,12 @@ namespace QuantumSuperposition.QuantumSoup
             _ops = ops;
 
             if (States.Distinct().Count() > 1)
+            {
                 SetType(QuantumStateType.SuperpositionAny);
+            }
 
             // no system
-            _system = null;
+            System = null;
             _qubitIndices = Array.Empty<int>();
             _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
         }
@@ -379,15 +412,18 @@ namespace QuantumSuperposition.QuantumSoup
 
         private int[] GetUnionOfGroupIndices()
         {
-            if (_system == null)
+            if (System == null)
+            {
                 return _qubitIndices;
-            var union = new HashSet<int>(_qubitIndices);
+            }
+
+            HashSet<int> union = [.. _qubitIndices];
             // Get all groups that this qubit belongs to.
-            var groups = _system.Entanglement.GetGroupsForReference(this);
-            foreach (var groupId in groups)
+            List<Guid> groups = System.Entanglement.GetGroupsForReference(this);
+            foreach (Guid groupId in groups)
             {
                 // For each qubit in each group, add its indices.
-                foreach (var q in _system.Entanglement.GetGroup(groupId))
+                foreach (IQuantumReference q in System.Entanglement.GetGroup(groupId))
                 {
                     union.UnionWith(q.GetQubitIndices());
                 }
@@ -403,7 +439,10 @@ namespace QuantumSuperposition.QuantumSoup
             if (_weights != null)
             {
                 if (!_weights.ContainsKey(element))
+                {
                     _weights[element] = 0.0;
+                }
+
                 _weights[element] += 1.0;
                 _qList = _weights.Keys;
             }
@@ -413,7 +452,9 @@ namespace QuantumSuperposition.QuantumSoup
             }
 
             if (States.Distinct().Count() > 1)
+            {
                 SetType(QuantumStateType.SuperpositionAny);
+            }
 
             return this;
         }
@@ -421,9 +462,9 @@ namespace QuantumSuperposition.QuantumSoup
 
         public static QuBit<T> WithEqualAmplitudes(IEnumerable<T> states)
         {
-            var list = states.Distinct().ToList();
+            List<T> list = states.Distinct().ToList();
             double amp = 1.0 / Math.Sqrt(list.Count);
-            var weighted = list.Select(s => (s, new Complex(amp, 0)));
+            IEnumerable<(T s, Complex)> weighted = list.Select(s => (s, new Complex(amp, 0)));
             return new QuBit<T>(weighted);
         }
         #endregion
@@ -436,15 +477,17 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public override QuantumSoup<T> Clone()
         {
-            var clonedWeights = _weights != null ? new Dictionary<T, Complex>(_weights) : null;
-            var clonedList = _qList.ToList();
-            var clone = new QuBit<T>(clonedList, clonedWeights, _ops, _valueValidator);
-            clone._isActuallyCollapsed = false;
-            clone._isCollapsedFromSystem = false;
-            clone._collapsedValue = default;
-            clone._collapseHistoryId = null;
-            clone._lastCollapseSeed = null;
-            clone._eType = this._eType == QuantumStateType.CollapsedResult ? QuantumStateType.SuperpositionAny : this._eType;
+            Dictionary<T, Complex>? clonedWeights = _weights != null ? new Dictionary<T, Complex>(_weights) : null;
+            List<T> clonedList = _qList.ToList();
+            QuBit<T> clone = new(clonedList, clonedWeights, _ops, _valueValidator)
+            {
+                _isActuallyCollapsed = false,
+                _isCollapsedFromSystem = false,
+                _collapsedValue = default,
+                _collapseHistoryId = null,
+                _lastCollapseSeed = null,
+                _eType = _eType == QuantumStateType.CollapsedResult ? QuantumStateType.SuperpositionAny : _eType
+            };
             return clone;
         }
 
@@ -465,9 +508,10 @@ namespace QuantumSuperposition.QuantumSoup
         // Think of it like mood settings, but for wavefunctions.
         // Also, it helps you avoid existential crises by keeping track of your quantum state.
 
-        public QuantumStateType GetCurrentType() => _eType;
-
-
+        public new QuantumStateType GetCurrentType()
+        {
+            return _eType;
+        }
 
         public QuBit<T> Any() { SetType(QuantumStateType.SuperpositionAny); return this; }
         public QuBit<T> All() { SetType(QuantumStateType.SuperpositionAll); return this; }
@@ -500,9 +544,10 @@ namespace QuantumSuperposition.QuantumSoup
             // Create a new qubit that contains only the resulting value.
             // Assign a full weight (e.g. Complex.One) so that the new qubit
             // reflects a collapsed state.
-            var collapsedStates = new List<T> { resultValue };
-            var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
-            var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, a.Operators);
+            List<T> collapsedStates = [resultValue];
+            Dictionary<T, Complex> collapsedWeights = new()
+            { { resultValue, Complex.One } };
+            QuBit<T> resultQubit = new(collapsedStates, collapsedWeights, a.Operators);
 
             // Mark the new qubit as collapsed.
             resultQubit.SetType(QuantumStateType.CollapsedResult);
@@ -523,28 +568,28 @@ namespace QuantumSuperposition.QuantumSoup
             if (QuantumConfig.EnableNonObservationalArithmetic)
             {
                 // Combine the underlying state lists, using the provided operator.
-                var newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
+                IEnumerable<T> newList = QuantumMathUtility<T>.CombineAll(a._qList, b._qList, op);
                 Dictionary<T, Complex>? newWeights = null;
 
                 // Create a local cache if commutative caching is enabled.
                 Dictionary<CommutativeKey<T>, T>? cache = null;
                 if (QuantumConfig.EnableCommutativeCache)
                 {
-                    cache = new Dictionary<CommutativeKey<T>, T>();
+                    cache = [];
                 }
 
                 if (a._weights != null || b._weights != null)
                 {
-                    newWeights = new Dictionary<T, Complex>();
-                    foreach (var (valA, wA) in a.ToWeightedValues())
+                    newWeights = [];
+                    foreach ((T valA, Complex wA) in a.ToWeightedValues())
                     {
-                        foreach (var (valB, wB) in b.ToWeightedValues())
+                        foreach ((T valB, Complex wB) in b.ToWeightedValues())
                         {
                             T newVal;
                             // Check cache for the unordered pair.
                             if (cache != null)
                             {
-                                var key = new CommutativeKey<T>(valA, valB);
+                                CommutativeKey<T> key = new(valA, valB);
                                 if (!cache.TryGetValue(key, out newVal))
                                 {
                                     newVal = op(valA, valB);
@@ -558,9 +603,13 @@ namespace QuantumSuperposition.QuantumSoup
 
                             Complex combinedWeight = wA * wB;
                             if (newWeights.ContainsKey(newVal))
+                            {
                                 newWeights[newVal] += combinedWeight;
+                            }
                             else
+                            {
                                 newWeights[newVal] = combinedWeight;
+                            }
                         }
                     }
                 }
@@ -586,33 +635,34 @@ namespace QuantumSuperposition.QuantumSoup
                 // Legacy: collapse the qubit first.
                 T observedA = a.Observe();
                 T resultValue = op(observedA, b);
-                var collapsedStates = new List<T> { resultValue };
-                var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
-                var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, a.Operators);
+                List<T> collapsedStates = [resultValue];
+                Dictionary<T, Complex> collapsedWeights = new()
+                { { resultValue, Complex.One } };
+                QuBit<T> resultQubit = new(collapsedStates, collapsedWeights, a.Operators);
                 resultQubit.SetType(QuantumStateType.CollapsedResult);
                 resultQubit._isActuallyCollapsed = true;
                 return resultQubit;
             }
 
-            var newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
+            IEnumerable<T> newList = QuantumMathUtility<T>.Combine(a._qList, b, op);
             Dictionary<T, Complex>? newWeights = null;
 
             // Set up a cache if commutative caching is enabled.
             Dictionary<CommutativeKey<T>, T>? cache = null;
             if (QuantumConfig.EnableCommutativeCache)
             {
-                cache = new Dictionary<CommutativeKey<T>, T>();
+                cache = [];
             }
 
             if (a._weights != null)
             {
-                newWeights = new Dictionary<T, Complex>();
-                foreach (var (valA, wA) in a.ToWeightedValues())
+                newWeights = [];
+                foreach ((T valA, Complex wA) in a.ToWeightedValues())
                 {
                     T newVal;
                     if (cache != null)
                     {
-                        var key = new CommutativeKey<T>(valA, b);
+                        CommutativeKey<T> key = new(valA, b);
                         if (!cache.TryGetValue(key, out newVal))
                         {
                             newVal = op(valA, b);
@@ -625,7 +675,10 @@ namespace QuantumSuperposition.QuantumSoup
                     }
 
                     if (!newWeights.ContainsKey(newVal))
+                    {
                         newWeights[newVal] = Complex.Zero;
+                    }
+
                     newWeights[newVal] += wA; // multiply by 1.0
                 }
             }
@@ -645,32 +698,33 @@ namespace QuantumSuperposition.QuantumSoup
                 // Legacy: collapse the qubit before operating.
                 T observedB = b.Observe();
                 T resultValue = op(a, observedB);
-                var collapsedStates = new List<T> { resultValue };
-                var collapsedWeights = new Dictionary<T, Complex> { { resultValue, Complex.One } };
-                var resultQubit = new QuBit<T>(collapsedStates, collapsedWeights, b.Operators);
+                List<T> collapsedStates = [resultValue];
+                Dictionary<T, Complex> collapsedWeights = new()
+                { { resultValue, Complex.One } };
+                QuBit<T> resultQubit = new(collapsedStates, collapsedWeights, b.Operators);
                 resultQubit.SetType(QuantumStateType.CollapsedResult);
                 resultQubit._isActuallyCollapsed = true;
                 return resultQubit;
             }
 
-            var newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
+            IEnumerable<T> newList = QuantumMathUtility<T>.Combine(a, b._qList, op);
             Dictionary<T, Complex>? newWeights = null;
 
             Dictionary<CommutativeKey<T>, T>? cache = null;
             if (QuantumConfig.EnableCommutativeCache)
             {
-                cache = new Dictionary<CommutativeKey<T>, T>();
+                cache = [];
             }
 
             if (b._weights != null)
             {
-                newWeights = new Dictionary<T, Complex>();
-                foreach (var (valB, wB) in b.ToWeightedValues())
+                newWeights = [];
+                foreach ((T valB, Complex wB) in b.ToWeightedValues())
                 {
                     T newVal;
                     if (cache != null)
                     {
-                        var key = new CommutativeKey<T>(a, valB);
+                        CommutativeKey<T> key = new(a, valB);
                         if (!cache.TryGetValue(key, out newVal))
                         {
                             newVal = op(a, valB);
@@ -683,7 +737,10 @@ namespace QuantumSuperposition.QuantumSoup
                     }
 
                     if (!newWeights.ContainsKey(newVal))
+                    {
                         newWeights[newVal] = Complex.Zero;
+                    }
+
                     newWeights[newVal] += wB; // multiply by 1.0
                 }
             }
@@ -698,40 +755,80 @@ namespace QuantumSuperposition.QuantumSoup
         // Because plain integers are too committed to a single outcome.
 
 
-        public static QuBit<T> operator %(T a, QuBit<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Mod(x, y));
-        public static QuBit<T> operator %(QuBit<T> a, QuBit<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Mod(x, y));
-        public static QuBit<T> operator %(QuBit<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Mod(x, y));
+        public static QuBit<T> operator %(T a, QuBit<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Mod);
+        }
 
-        public static QuBit<T> operator +(T a, QuBit<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Add(x, y));
-        public static QuBit<T> operator +(QuBit<T> a, QuBit<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Add(x, y));
-        public static QuBit<T> operator +(QuBit<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Add(x, y));
+        public static QuBit<T> operator %(QuBit<T> a, QuBit<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Mod);
+        }
 
-        public static QuBit<T> operator -(T a, QuBit<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Subtract(x, y));
-        public static QuBit<T> operator -(QuBit<T> a, QuBit<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Subtract(x, y));
-        public static QuBit<T> operator -(QuBit<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Subtract(x, y));
+        public static QuBit<T> operator %(QuBit<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Mod);
+        }
 
-        public static QuBit<T> operator *(T a, QuBit<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Multiply(x, y));
-        public static QuBit<T> operator *(QuBit<T> a, QuBit<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Multiply(x, y));
-        public static QuBit<T> operator *(QuBit<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Multiply(x, y));
+        public static QuBit<T> operator +(T a, QuBit<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Add);
+        }
 
-        public static QuBit<T> operator /(T a, QuBit<T> b) =>
-            b.Do_oper_type(a, b, (x, y) => b._ops.Divide(x, y));
-        public static QuBit<T> operator /(QuBit<T> a, QuBit<T> b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Divide(x, y));
-        public static QuBit<T> operator /(QuBit<T> a, T b) =>
-            a.Do_oper_type(a, b, (x, y) => a._ops.Divide(x, y));
+        public static QuBit<T> operator +(QuBit<T> a, QuBit<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Add);
+        }
+
+        public static QuBit<T> operator +(QuBit<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Add);
+        }
+
+        public static QuBit<T> operator -(T a, QuBit<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Subtract);
+        }
+
+        public static QuBit<T> operator -(QuBit<T> a, QuBit<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Subtract);
+        }
+
+        public static QuBit<T> operator -(QuBit<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Subtract);
+        }
+
+        public static QuBit<T> operator *(T a, QuBit<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Multiply);
+        }
+
+        public static QuBit<T> operator *(QuBit<T> a, QuBit<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Multiply);
+        }
+
+        public static QuBit<T> operator *(QuBit<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Multiply);
+        }
+
+        public static QuBit<T> operator /(T a, QuBit<T> b)
+        {
+            return b.Do_oper_type(a, b, b._ops.Divide);
+        }
+
+        public static QuBit<T> operator /(QuBit<T> a, QuBit<T> b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Divide);
+        }
+
+        public static QuBit<T> operator /(QuBit<T> a, T b)
+        {
+            return a.Do_oper_type(a, b, a._ops.Divide);
+        }
 
         #endregion
 
@@ -739,8 +836,8 @@ namespace QuantumSuperposition.QuantumSoup
         public static implicit operator QuBit<T>(T scalar)
         {
             // Create a single-value local qubit; mark it as a non-collapsed "any" state
-            var qb = new QuBit<T>(new[] { scalar });
-            qb.Any();
+            QuBit<T> qb = new(new[] { scalar });
+            _ = qb.Any();
             return qb;
         }
         #endregion
@@ -773,9 +870,9 @@ namespace QuantumSuperposition.QuantumSoup
             // If mock collapse is enabled, return the forced value.
             if (_mockCollapseEnabled)
             {
-                if (_mockCollapseValue == null)
-                    throw new InvalidOperationException("Mock collapse enabled but no mock value is set.");
-                return _mockCollapseValue;
+                return _mockCollapseValue == null
+                    ? throw new InvalidOperationException("Mock collapse enabled but no mock value is set.")
+                    : _mockCollapseValue;
             }
 
             // If already collapsed, simply return the collapsed value.
@@ -788,7 +885,9 @@ namespace QuantumSuperposition.QuantumSoup
             T picked = SampleWeighted(rng);
 
             if (QuantumConfig.ForbidDefaultOnCollapse && !_valueValidator(picked))
+            {
                 throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
+            }
 
             // Update internal state to reflect the collapse.
             _collapsedValue = picked;
@@ -810,7 +909,7 @@ namespace QuantumSuperposition.QuantumSoup
             {
                 int value = chosenOutcome[0];
                 // For bool qubits, convert 0/1 to false/true.
-                object observed = typeof(T) == typeof(bool) ? (object)(value != 0) : (object)value;
+                object observed = typeof(T) == typeof(bool) ? value != 0 : value;
                 _collapsedValue = (T)observed;
             }
             else
@@ -836,34 +935,40 @@ namespace QuantumSuperposition.QuantumSoup
             _lastCollapseSeed = seed;
             _collapseHistoryId = Guid.NewGuid();
 
-            var rng = new Random(seed);
+            Random rng = new(seed);
             return Observe(rng);
         }
 
         public T ObserveInBasis(Complex[,] basisMatrix, Random? rng = null)
         {
             if (_weights == null || _weights.Count == 0)
+            {
                 throw new InvalidOperationException("No amplitudes available for basis transform.");
+            }
 
             int dimension = _weights.Count;
 
             if (basisMatrix.GetLength(0) != dimension || basisMatrix.GetLength(1) != dimension)
+            {
                 throw new ArgumentException($"Basis transform must be a {dimension}×{dimension} square matrix.");
+            }
 
             // Capture the states and their amplitudes
-            var states = _weights.Keys.ToArray();
-            var amplitudes = states.Select(s => _weights[s]).ToArray();
+            T[] states = _weights.Keys.ToArray();
+            Complex[] amplitudes = states.Select(s => _weights[s]).ToArray();
 
             // Apply the unitary basis transformation
-            var transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, basisMatrix);
+            Complex[] transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, basisMatrix);
 
             // Construct new weights
-            var newWeights = new Dictionary<T, Complex>();
+            Dictionary<T, Complex> newWeights = [];
             for (int i = 0; i < states.Length; i++)
+            {
                 newWeights[states[i]] = transformed[i];
+            }
 
             // Because nothing says "science" like measuring something after you’ve changed the rules.
-            var newQubit = new QuBit<T>(states, newWeights, _ops).WithNormalisedWeights();
+            QuBit<T> newQubit = new QuBit<T>(states, newWeights, _ops).WithNormalisedWeights();
             return newQubit.Observe(rng);
         }
 
@@ -872,7 +977,7 @@ namespace QuantumSuperposition.QuantumSoup
         /// <summary>
         /// Returns true if this QuBit has actually collapsed (via a real observation).
         /// </summary>
-        public bool IsActuallyCollapsed => _isActuallyCollapsed && _eType == QuantumStateType.CollapsedResult;
+        public new bool IsActuallyCollapsed => _isActuallyCollapsed && _eType == QuantumStateType.CollapsedResult;
 
         // ---------------------------------------------------------------------
         // Collapse Mocking
@@ -903,7 +1008,10 @@ namespace QuantumSuperposition.QuantumSoup
         /// Returns a string representation of the current superposition states and their weights
         /// without triggering a collapse. Useful for debugging and introspection.
         /// </summary>
-        public string show_states() => ToDebugString();
+        public string show_states()
+        {
+            return ToDebugString();
+        }
 
         #endregion
 
@@ -921,10 +1029,12 @@ namespace QuantumSuperposition.QuantumSoup
             }
 
             if (_eType == QuantumStateType.SuperpositionAny)
+            {
                 return States;
+            }
             else if (_eType == QuantumStateType.SuperpositionAll)
             {
-                var distinct = States.Distinct().ToList();
+                List<T> distinct = States.Distinct().ToList();
                 return distinct.Count == 1 ? distinct : States;
             }
             else
@@ -943,14 +1053,18 @@ namespace QuantumSuperposition.QuantumSoup
             if (_weights == null)
             {
                 // All distinct items with weight=1.0
-                var distinct = _qList.Distinct();
-                foreach (var v in distinct)
+                IEnumerable<T> distinct = _qList.Distinct();
+                foreach (T? v in distinct)
+                {
                     yield return (v, 1.0);
+                }
             }
             else
             {
-                foreach (var kvp in _weights)
+                foreach (KeyValuePair<T, Complex> kvp in _weights)
+                {
                     yield return (kvp.Key, kvp.Value);
+                }
             }
         }
 
@@ -961,19 +1075,20 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public QuBit<T> WithNormalisedWeights()
         {
-            if (!IsWeighted) return this; // no weights to normalise
+            if (!IsWeighted)
+            {
+                return this; // no weights to normalise
+            }
 
+            Dictionary<T, Complex> clonedWeights = new(_weights);
 
+            List<T> clonedQList = _qList.ToList();  // or just _weights.Keys
 
-            var clonedWeights = new Dictionary<T, Complex>(_weights);
-
-            var clonedQList = _qList.ToList();  // or just _weights.Keys
-
-            var newQ = new QuBit<T>(clonedQList, clonedWeights, _ops)
+            QuBit<T> newQ = new(clonedQList, clonedWeights, _ops)
 
             {
 
-                _eType = this._eType
+                _eType = _eType
 
             };
 
@@ -991,34 +1106,44 @@ namespace QuantumSuperposition.QuantumSoup
         public QuBit<T> WithWeights(Dictionary<T, Complex> weights, bool autoNormalise = false)
         {
             if (weights == null)
-                throw new ArgumentNullException(nameof(weights));
-
-            // Filter weights to only include valid states.
-            var filtered = new Dictionary<T, Complex>();
-            foreach (var kvp in weights)
             {
-                if (States.Contains(kvp.Key))
-                    filtered[kvp.Key] = kvp.Value;
+                throw new ArgumentNullException(nameof(weights));
             }
 
-            if (this.System != null)
+            // Filter weights to only include valid states.
+            Dictionary<T, Complex> filtered = [];
+            foreach (KeyValuePair<T, Complex> kvp in weights)
+            {
+                if (States.Contains(kvp.Key))
+                {
+                    filtered[kvp.Key] = kvp.Value;
+                }
+            }
+
+            if (System != null)
             {
                 // Update this instance’s weights in place.
                 _weights = filtered;
                 if (autoNormalise)
+                {
                     NormaliseWeights();
+                }
+
                 return this;
             }
             else
             {
                 // Because sometimes commitment is optional. Especially in quantum dating.
-                var newQ = new QuBit<T>(_qList, filtered, _ops)
+                QuBit<T> newQ = new(_qList, filtered, _ops)
                 {
-                    _eType = this._eType
+                    _eType = _eType,
+                    _weights = filtered
                 };
-                newQ._weights = filtered;
                 if (autoNormalise)
+                {
                     newQ.NormaliseWeights();
+                }
+
                 return newQ;
             }
         }
@@ -1028,24 +1153,20 @@ namespace QuantumSuperposition.QuantumSoup
         /// Returns a string representation of the current superposition states.
         /// </summary>
         /// <returns></returns>
-        public override string ToString()
+        public override string? ToString()
         {
             // Legacy style if no weights or all weights equal
             if (_weights == null || AllWeightsEqual(_weights))
             {
-                var distinct = States.Distinct();
-                if (_eType == QuantumStateType.SuperpositionAny)
-                    return $"any({string.Join(", ", distinct)})";
-                else
-                {
-                    if (distinct.Count() == 1) return distinct.First().ToString();
-                    return $"all({string.Join(", ", distinct)})";
-                }
+                IEnumerable<T> distinct = States.Distinct();
+                return _eType == QuantumStateType.SuperpositionAny
+                    ? $"any({string.Join(", ", distinct)})"
+                    : distinct.Count() == 1 ? distinct.First().ToString() : $"all({string.Join(", ", distinct)})";
             }
             else
             {
                 // Weighted
-                var entries = ToWeightedValues().Select(x => $"{x.value}:{x.weight}");
+                IEnumerable<string> entries = ToWeightedValues().Select(x => $"{x.value}:{x.weight}");
                 return _eType == QuantumStateType.SuperpositionAny
                     ? $"any({string.Join(", ", entries)})"
                     : $"all({string.Join(", ", entries)})";
@@ -1070,14 +1191,15 @@ namespace QuantumSuperposition.QuantumSoup
         {
             var obj = new
             {
-                states = this.ToWeightedValues().Select(v => new {
-                    value = v.value,
+                states = ToWeightedValues().Select(v => new
+                {
+                    v.value,
                     amplitude = new { real = v.weight.Real, imag = v.weight.Imaginary },
                     probability = v.weight.Magnitude * v.weight.Magnitude
                 }),
-                collapsed = this.IsCollapsed,
-                collapseId = this.LastCollapseHistoryId,
-                qubitIndices = this.GetQubitIndices()
+                collapsed = IsCollapsed,
+                collapseId = LastCollapseHistoryId,
+                qubitIndices = GetQubitIndices()
             };
             return JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
         }
@@ -1088,10 +1210,14 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>
-        private bool AllWeightsEqual(Dictionary<T, Complex> dict)
+        private new bool AllWeightsEqual(Dictionary<T, Complex> dict)
         {
-            if (dict.Count <= 1) return true;
-            var first = dict.Values.First();
+            if (dict.Count <= 1)
+            {
+                return true;
+            }
+
+            Complex first = dict.Values.First();
             return dict.Values.Skip(1).All(w => Complex.Abs(w - first) < 1e-14);
         }
 
@@ -1100,9 +1226,12 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>
-        private bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
+        private new bool AllWeightsProbablyEqual(Dictionary<T, Complex> dict)
         {
-            if (dict.Count <= 1) return true;
+            if (dict.Count <= 1)
+            {
+                return true;
+            }
 
             double firstProb = SquaredMagnitude(dict.Values.First());
 
@@ -1111,7 +1240,10 @@ namespace QuantumSuperposition.QuantumSoup
                 .All(w => Math.Abs(SquaredMagnitude(w) - firstProb) < 1e-14);
         }
 
-        private double SquaredMagnitude(Complex c) => c.Real * c.Real + c.Imaginary * c.Imaginary;
+        private double SquaredMagnitude(Complex c)
+        {
+            return (c.Real * c.Real) + (c.Imaginary * c.Imaginary);
+        }
 
         #endregion
 
@@ -1119,12 +1251,12 @@ namespace QuantumSuperposition.QuantumSoup
         /// Indicates if the QuBit is burdened with knowledge (i.e., weighted).
         /// If not, it's just blissfully unaware of how much it should care.
         /// </summary>
-        public bool IsWeighted => _weights != null;
+        public new bool IsWeighted => _weights != null;
 
         public bool IsCollapsed => _isCollapsedFromSystem || _isActuallyCollapsed;
 
         public override IReadOnlyCollection<T> States =>
-        _weights != null ? (IReadOnlyCollection<T>)_weights.Keys : _qList.ToList();
+        _weights != null ? _weights.Keys : _qList.ToList();
 
         /// <summary>
         /// Returns the most probable state, i.e., the one that's been yelling the loudest in the multiverse.
@@ -1133,7 +1265,9 @@ namespace QuantumSuperposition.QuantumSoup
         public T MostProbable()
         {
             if (!States.Any())
+            {
                 throw new InvalidOperationException("No states available to collapse.");
+            }
 
             if (!IsWeighted)
             {
@@ -1143,7 +1277,7 @@ namespace QuantumSuperposition.QuantumSoup
             else
             {
                 // pick the max by weight
-                var (val, _) = ToWeightedValues()
+                (T val, Complex _) = ToWeightedValues()
                     .OrderByDescending(x => x.weight)
                     .First();
                 return val;
@@ -1154,7 +1288,7 @@ namespace QuantumSuperposition.QuantumSoup
         /// Tolerance used for comparing weights in equality checks.
         /// This allows for minor floating-point drift.
         /// </summary>
-        private static readonly double _tolerance = 1e-9;
+        private static new readonly double _tolerance = 1e-9;
 
 
         /// <summary>
@@ -1167,13 +1301,13 @@ namespace QuantumSuperposition.QuantumSoup
             {
                 int hash = 17;
 
-                foreach (var s in States.Distinct().OrderBy(x => x))
+                foreach (T? s in States.Distinct().OrderBy(x => x))
                 {
-                    hash = hash * 23 + (s?.GetHashCode() ?? 0);
+                    hash = (hash * 23) + (s?.GetHashCode() ?? 0);
 
                     if (IsWeighted)
                     {
-                        Complex amp = _weights != null && _weights.TryGetValue(s, out var w) ? w : Complex.One;
+                        Complex amp = _weights != null && _weights.TryGetValue(s, out Complex w) ? w : Complex.One;
 
                         // Round real and imaginary parts separately to avoid hash instability
                         double real = Math.Round(amp.Real, 12);
@@ -1182,8 +1316,8 @@ namespace QuantumSuperposition.QuantumSoup
                         long realBits = BitConverter.DoubleToInt64Bits(real);
                         long imagBits = BitConverter.DoubleToInt64Bits(imag);
 
-                        hash = hash * 23 + realBits.GetHashCode();
-                        hash = hash * 23 + imagBits.GetHashCode();
+                        hash = (hash * 23) + realBits.GetHashCode();
+                        hash = (hash * 23) + imagBits.GetHashCode();
                     }
                 }
 
@@ -1197,7 +1331,10 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         public string WeightSummary()
         {
-            if (!IsWeighted) return "Weighted: false";
+            if (!IsWeighted)
+            {
+                return "Weighted: false";
+            }
 
             double totalProbability = _weights.Values.Sum(amp => amp.Magnitude * amp.Magnitude);
             double maxMagnitudeSquared = _weights.Values.Max(amp => amp.Magnitude * amp.Magnitude);
@@ -1219,65 +1356,78 @@ namespace QuantumSuperposition.QuantumSoup
         /// </summary>
         /// <param name="q"></param>
         [Obsolete("Implicit QuBit collapse is not safe for production. Use Observe() instead.")]
-        public static implicit operator T(QuBit<T> q) => q.SampleWeighted();
+        public static implicit operator T(QuBit<T> q)
+        {
+            return q.SampleWeighted();
+        }
 
         // A convenient way to slap some probabilities onto your states after the fact.
         // Like putting sprinkles on a Schrödinger cupcake — you won't know how it tastes until you eat it, and then it's too late.
         /// </summary>
         public QuBit<T> WithWeightsNormalised(Dictionary<T, Complex> weights)
         {
-            if (weights == null) throw new ArgumentNullException(nameof(weights));
+            if (weights == null)
+            {
+                throw new ArgumentNullException(nameof(weights));
+            }
 
             // Gather only the weights for keys we already have in States.
-            var filtered = new Dictionary<T, Complex>();
-            foreach (var kvp in weights)
+            Dictionary<T, Complex> filtered = [];
+            foreach (KeyValuePair<T, Complex> kvp in weights)
             {
                 if (States.Contains(kvp.Key))
+                {
                     filtered[kvp.Key] = kvp.Value;
+                }
             }
 
             // Construct the new QuBit with the same _qList, same ops
-            var newQ = new QuBit<T>(_qList, filtered, _ops)
+            QuBit<T> newQ = new(_qList, filtered, _ops)
             {
-                _eType = this._eType  // preserve the existing quantum state type
+                _eType = _eType  // preserve the existing quantum state type
             };
             return newQ;
         }
 
-        public int[] GetQubitIndices() => _qubitIndices;
+        public int[] GetQubitIndices()
+        {
+            return _qubitIndices;
+        }
 
         public void NotifyWavefunctionCollapsed(Guid collapseId)
         {
             // If already collapsed, ensure we update the system-observed value if missing.
             if (_isActuallyCollapsed)
             {
-                if (_systemObservedValue == null && _system != null)
+                if (_systemObservedValue == null && System != null)
                 {
                     int[] fullObserved;
                     try
                     {
-                        fullObserved = _system.GetCollapsedState();
+                        fullObserved = System.GetCollapsedState();
                     }
                     catch (InvalidOperationException)
                     {
                         int[] unionIndices = GetUnionOfGroupIndices();
-                        fullObserved = _system.ObserveGlobal(unionIndices, Random.Shared);
+                        fullObserved = System.ObserveGlobal(unionIndices, Random.Shared);
                     }
 
                     if (_qubitIndices.Length == 1)
                     {
-                        var value = fullObserved[_qubitIndices[0]];
-                        object val = typeof(T) == typeof(bool) ? (object)(value != 0) : (object)value;
+                        int value = fullObserved[_qubitIndices[0]];
+                        object val = typeof(T) == typeof(bool) ? value != 0 : value;
                         _systemObservedValue = val;
                         _collapsedValue = (T)val;
                     }
                     else
                     {
-                        var values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
-                        object val = typeof(T) == typeof(bool[]) ? (object)values.Select(v => v != 0).ToArray() : (object)values;
+                        int[] values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
+                        object val = typeof(T) == typeof(bool[]) ? values.Select(v => v != 0).ToArray() : values;
                         _systemObservedValue = val;
                         if (val is T t)
+                        {
                             _collapsedValue = t;
+                        }
                     }
                 }
                 _collapseHistoryId = collapseId;
@@ -1287,33 +1437,35 @@ namespace QuantumSuperposition.QuantumSoup
             _isCollapsedFromSystem = true;
             _collapseHistoryId = collapseId;
 
-            if (_system != null)
+            if (System != null)
             {
                 int[] fullObserved;
                 try
                 {
-                    fullObserved = _system.GetCollapsedState();
+                    fullObserved = System.GetCollapsedState();
                 }
                 catch (InvalidOperationException)
                 {
                     int[] unionIndices = GetUnionOfGroupIndices();
-                    fullObserved = _system.ObserveGlobal(unionIndices, Random.Shared);
+                    fullObserved = System.ObserveGlobal(unionIndices, Random.Shared);
                 }
 
                 if (_qubitIndices.Length == 1)
                 {
-                    var value = fullObserved[_qubitIndices[0]];
-                    object val = typeof(T) == typeof(bool) ? (object)(value != 0) : (object)value;
+                    int value = fullObserved[_qubitIndices[0]];
+                    object val = typeof(T) == typeof(bool) ? value != 0 : value;
                     _systemObservedValue = val;
                     _collapsedValue = (T)val;
                 }
                 else
                 {
-                    var values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
-                    object val = typeof(T) == typeof(bool[]) ? (object)values.Select(v => v != 0).ToArray() : (object)values;
+                    int[] values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
+                    object val = typeof(T) == typeof(bool[]) ? values.Select(v => v != 0).ToArray() : values;
                     _systemObservedValue = val;
                     if (val is T t)
+                    {
                         _collapsedValue = t;
+                    }
                 }
 
                 _isActuallyCollapsed = true;
@@ -1328,13 +1480,19 @@ namespace QuantumSuperposition.QuantumSoup
             if (IsCollapsed)
             {
                 // If we collapsed locally, return _collapsedValue
-                if (_collapsedValue != null) return _collapsedValue;
+                if (_collapsedValue != null)
+                {
+                    return _collapsedValue;
+                }
 
                 // If the system forced the collapse, we might do a lazy read:
                 // For a real partial measurement approach, you'd query
                 // the system's wavefunction. Here we do a simplified approach
                 // if T == (int,bool).
-                if (_systemObservedValue != null) return _systemObservedValue;
+                if (_systemObservedValue != null)
+                {
+                    return _systemObservedValue;
+                }
             }
 
             return null;
@@ -1344,17 +1502,24 @@ namespace QuantumSuperposition.QuantumSoup
 
         object IQuantumReference.Observe(Random? rng)
         {
-            if (_system != null)
+            if (System != null)
             {
                 if (IsCollapsed)
                 {
-                    if (_systemObservedValue != null) return _systemObservedValue;
-                    if (_collapsedValue != null) return _collapsedValue;
+                    if (_systemObservedValue != null)
+                    {
+                        return _systemObservedValue;
+                    }
+
+                    if (_collapsedValue != null)
+                    {
+                        return _collapsedValue;
+                    }
                 }
                 rng ??= Random.Shared;
                 // Collapse the full entangled state by measuring the union of indices
                 int[] unionIndices = GetUnionOfGroupIndices();
-                int[] measured = _system.ObserveGlobal(unionIndices, rng);
+                int[] measured = System.ObserveGlobal(unionIndices, rng);
 
                 // Now extract this qubit’s value from the complete collapsed state.
                 object result;
@@ -1378,16 +1543,16 @@ namespace QuantumSuperposition.QuantumSoup
 
         public void ApplyLocalUnitary(Complex[,] gate, string gateName)
         {
-            if (this.System != null)
+            if (System != null)
             {
                 // For example, if this is a single-qubit operation:
                 if (_qubitIndices.Length == 1 && gate.GetLength(0) == 2 && gate.GetLength(1) == 2)
                 {
-                    this.System.ApplySingleQubitGate(_qubitIndices[0], gate, gateName);
+                    System.ApplySingleQubitGate(_qubitIndices[0], gate, gateName);
                 }
                 else if (_qubitIndices.Length == 2 && gate.GetLength(0) == 4 && gate.GetLength(1) == 4)
                 {
-                    this.System.ApplyTwoQubitGate(_qubitIndices[0], _qubitIndices[1], gate, gateName);
+                    System.ApplyTwoQubitGate(_qubitIndices[0], _qubitIndices[1], gate, gateName);
                 }
                 else
                 {
@@ -1398,12 +1563,14 @@ namespace QuantumSuperposition.QuantumSoup
 
             // Local fallback for 2-state qubits
             if (_weights == null || _weights.Count != 2)
+            {
                 throw new InvalidOperationException("Local unitary only supported for 2-state local qubits in this example.");
+            }
 
-            var states = _weights.Keys.ToArray();
-            var amplitudes = states.Select(s => _weights[s]).ToArray();
+            T[] states = _weights.Keys.ToArray();
+            Complex[] amplitudes = states.Select(s => _weights[s]).ToArray();
 
-            var transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, gate);
+            Complex[] transformed = QuantumMathUtility<Complex>.ApplyMatrix(amplitudes, gate);
 
             for (int i = 0; i < states.Length; i++)
             {
@@ -1424,11 +1591,11 @@ namespace QuantumSuperposition.QuantumSoup
             // If mock collapse is enabled, return the forced mock value
             if (_mockCollapseEnabled)
             {
-                if (_mockCollapseValue == null)
-                    throw new InvalidOperationException(
+                return _mockCollapseValue == null
+                    ? throw new InvalidOperationException(
                         $"Mock collapse enabled but no mock value is set. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."
-                    );
-                return _mockCollapseValue;
+                    )
+                    : (object)_mockCollapseValue;
             }
 
             // If already collapsed, return the same value
@@ -1447,7 +1614,7 @@ namespace QuantumSuperposition.QuantumSoup
                 throw new InvalidOperationException("Collapse resulted in default(T), which is disallowed by config.");
             }
 
-            if (EqualityComparer<T>.Default.Equals(picked, default(T)))
+            if (EqualityComparer<T>.Default.Equals(picked, default))
             {
                 throw new InvalidOperationException(
                     $"Collapse resulted in default value. IsCollapsed={_isActuallyCollapsed}, States.Count={States.Count}, Type={_eType}."

@@ -22,16 +22,16 @@ namespace PositronicVariables.DependencyInjection
             Action<ConvergenceEngineBuilder<T>> configure)
             where T : IComparable<T>
         {
-            services.AddScoped<ScopedPositronicVariableFactory>();
-            services.AddScoped<IPositronicVariableFactory>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
-            services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
-            services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
+            _ = services.AddScoped<ScopedPositronicVariableFactory>();
+            _ = services.AddScoped<IPositronicVariableFactory>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+            _ = services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
+            _ = services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
 
-            services.AddScoped<IImprobabilityEngine<T>>(sp =>
+            _ = services.AddScoped<IImprobabilityEngine<T>>(sp =>
             {
-                var runtime = sp.GetRequiredService<IPositronicRuntime>();
+                IPositronicRuntime runtime = sp.GetRequiredService<IPositronicRuntime>();
 
-                var defaultEngine = new ImprobabilityEngine<T>(
+                ImprobabilityEngine<T> defaultEngine = new(
                     new DefaultEntropyController(runtime),
                     new RegretScribe<T>(),
                     new SubEthaOutputTransponder(runtime),
@@ -39,7 +39,7 @@ namespace PositronicVariables.DependencyInjection
                     new BureauOfTemporalRecords<T>()
                 );
 
-                var builder = new ConvergenceEngineBuilder<T>();
+                ConvergenceEngineBuilder<T> builder = new();
                 configure(builder);
 
                 return builder.Build(defaultEngine);

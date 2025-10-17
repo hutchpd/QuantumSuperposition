@@ -7,18 +7,60 @@ namespace QuantumSuperposition.Operators
     /// </summary>
     public class CharOperators : IQuantumOperators<char>
     {
-        public char Add(char a, char b) => (char)(a + b);
-        public char Subtract(char a, char b) => (char)(a - b);
-        public char Multiply(char a, char b) => (char)(a * b);
-        public char Divide(char a, char b) => (char)(a / b);
-        public char Mod(char a, char b) => (char)(a % b);
+        public char Add(char a, char b)
+        {
+            return (char)(a + b);
+        }
 
-        public bool GreaterThan(char a, char b) => a > b;
-        public bool GreaterThanOrEqual(char a, char b) => a >= b;
-        public bool LessThan(char a, char b) => a < b;
-        public bool LessThanOrEqual(char a, char b) => a <= b;
-        public bool Equal(char a, char b) => a == b;
-        public bool NotEqual(char a, char b) => a != b;
+        public char Subtract(char a, char b)
+        {
+            return (char)(a - b);
+        }
+
+        public char Multiply(char a, char b)
+        {
+            return (char)(a * b);
+        }
+
+        public char Divide(char a, char b)
+        {
+            return (char)(a / b);
+        }
+
+        public char Mod(char a, char b)
+        {
+            return (char)(a % b);
+        }
+
+        public bool GreaterThan(char a, char b)
+        {
+            return a > b;
+        }
+
+        public bool GreaterThanOrEqual(char a, char b)
+        {
+            return a >= b;
+        }
+
+        public bool LessThan(char a, char b)
+        {
+            return a < b;
+        }
+
+        public bool LessThanOrEqual(char a, char b)
+        {
+            return a <= b;
+        }
+
+        public bool Equal(char a, char b)
+        {
+            return a == b;
+        }
+
+        public bool NotEqual(char a, char b)
+        {
+            return a != b;
+        }
 
         public bool IsAddCommutative => true;
     }
