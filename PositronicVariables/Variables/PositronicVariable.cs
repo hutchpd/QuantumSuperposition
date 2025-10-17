@@ -25,7 +25,7 @@ namespace PositronicVariables.Variables
     /// If Schrödinger and Asimov had a baby, this would be its teething ring.
     /// </summary>
     /// <typeparam name="T">A type that implements IComparable.</typeparam>
-    public class PositronicVariable<T> : IPositronicVariable
+    public partial class PositronicVariable<T> : IPositronicVariable
         where T : IComparable<T>
     {
         private static int OutsideEpoch => -1;
@@ -1561,10 +1561,11 @@ namespace PositronicVariables.Variables
 
             public static implicit operator QuBit<T>(QExpr e) => e.Resolve();
 
-            public static implicit operator PositronicVariable<T>(QExpr e)
+            public static implicit operator PositronicVariable<T>(QExpr expr)
             {
-                e.Source.Assign(e.Resolve());
-                return e.Source;
+                var src = expr.Source ?? throw new InvalidOperationException("Detached QExpr has no source PositronicVariable.");
+                src.Assign(expr);   // side-effectful assign
+                return src;         // allow "antival = antival + 2;" to compile and mutate
             }
 
             // ---------- QExpr ⊗ scalar operators ----------

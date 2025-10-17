@@ -1016,8 +1016,7 @@ namespace PositronicVariables.Tests
                 // The print under investigation
                 lines.Add($"The antival is {antival}");
 
-                // Do the usual writes the test relies on.
-                // Use your real body here if it differs; the point is:
+                // Real body here if it differs; the point is:
                 //   (a) a pre-print read
                 //   (b) then writes that constrain the antival.
                 antival = (antival + 1);   // logs +1 into the ledger
@@ -1028,7 +1027,7 @@ namespace PositronicVariables.Tests
             ProgramBody();
 
             // Act 2: run inside the convergence loop
-            // NOTE: runFinalIteration=true, unifyOnConvergence=true -> mirrors your current setup
+            // NOTE: runFinalIteration=true, unifyOnConvergence=true -> mirrors
             PositronicVariables.Variables.PositronicVariable<int>.RunConvergenceLoop(
                 rt, ProgramBody, runFinalIteration: true, unifyOnConvergence: true);
 
@@ -1036,7 +1035,7 @@ namespace PositronicVariables.Tests
             var lastPrePrint = prePrintSnapshots.Last();
 
             // This assertion tells us if reverse replay provided a single value at the print site.
-            // If this FAILS (length != 1), your print site is still seeing a union (e.g., {1,10}).
+            // If this FAILS (length != 1), the print site is still seeing a union (e.g., {1,10}).
             Assert.That(lastPrePrint.Length, Is.EqualTo(1),
                 "Expected a single current-slice value at the print site in the final iteration.");
 
