@@ -6,10 +6,11 @@ internal static class Program
     [DontPanic]
     private static void Main()
     {
-        var antival = PositronicVariable<int>.GetOrCreate("antival", -1);
-        Console.WriteLine($"The antival is {antival}");
-        var val = -1 * antival;
-        Console.WriteLine($"The value is {val}");
-        antival.State = val; // feeds back
+        var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+
+        Console.WriteLine($"The antivals are {antival} "); // the result is printed
+        antival.State = antival.State + 2;
+        antival.Scalar = 10; // second variable incremented
+
     }
 }

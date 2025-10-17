@@ -13,6 +13,7 @@ using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections;
 using System.Reflection;
+using System.Text;
 #endregion
 
 namespace PositronicVariables.Tests
@@ -1355,9 +1356,164 @@ namespace PositronicVariables.Tests
         }
 
         #endregion
-    }
 
     #endregion
+
+            [Test, Explicit("Diagnostics")]
+        public void Trace_Timelines_AndEpochs_SingleVariable_Multiply()
+        {
+            var rt = PositronicAmbient.Current;
+            var a = PositronicVariable<int>.GetOrCreate("antival", 0, rt);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("=== Single-var diagnostic: multiply then scalar ===");
+
+            void Dump(string label)
+            {
+                int entropy = PositronicVariable<int>.GetEntropy(rt);
+                int epoch = GetStaticInt(typeof(PositronicVariable<int>), "s_CurrentEpoch");
+                int lastEntSeen = GetStaticInt(typeof(PositronicVariable<int>), "s_LastEntropySeenForEpoch");
+                bool revStarted = GetStaticBool(typeof(PositronicVariable<int>), "_reverseReplayStarted");
+
+                var aStates = GetTimelineStates(a);
+                var aEpochs = GetEpochs(a);
+
+                var (hasBase, baseVal) = GetForwardBaseline(a);
+
+                sb.AppendLine($"[{label}] Entropy={(entropy > 0 ? "FWD" : "REV")}, Epoch={epoch}, LastEntropySeen={lastEntSeen}, ReverseReplayStarted={revStarted}");
+                sb.AppendLine($"  antival.timeline      = {FormatTimeline(aStates)}");
+                sb.AppendLine($"  antival._sliceEpochs  = [{string.Join(", ", aEpochs)}]");
+                sb.AppendLine($"  antival.CurrentQBit   = [{string.Join(", ", a.GetCurrentQBit().ToCollapsedValues())}]");
+                sb.AppendLine($"  antival.ForwardBaseline = {(hasBase ? baseVal.ToString() : "(none)")}");
+
+                DumpOpLog(sb, a);
+            }
+
+            void ProgramBody()
+            {
+                Dump("pre-print");
+                var _ = $"The antival is {a}"; // print site
+
+                // The sequence under test: multiply then force final value
+                a.State = a.State * 2;
+                a.Scalar = 10;
+
+                Dump("post-mutations");
+            }
+
+            // Outside-the-loop run
+            ProgramBody();
+
+            // In-loop run (matches console exit behavior)
+            PositronicVariable<int>.RunConvergenceLoop(rt, ProgramBody, runFinalIteration: true, unifyOnConvergence: true);
+
+            TestContext.WriteLine(sb.ToString());
+
+            // keep variable referenced
+            Assert.That(a.timeline.Count, Is.GreaterThanOrEqualTo(1));
+        }
+
+        // -------- local helpers (single-var versions) --------
+
+        private static string FormatTimeline(IReadOnlyList<int[]> slices)
+            => string.Join(" ", slices.Select(s => $"[{string.Join(", ", s.Select(v => v.ToString()))}]"));
+
+        private static IReadOnlyList<int[]> GetTimelineStates(PositronicVariable<int> v)
+        {
+            var timelineField = typeof(PositronicVariable<int>)
+                .GetField("timeline", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var slices = (IEnumerable)timelineField!.GetValue(v);
+            var result = new List<int[]>();
+            foreach (var qb in slices)
+            {
+                var toVals = qb.GetType().GetMethod("ToCollapsedValues", BindingFlags.Public | BindingFlags.Instance);
+                var vals = ((IEnumerable<int>)toVals!.Invoke(qb, null)).ToArray();
+                result.Add(vals);
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<int> GetEpochs(PositronicVariable<int> v)
+        {
+            var epochsField = typeof(PositronicVariable<int>)
+                .GetField("_sliceEpochs", BindingFlags.NonPublic | BindingFlags.Instance);
+            var epochs = (IEnumerable<int>)epochsField!.GetValue(v);
+            return epochs.ToArray();
+        }
+
+        private static (bool has, int baseline) GetForwardBaseline(PositronicVariable<int> v)
+        {
+            var t = typeof(PositronicVariable<int>);
+            var fHas = t.GetField("_hasForwardScalarBaseline", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBase = t.GetField("_forwardScalarBaseline", BindingFlags.NonPublic | BindingFlags.Instance);
+            bool has = (bool)(fHas?.GetValue(v) ?? false);
+            int baseline = has ? (int)(fBase!.GetValue(v) ?? 0) : 0;
+            return (has, baseline);
+        }
+
+        private static int GetStaticInt(Type t, string fieldName)
+        {
+            var f = t.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static);
+            return (int)(f?.GetValue(null) ?? 0);
+        }
+
+        private static bool GetStaticBool(Type t, string fieldName)
+        {
+            var f = t.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static);
+            return (bool)(f?.GetValue(null) ?? false);
+        }
+
+        private static void DumpOpLog(StringBuilder sb, PositronicVariable<int> a)
+        {
+            var logField = typeof(QuantumLedgerOfRegret).GetField("_log", BindingFlags.NonPublic | BindingFlags.Static);
+            var log = ((IEnumerable)logField!.GetValue(null)).Cast<object>().ToArray();
+            sb.AppendLine($"  OpLog (depth={log.Length}):");
+
+            for (int i = 0; i < log.Length; i++)
+            {
+                var entry = log[i];
+                string type = entry?.GetType().Name ?? "(null)";
+
+                string target = "";
+                var opVar = TryGetOperationVariable(entry);
+                if (ReferenceEquals(opVar, a)) target = " [antival]";
+
+                // Try to show Added/Replaced slice values if available
+                string extra = "";
+                var addedSliceProp = entry?.GetType().GetProperty("AddedSlice", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var replacedSliceProp = entry?.GetType().GetProperty("ReplacedSlice", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (addedSliceProp != null)
+                {
+                    var qb = addedSliceProp.GetValue(entry);
+                    var toVals = qb?.GetType().GetMethod("ToCollapsedValues", BindingFlags.Public | BindingFlags.Instance);
+                    var vals = toVals != null ? string.Join(", ", ((IEnumerable<int>)toVals.Invoke(qb, null)).ToArray()) : "";
+                    extra = $" Added=[{vals}]";
+                }
+                else if (replacedSliceProp != null)
+                {
+                    var qb = replacedSliceProp.GetValue(entry);
+                    var toVals = qb?.GetType().GetMethod("ToCollapsedValues", BindingFlags.Public | BindingFlags.Instance);
+                    var vals = toVals != null ? string.Join(", ", ((IEnumerable<int>)toVals.Invoke(qb, null)).ToArray()) : "";
+                    extra = $" Replaced=[{vals}]";
+                }
+
+                sb.AppendLine($"    {i,2}: {type}{target}{extra}");
+            }
+        }
+
+        private static object TryGetOperationVariable(object op)
+        {
+            if (op is null) return null;
+            var fields = op.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (var f in fields)
+            {
+                var val = f.GetValue(op);
+                if (val is IPositronicVariable) return val;
+            }
+            return null;
+        }
+    }
 
     #region Helpers
 

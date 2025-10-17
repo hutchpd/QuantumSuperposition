@@ -7,6 +7,7 @@ using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -39,138 +40,159 @@ namespace PositronicVariables.Engine
         /// </summary>
         public QuBit<T> ReplayReverseCycle(QuBit<T> incoming, PositronicVariable<T> variable)
         {
-            // Peel the **last forward half‑cycle**:
-            // pop ops newest->oldest until we hit the ForwardHalfCycleMarker;
-            // if there is no marker (outside the loop), fall back to greedy peel.
+            // Global peel newest→oldest; scope decisions to 'variable'.
             var poppedSnapshots = new List<IOperation>();
             var poppedReversibles = new List<IReversibleOperation<T>>();
-            var forwardValues = new HashSet<T>();
-            var closingReplaceEncountered = false;
-            var preReplaceScalarAppends = new List<T>();
+
+            // Per-variable bookkeeping
+            var forwardValuesForThisVar = new HashSet<T>();
+            var preReplaceScalarAppendsForThisVar = new List<T>();
+
+            // IMPORTANT: this flips when we hit the FIRST snapshot (append or replace) for THIS variable.
+            // From that point backward we collect reversible ops for THIS variable only.
+            bool encounteredClosingSnapshotForThisVar = false;
 
             while (true)
             {
-                // Gotos are evil and wrong a deliciously tasty with hot sauce.
                 var top = QuantumLedgerOfRegret.Peek();
                 switch (top)
                 {
                     case null:
-                        // no marker found (outside loop) - done peeling this run
                         goto DonePeel;
+
                     case MerlinFroMarker:
-                        // boundary of this forward half‑cycle - stop here
                         goto DonePeel;
+
                     case TimelineAppendOperation<T> tap:
-                        // Only count appends that occur *after* the closing replace.
-                        // Appends that happened before the replace must NOT seed reverse replay.
+                    {
+                        poppedSnapshots.Add(tap);
+
+                        if (BelongsToVariable(tap, variable))
                         {
                             var vals = tap.AddedSlice.ToCollapsedValues();
-                            if (!closingReplaceEncountered)
+
+                            if (!encounteredClosingSnapshotForThisVar)
                             {
-                                forwardValues.UnionWith(vals);                // normal forward appends (survive)
+                                // Appends more recent than the closing snapshot survive toward the print site.
+                                forwardValuesForThisVar.UnionWith(vals);
+                                // The first snapshot we meet for this var is its closing write (scalar-append close case).
+                                encounteredClosingSnapshotForThisVar = true;
                             }
                             else
                             {
-                                preReplaceScalarAppends.AddRange(vals);       // overwritten by the closing replace
+                                // Older-than-close appends were overwritten by the closing write.
+                                preReplaceScalarAppendsForThisVar.AddRange(vals);
                             }
                         }
-                        poppedSnapshots.Add(tap);
+
                         QuantumLedgerOfRegret.Pop();
                         continue;
+                    }
+
                     case TimelineReplaceOperation<T> trp:
-                        closingReplaceEncountered = true;
+                    {
                         poppedSnapshots.Add(trp);
+
+                        if (BelongsToVariable(trp, variable) && !encounteredClosingSnapshotForThisVar)
+                        {
+                            // Replace is the closing write for this var.
+                            encounteredClosingSnapshotForThisVar = true;
+                        }
+
                         QuantumLedgerOfRegret.Pop();
                         continue;
+                    }
+
                     case IReversibleOperation<T> rop:
-                        poppedReversibles.Add(rop);
+                    {
+                        // Only collect reversibles for THIS variable after we crossed its closing snapshot.
+                        if (BelongsToVariable(rop, variable) && encounteredClosingSnapshotForThisVar)
+                            poppedReversibles.Add(rop);
+
+                        // Pop globally as before.
                         QuantumLedgerOfRegret.Pop();
                         continue;
+                    }
+
                     default:
-                        // unrecognized entry - stop safely
                         goto DonePeel;
                 }
             }
+
         DonePeel:
 
-            // "rewind" step so that it undoes both appends and replaces:
-            foreach (var op in poppedSnapshots.OfType<IOperation>().Reverse())
+            // Undo all popped snapshots (global behavior preserved)
+            foreach (var op in poppedSnapshots.AsEnumerable().Reverse())
                 op.Undo();
 
+            // Compute “scalar close” strictly for THIS variable
+            var incomingVals = incoming.ToCollapsedValues();
 
-            // Was the forward half-cycle closed by a scalar overwrite?
-            var hasArithmetic = poppedReversibles.Count > 0;
-            // True Replace is always a scalar-close if arithmetic happened.
-            var sawReplace = poppedSnapshots.OfType<TimelineReplaceOperation<T>>().Any();
-            // Also treat a trailing scalar *append* as a scalar-close, but only if arithmetic happened.
-            var lastAppendWasScalar =
-                poppedSnapshots.LastOrDefault() is TimelineAppendOperation<T> ap &&
-                ap.AddedSlice.ToCollapsedValues().Count() == 1;
-            // Final rule: only scalar-close when arithmetic occurred.
-            bool scalarWriteDetected = hasArithmetic && (sawReplace || lastAppendWasScalar);
+            bool hasArithmeticForThisVar = poppedReversibles.Count > 0;
+
+            bool sawReplaceForThisVar = poppedSnapshots
+                .OfType<TimelineReplaceOperation<T>>()
+                .Any(op => BelongsToVariable(op, variable));
+
+            bool lastAppendWasScalarForThisVar =
+                poppedSnapshots.AsEnumerable().Reverse()
+                    .Where(op => op is TimelineAppendOperation<T> a && BelongsToVariable(a, variable))
+                    .Cast<TimelineAppendOperation<T>>()
+                    .Select(a => a.AddedSlice.ToCollapsedValues().Count() == 1)
+                    .FirstOrDefault(false);
+
+            bool scalarWriteDetected =
+                hasArithmeticForThisVar && (sawReplaceForThisVar || lastAppendWasScalarForThisVar);
+
             bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
             IEnumerable<T> seeds;
-
-            var incomingVals = incoming.ToCollapsedValues();
-            bool noForwardAppends = !poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any();
+            var bootstrap = variable.timeline[0].ToCollapsedValues();
 
             if (!scalarWriteDetected)
             {
-                // Trim bootstrap *only* in the degenerate case where no arithmetic happened.
-                // If arithmetic did occur (e.g., +1 or %3), a real result may equal the bootstrap
-                // (e.g., 0), and we must keep it.
-                var bootstrap = variable.timeline[0].ToCollapsedValues();
-                var excludeBootstrap = !hasArithmetic && bootstrap.Count() == 1;
+                // In degenerate no-arithmetic case, drop bootstrap to avoid stale-union bleed.
+                bool excludeBootstrap = !hasArithmeticForThisVar && bootstrap.Count() == 1;
 
-                var fwd = excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues;
+                var fwd = excludeBootstrap ? forwardValuesForThisVar.Except(bootstrap) : forwardValuesForThisVar;
                 var inc = excludeBootstrap ? incomingVals.Except(bootstrap) : incomingVals;
 
                 seeds = includeForward ? fwd.Union(inc).Distinct() : inc;
             }
             else
             {
-                // Scalar overwrite close: rebuild from incoming, but handle feedback-from-self specially
-                var bootstrap = variable.timeline[0].ToCollapsedValues();
-
-                var replaced = poppedSnapshots
+                // Scalar-close: rebuild from incoming; exclude pre-close history for this var
+                var replacedForThisVar = poppedSnapshots
                     .OfType<TimelineReplaceOperation<T>>()
+                    .Where(op => BelongsToVariable(op, variable))
                     .SelectMany(op => op.ReplacedSlice.ToCollapsedValues());
 
-                // Detect feedback-from-self: no forward appends means this is a pure replace cycle
-                bool noForwardAppendslocal = !poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any();
+                bool noForwardAppendsForThisVar = !poppedSnapshots
+                    .OfType<TimelineAppendOperation<T>>()
+                    .Any(op => BelongsToVariable(op, variable));
 
-                if (noForwardAppendslocal && hasArithmetic)
+                if (noForwardAppendsForThisVar && hasArithmeticForThisVar)
                 {
-                    seeds = incomingVals.Union(replaced).Distinct();
+                    seeds = incomingVals.Union(replacedForThisVar).Distinct();
                 }
                 else
                 {
-                    // Normal scalar close: exclude bootstrap and replaced (they're "before" this cycle)
                     seeds = incomingVals
                         .Except(bootstrap)
-                        .Except(replaced)
+                        .Except(replacedForThisVar)
                         .Distinct();
                 }
             }
 
-
-
             if (!seeds.Any())
-            {
-                // Keep at least what the caller just assigned.
                 seeds = incomingVals;
-            }
 
             var rebuiltSet = new HashSet<T>();
 
-            // **only** if there was literally _no_ popped operation at all
-            // do we reuse incoming here
             if (!poppedSnapshots.Any() && !poppedReversibles.Any())
                 rebuiltSet.UnionWith(incomingVals);
 
-            // Special case: last half‑cycle pattern "(+k) then % d" ⇒ earlier reads fill the residue class {0..d-1}
-            // This matches the fixed‑point intuition of the demo program and keeps the set tight.
+            // Special-case: (+k) then %d → residue class
             var addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
             var modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
             bool usedResidueClass = addOp is not null && modOp is not null;
@@ -186,61 +208,57 @@ namespace PositronicVariables.Engine
                 foreach (var seed in seeds)
                 {
                     var v = seed;
-                    // Walk *backwards in execution order* applying **forward** maps, newest → oldest.
                     for (int i = 0; i < poppedReversibles.Count; i++)
                         v = poppedReversibles[i].ApplyForward(v);
                     rebuiltSet.Add(v);
                 }
             }
 
-            // If arithmetic occurred, don't union the forward remainder set into the *earlier* reads;
-            // that remainder belongs to the later state, not the prior one.
-            if (!scalarWriteDetected && !hasArithmetic)
+            if (!scalarWriteDetected && !hasArithmeticForThisVar)
             {
-                var bootstrap = variable.timeline[0].ToCollapsedValues();
-                var excludeBootstrap = bootstrap.Count() == 1;
-                rebuiltSet.UnionWith(excludeBootstrap ? forwardValues.Except(bootstrap) : forwardValues);
+                bool excludeBootstrap = bootstrap.Count() == 1;
+                rebuiltSet.UnionWith(excludeBootstrap ? forwardValuesForThisVar.Except(bootstrap) : forwardValuesForThisVar);
             }
-
-
 
             // Carefully wrap this absurd collection of maybe-states into one neat, Schrödinger-approved burrito
             var rebuilt = new QuBit<T>(rebuiltSet.OrderBy(x => x).ToArray());
             rebuilt.Any();
 
-            /*  When a scalar overwrite closed the forward half‑cycle we
-             *  want that new scalar - and *only* that scalar - to survive.
-             *  The older slices (bootstrap + intermediate) are discarded.
-             */
+            // Append vs replace for this variable’s timeline growth
+            bool anyAppendsForThisVar = poppedSnapshots
+                .OfType<TimelineAppendOperation<T>>()
+                .Any(op => BelongsToVariable(op, variable));
+
             if (scalarWriteDetected)
             {
-                /* Keep slice 0 intact, discard only the intermediate
-                   forward‑pass history, then append the new scalar. */
                 if (variable.timeline.Count > 1)
                     variable.ReplaceForwardHistoryWith(rebuilt);
                 else
                     variable.AppendFromReverse(rebuilt);
-
-                //variable.timeline.Add(rebuilt);
             }
             else
             {
-                // If the forward half-cycle performed only in-place merges (no appends),
-                // do not grow the timeline during reverse replay; replace the last slice.
-                // This preserves "may merge" behaviour and avoids
-                // spurious slice growth on pure-merge passes.
-                if (!poppedSnapshots.OfType<TimelineAppendOperation<T>>().Any() && variable.timeline.Count > 0)
-                {
+                if (!anyAppendsForThisVar && variable.timeline.Count > 0)
                     variable.ReplaceLastFromReverse(rebuilt);
-                }
                 else
-                {
                     variable.AppendFromReverse(rebuilt);
-                }
             }
 
 
             return rebuilt;
+        }
+
+        // Reflect to determine if an operation targets the given variable instance
+        private static bool BelongsToVariable(object entry, PositronicVariable<T> variable)
+        {
+            var fields = entry.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (var f in fields)
+            {
+                var val = f.GetValue(entry);
+                if (ReferenceEquals(val, variable))
+                    return true;
+            }
+            return false;
         }
     }
 }
