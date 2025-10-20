@@ -484,35 +484,31 @@ namespace PositronicVariables.Variables
                 return;
             }
 
-            /* Merge *all* values that appeared after the bootstrap (slice 0)
-               into a single union slice, but **keep** slice 0 untouched so
-               callers can still see the original seed when they ask for it. */
-
+            // Merge all values that appeared after the bootstrap (slice 0)
             T[] mergedStates = [.. timeline
-                                .Skip(1)   // ignore bootstrap
+                                .Skip(1)
                                 .SelectMany(q => q.ToCollapsedValues())
                                 .Distinct()];
 
             QuBit<T> unified = new(mergedStates);
             unified.Any();
 
-            // replace everything after the bootstrap with the unified slice
-            timeline.RemoveRange(1, timeline.Count - 1);
+            // Replace everything after the bootstrap with the unified slice
+            if (timeline.Count > 1)
+            {
+                timeline.RemoveRange(1, timeline.Count - 1);
+            }
 
-            // keep epochs in sync: drop stamps past bootstrap
+            // Keep epoch stamps in sync: drop stamps past bootstrap
             if (_sliceEpochs.Count > 1)
             {
                 _sliceEpochs.RemoveRange(1, _sliceEpochs.Count - 1);
             }
 
             timeline.Add(unified);
-            StampAppendCurrentEpoch();  // tag the unified slice for the current epoch (or OutsideEpoch if not in-loop)
+            StampAppendCurrentEpoch();
 
-            // replace everything after the bootstrap with the unified slice
-            timeline.RemoveRange(1, timeline.Count - 1);
-            timeline.Add(unified);
-
-            // refresh the domain to reflect the new union
+            // Refresh the domain to reflect the new union
             _domain.Clear();
             foreach (T x in mergedStates)
             {
@@ -1609,301 +1605,6 @@ namespace PositronicVariables.Variables
         public void NoteOutsideWrites()
         {
             _hadOutsideWritesSinceLastLoop = true;
-        }
-
-
-
-        /// <summary>
-        /// A sentient wrapper that delays reality itself.
-        /// Useful for pretending your math is correct until it's too late to stop it.
-        /// </summary>
-        public readonly struct QExpr
-        {
-            internal readonly PositronicVariable<T> Source;
-
-            // Eager result
-            internal readonly QuBit<T> Q;
-
-            // Lazy materializer – when present, we build the QuBit at use-time
-            private readonly Func<QuBit<T>> _lazy;
-            private readonly bool _isLazy;
-
-
-            internal QExpr(PositronicVariable<T> src, QuBit<T> q)
-            {
-                Source = src;
-                Q = q;
-                _lazy = null;
-                _isLazy = false;
-            }
-
-            // ctor: build on demand from the Source's *current* qubit
-            internal QExpr(PositronicVariable<T> src, Func<QuBit<T>> lazy)
-            {
-                Source = src;
-                Q = default!;
-                _lazy = lazy;
-                _isLazy = true;
-            }
-
-            private QuBit<T> Resolve()
-            {
-                QuBit<T> qb = _isLazy ? _lazy() : Q;
-                 // ensure union-aware enumeration/printing
-                return qb;
-            }
-
-            public IEnumerable<T> ToCollapsedValues()
-            {
-                return Resolve().ToCollapsedValues();
-            }
-
-            public override string ToString()
-            {
-                return Resolve().ToString();
-            }
-
-            public static implicit operator QuBit<T>(QExpr e)
-            {
-                return e.Resolve();
-            }
-
-            public static implicit operator PositronicVariable<T>(QExpr expr)
-            {
-                PositronicVariable<T> src = expr.Source ?? throw new InvalidOperationException("Detached QExpr has no source PositronicVariable.");
-                src.Assign(expr);   // side-effectful assign
-                return src;         // allow "antival = antival + 2;" to compile and mutate
-            }
-
-            // ---------- QExpr ⊗ scalar operators ----------
-            public static QExpr operator %(QExpr left, T right)
-            {
-                QuBit<T> lazy()
-                {
-                    QuBit<T> resultQB = left.Resolve() % right;
-                    resultQB.Any();
-                    return resultQB;
-                }
-
-                if (left.Source._runtime.Entropy >= 0)
-                {
-                    QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
-                }
-
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator +(QExpr left, T right)
-            {
-                QuBit<T> lazy()
-                {
-                    QuBit<T> resultQB = left.Resolve() + right;
-                    resultQB.Any();
-                    return resultQB;
-                }
-
-                if (left.Source._runtime.Entropy >= 0)
-                {
-                    QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left.Source, right, left.Source._runtime));
-                }
-
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator -(QExpr left, T right)
-            {
-                QuBit<T> lazy()
-                {
-                    QuBit<T> resultQB = left.Resolve() - right;
-                    resultQB.Any();
-                    return resultQB;
-                }
-
-                if (left.Source._runtime.Entropy >= 0)
-                {
-                    QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left.Source, right, left.Source._runtime));
-                }
-
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator *(QExpr left, T right)
-            {
-                // already lazy in your code — keep as-is
-                QuBit<T> resultQB = left.Resolve() * right; // replace with lazy for consistency:
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve() * right;
-                    
-                    return qb;
-                }
-
-                if (left.Source._runtime.Entropy >= 0)
-                {
-                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left.Source, right));
-                }
-
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator /(QExpr left, T right)
-            {
-                QuBit<T> lazy()
-                {
-                    QuBit<T> resultQB = left.Resolve() / right;
-                    resultQB.Any();
-                    return resultQB;
-                }
-
-                if (left.Source._runtime.Entropy >= 0)
-                {
-                    QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left.Source, right, left.Source._runtime));
-                }
-
-                return new QExpr(left.Source, lazy);
-            }
-
-            // ---------- QExpr ⊗ bitwise with scalar ----------
-            public static QExpr operator &(QExpr left, T right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve();
-                    return qb.Select(v => PositronicVariables.Maths.Bitwise.And(v, right));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator |(QExpr left, T right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve();
-                    return qb.Select(v => PositronicVariables.Maths.Bitwise.Or(v, right));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator ^(QExpr left, T right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve();
-                    return qb.Select(v => PositronicVariables.Maths.Bitwise.Xor(v, right));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            // ---------- QExpr shifts and NOT ----------
-            public static QExpr operator <<(QExpr left, int count)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve();
-                    return qb.Select(v => PositronicVariables.Maths.Bitwise.ShiftLeft(v, count));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator >>(QExpr left, int count)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = left.Resolve();
-                    return qb.Select(v => PositronicVariables.Maths.Bitwise.ShiftRight(v, count));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator ~(QExpr value)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> qb = value.Resolve();
-                    return qb.Select(PositronicVariables.Maths.Bitwise.Not);
-                }
-                return new QExpr(value.Source, lazy);
-            }
-
-            // ---------- QExpr ⊗ PositronicVariable<T> (pairwise map) ----------
-            public static QExpr operator &(QExpr left, PositronicVariable<T> right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.GetCurrentQBit();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.And(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator |(QExpr left, PositronicVariable<T> right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.GetCurrentQBit();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Or(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator ^(QExpr left, PositronicVariable<T> right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.GetCurrentQBit();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Xor(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            // ---------- QExpr ⊗ QExpr (pairwise map) ----------
-            public static QExpr operator &(QExpr left, QExpr right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.Resolve();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.And(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator |(QExpr left, QExpr right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.Resolve();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Or(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
-
-            public static QExpr operator ^(QExpr left, QExpr right)
-            {
-                EnsureIntegralBitwise();
-                QuBit<T> lazy()
-                {
-                    QuBit<T> l = left.Resolve();
-                    QuBit<T> r = right.Resolve();
-                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Xor(a, b)));
-                }
-                return new QExpr(left.Source, lazy);
-            }
         }
 
         public QExpr Project(Func<T, T> projector)
