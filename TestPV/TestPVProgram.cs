@@ -1,5 +1,6 @@
 ﻿using PositronicVariables.Attributes;
 using PositronicVariables.Variables;
+using static PositronicVariables.Variables.QSugar;
 
 internal static class Program
 {
@@ -10,6 +11,6 @@ internal static class Program
 
         Console.WriteLine($"The antivals are {antival} ");
         antival = antival + 2;
-        antival.Assign(10); // was: antival |= 10; (now bitwise OR)
+        antival <<= Q(10);
     }
 }

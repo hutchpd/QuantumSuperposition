@@ -1763,20 +1763,179 @@ namespace PositronicVariables.Variables
                 return new QExpr(left.Source, lazy);
             }
 
-            // ---------- QExpr % PositronicVariable<T> ----------
-            public static QExpr operator %(QExpr left, PositronicVariable<T> right)
+            // ---------- QExpr ⊗ bitwise with scalar ----------
+            public static QExpr operator &(QExpr left, T right)
             {
-                T divisor = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuBit<T> resultQB = left.Resolve() % right.GetCurrentQBit();
-                resultQB.Any();
-                if (left.Source._runtime.Entropy >= 0)
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
                 {
-                    QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
+                    QuBit<T> qb = left.Resolve();
+                    return qb.Select(v => PositronicVariables.Maths.Bitwise.And(v, right));
                 }
+                return new QExpr(left.Source, lazy);
+            }
 
-                return new QExpr(left.Source, resultQB);
+            public static QExpr operator |(QExpr left, T right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> qb = left.Resolve();
+                    return qb.Select(v => PositronicVariables.Maths.Bitwise.Or(v, right));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator ^(QExpr left, T right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> qb = left.Resolve();
+                    return qb.Select(v => PositronicVariables.Maths.Bitwise.Xor(v, right));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            // ---------- QExpr shifts and NOT ----------
+            public static QExpr operator <<(QExpr left, int count)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> qb = left.Resolve();
+                    return qb.Select(v => PositronicVariables.Maths.Bitwise.ShiftLeft(v, count));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator >>(QExpr left, int count)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> qb = left.Resolve();
+                    return qb.Select(v => PositronicVariables.Maths.Bitwise.ShiftRight(v, count));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator ~(QExpr value)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> qb = value.Resolve();
+                    return qb.Select(PositronicVariables.Maths.Bitwise.Not);
+                }
+                return new QExpr(value.Source, lazy);
+            }
+
+            // ---------- QExpr ⊗ PositronicVariable<T> (pairwise map) ----------
+            public static QExpr operator &(QExpr left, PositronicVariable<T> right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.GetCurrentQBit();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.And(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator |(QExpr left, PositronicVariable<T> right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.GetCurrentQBit();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Or(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator ^(QExpr left, PositronicVariable<T> right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.GetCurrentQBit();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Xor(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            // ---------- QExpr ⊗ QExpr (pairwise map) ----------
+            public static QExpr operator &(QExpr left, QExpr right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.Resolve();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.And(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator |(QExpr left, QExpr right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.Resolve();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Or(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
+            }
+
+            public static QExpr operator ^(QExpr left, QExpr right)
+            {
+                EnsureIntegralBitwise();
+                QuBit<T> lazy()
+                {
+                    QuBit<T> l = left.Resolve();
+                    QuBit<T> r = right.Resolve();
+                    return l.SelectMany(a => r.Select(b => PositronicVariables.Maths.Bitwise.Xor(a, b)));
+                }
+                return new QExpr(left.Source, lazy);
             }
         }
 
+        public QExpr Project(Func<T, T> projector)
+        {
+            ArgumentNullException.ThrowIfNull(projector);
+            QuBit<T> lazy()
+            {
+                QuBit<T> qb = GetCurrentQBit();
+                return qb.Select(projector);
+            }
+            return new QExpr(this, lazy);
+        }
+
+        public static QExpr Project(PositronicVariable<T> src, Func<T, T> projector)
+        {
+            return src.Project(projector);
+        }
+        // ---------- PositronicVariable<T> ⊗ QuBit<T> / QExpr ----------
+        /// <summary>
+        /// Momma is doing some dirty synactics here. This is not a bitwise shift, but an assignment of a QuBit to a PositronicVariable.
+        /// </summary>
+        public static QExpr operator <<(PositronicVariable<T> target, QuBit<T> qb)
+        {
+            return new QExpr(target, qb);
+        }
+
+        /// <summary>
+        /// Momma is doing some dirty synactics here. This is not a bitwise shift, but an assignment of a QExpr to a PositronicVariable.
+        /// </summary>
+        public static QExpr operator <<(PositronicVariable<T> target, QExpr expr)
+        {
+            return new QExpr(target, () => (QuBit<T>)expr);
+        }
     }
 }
