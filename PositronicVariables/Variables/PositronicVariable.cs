@@ -27,7 +27,7 @@ namespace PositronicVariables.Variables
     {
         private static int OutsideEpoch => -1;
 
-        private static int s_LastEntropySeenForEpoch = int.MaxValue; // forces a bump on first write
+        private static int s_LastEntropySeenForEpoch = int.MaxValue; // kick the epoch counter awake on first write
         private bool _hasForwardScalarBaseline = false;
         private T _forwardScalarBaseline;
 
@@ -70,7 +70,7 @@ namespace PositronicVariables.Variables
                 {
                     if (!PositronicAmbient.IsInitialized)
                     {
-                        // Build a minimal host and register the default runtime
+                        // Spin up a pocket universe (minimal host) and wire in the default runtime.
                         IHostBuilder hb = Host.CreateDefaultBuilder()
                                      .ConfigureServices(s => s.AddPositronicRuntime());
                         PositronicAmbient.InitialiseWith(hb);
@@ -105,7 +105,7 @@ namespace PositronicVariables.Variables
             QuBit<T> qb = new(values);
             qb.Any();
             _temporalRecords.OverwriteBootstrap(this, qb);
-            _sliceEpochs.Clear();      // epoch tagging for slice[0]
+            _sliceEpochs.Clear();      // stamp slice[0] as Epoch Zero (the Big Bang)
             _sliceEpochs.Add(0);       // bootstrap marked as epoch 0
 
             bootstrapSuperseded = false;
@@ -132,17 +132,17 @@ namespace PositronicVariables.Variables
             _domain.Add(initialValue);
             _runtime.Registry.Add(this);
 
-            // DI my temporal records and ops handler
+            // Hire our cosmic bureaucrats via DI (archivist + scribe).
             _ops = opsHandler ?? new RegretScribe<T>();
             _reverseReplay = new UnhappeningEngine<T>(_ops, _temporalRecords);
 
-            // "something appended" hook
+            // When the timeline grows a new limb, let the world know.
             _temporalRecords.RegisterTimelineAppendedHook(() => OnTimelineAppended?.Invoke());
         }
 
         static PositronicVariable()
         {
-            // Do the old IComparable guard
+            // Entrance exam: types must be comparable to navigate the multiverse responsibly.
             if (!(typeof(IComparable).IsAssignableFrom(typeof(T)) ||
                   typeof(IComparable<T>).IsAssignableFrom(typeof(T))))
             {
@@ -151,7 +151,7 @@ namespace PositronicVariables.Variables
                     "must implement IComparable or IComparable<T> to enable proper convergence checking.");
             }
 
-            // Trigger the neuro-cascade init, etc.
+            // Wake the neural lattice so the chronometers start ticking.
             bool _ = AethericRedirectionGrid.Initialised;
         }
 
@@ -165,7 +165,7 @@ namespace PositronicVariables.Variables
 
         internal static void ResetReverseReplayFlag()
         {
-            _reverseReplayStarted = false;           // Trying to keep track of when we turn around violently in time.
+            _reverseReplayStarted = false;           // Reset the "we're about to moonwalk through time" alarm.
         }
 
         /// <summary>
@@ -349,8 +349,7 @@ namespace PositronicVariables.Variables
                            new BureauOfTemporalRecords<T>());
 
 
-            // Before entering the loop, quarantine any forward writes that happened outside the loop
-            // during the "first run" (console style).
+            // Before the loop: quarantine any forward writes that happened in the "pilot episode" (outside-loop run).
             foreach (PositronicVariable<T> v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
             {
                 v.ResetTimelineIfOutsideWrites();
@@ -358,19 +357,19 @@ namespace PositronicVariables.Variables
 
             QuantumLedgerOfRegret.Clear();
             BeginEpoch();
-            s_LastEntropySeenForEpoch = int.MaxValue; // forces a bump on first write
+            s_LastEntropySeenForEpoch = int.MaxValue; // ensure the first write bumps the epoch
 
             try
             {
-                // mark "we're inside the loop" so the fast-path is disabled
+                // Mark that we're inside the time vortex so fast-path antics are disabled.
                 s_LoopDepth++;
                 engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
             }
             finally
             {
                 s_LoopDepth--;
-                // After the engine finishes (including the final iteration),
-                // clear the op log and re-seed domains from the *current* slice.
+                // When the engine lands (including any final lap), clear the logbook
+                // and rebuild each domain from whatever timeline slice we're currently calling "reality".
                 if (runtime.Converged)
                 {
                     foreach (PositronicVariable<T> v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
@@ -403,14 +402,14 @@ namespace PositronicVariables.Variables
 
             TruncateToBootstrapOnly();
 
-            // Rebuild domain strictly from the bootstrap (no leakage from outside writes)
+            // Rebuild domain strictly from the bootstrap. No leakage from the wild frontier.
             _domain.Clear();
             foreach (T x in timeline[0].ToCollapsedValues())
             {
                 _domain.Add(x);
             }
 
-            // Clear bookkeeping for the fresh pass
+            // Fresh pass bookkeeping
             bootstrapSuperseded = false;
             _ops.SawForwardWrite = false;
             _hadOutsideWritesSinceLastLoop = false;
@@ -478,13 +477,13 @@ namespace PositronicVariables.Variables
         /// </summary>
         public void UnifyAll()
         {
-            // nothing to do if we still only have the bootstrap
+            // Nothing to do if we still only have the bootstrap.
             if (timeline.Count < 2)
             {
                 return;
             }
 
-            // Merge all values that appeared after the bootstrap (slice 0)
+            // Merge all values that appeared after the bootstrap (slice 0).
             T[] mergedStates = [.. timeline
                                 .Skip(1)
                                 .SelectMany(q => q.ToCollapsedValues())
@@ -493,13 +492,13 @@ namespace PositronicVariables.Variables
             QuBit<T> unified = new(mergedStates);
             unified.Any();
 
-            // Replace everything after the bootstrap with the unified slice
+            // Replace everything after the bootstrap with the unified slice.
             if (timeline.Count > 1)
             {
                 timeline.RemoveRange(1, timeline.Count - 1);
             }
 
-            // Keep epoch stamps in sync: drop stamps past bootstrap
+            // Keep epoch stamps in sync: drop stamps past bootstrap.
             if (_sliceEpochs.Count > 1)
             {
                 _sliceEpochs.RemoveRange(1, _sliceEpochs.Count - 1);
@@ -508,7 +507,7 @@ namespace PositronicVariables.Variables
             timeline.Add(unified);
             StampAppendCurrentEpoch();
 
-            // Refresh the domain to reflect the new union
+            // Refresh the domain to reflect the new union.
             _domain.Clear();
             foreach (T x in mergedStates)
             {
@@ -541,7 +540,7 @@ namespace PositronicVariables.Variables
 
             timeline.RemoveRange(start, count);
 
-            // keep epochs in sync with the removal
+            // Keep epochs in sync with the removal.
             if (_sliceEpochs.Count > start)
             {
                 _sliceEpochs.RemoveRange(start, _sliceEpochs.Count - start);
@@ -564,7 +563,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> qb = other.GetCurrentQBit();
             
-            // treat this as a cross-variable assignment (source = other)
+            // Treat this as a cross-variable assignment (source = other).
             ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: ReferenceEquals(this, other), crossSource: other);
         }
 
@@ -579,10 +578,8 @@ namespace PositronicVariables.Variables
             bool isFeedbackFromSelf = ReferenceEquals(this, expr.Source);
             QuBit<T> qb = (QuBit<T>)expr; // force materialization (eager or lazy)
 
-            // NOTE: Do NOT log reversible ops for the TARGET during cross-variable forward writes.
-            // The ledger should continue to reflect the SOURCE variable (expr.Source),
-            // and cross-variable reconstruction is handled explicitly in reverse branches.
-
+            // Temporal law: for cross-variable forward writes, only the SOURCE gets logged.
+            // The TARGET stays unlogged here; reconstruction happens during reverse ticks.
             ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf, expr.Source);
             _sawStateReadThisForward = false;
         }
@@ -602,7 +599,7 @@ namespace PositronicVariables.Variables
             }
         }
 
-        // updated signature to accept the (optional) crossSource
+        // Central ingest point for writes, with optional cross-variable context.
         private void ReplaceOrAppendOrUnify(QuBit<T> qb, bool replace, bool isFeedbackFromSelf = false, PositronicVariable<T> crossSource = null)
         {
             if (InConvergenceLoop)
@@ -620,19 +617,17 @@ namespace PositronicVariables.Variables
             IPositronicRuntime runtime = _runtime;
 
 
-            // --- Forward, in-loop
-            // --- Forward, in-loop
+            // ---------- Forward, in-loop ----------
             if (runtime.Entropy > 0 && InConvergenceLoop)
             {
-                // Suppress cross-variable writes during the forward half-cycle.
-                // We only reconstruct cross-variable state on reverse ticks.
+                // During forward ticks, ignore cross-variable TARGET writes.
+                // We only reconstitute them on reverse ticks for causality bookkeeping.
                 if (!isFeedbackFromSelf && crossSource is not null)
                 {
-                    // Do not write, do not set SawForwardWrite, just ignore this forward cross-assign.
                     return;
                 }
 
-                // Self-feedback early-union (first write)
+                // Self-feedback early-union (first write).
                 if (replace && isFeedbackFromSelf && timeline.Count > 0
                     && !_ops.SawForwardWrite
                     && !_sawStateReadThisForward)
@@ -663,7 +658,7 @@ namespace PositronicVariables.Variables
                     }
                 }
 
-                // Self-feedback subsequent writes (union growth)
+                // Self-feedback subsequent writes (union growth).
                 if (replace && isFeedbackFromSelf && timeline.Count > 0 && _ops.SawForwardWrite)
                 {
                     T[] incoming = [.. qb.ToCollapsedValues()];
@@ -685,7 +680,7 @@ namespace PositronicVariables.Variables
                     }
                 }
 
-                // Never mutate bootstrap during the loop; append first write
+                // Bootstrap is sacred during the loop; first real write appends.
                 if (timeline.Count == 1)
                 {
                     _temporalRecords.SnapshotAppend(this, qb);
@@ -695,7 +690,7 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                // Normal append/replace for non-scalar writes
+                // Normal append/replace for non-scalar writes.
                 if (replace)
                 {
                     T[] incoming = [.. qb.ToCollapsedValues()];
@@ -718,7 +713,7 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                // scalar (replace == false) — if we already wrote this half-cycle, REPLACE; else APPEND
+                // Scalar (replace == false) — if we already wrote this half-cycle, REPLACE; otherwise APPEND.
                 if (_ops.SawForwardWrite && timeline.Count > 0)
                 {
                     _temporalRecords.ReplaceLastSlice(this, qb);
@@ -746,7 +741,7 @@ namespace PositronicVariables.Variables
             // ---------- Reverse, in-loop ----------
             if (runtime.Entropy < 0 && InConvergenceLoop)
             {
-                // Cross-variable assignment: do not consume reverse replay; isolate from source.
+                // Cross-variable assignment: reconstruct TARGET locally without consuming replay from SOURCE.
                 if (!isFeedbackFromSelf && crossSource is not null)
                 {
                     bool alreadyRebuiltThisEpoch =
@@ -769,7 +764,7 @@ namespace PositronicVariables.Variables
                         dynamic src = srcVals[0];
                         dynamic k = incoming - src;
 
-                        // Prefer the target’s forward scalar baseline if present; otherwise fall back to last scalar.
+                        // Prefer the target's forward scalar baseline if present; otherwise fall back to last scalar.
                         dynamic baseVal;
                         if (_hasForwardScalarBaseline)
                         {
@@ -799,7 +794,7 @@ namespace PositronicVariables.Variables
                         rebuilt = q;
                     }
 
-                    // Key fix: keep only the latest reconstructed state beyond bootstrap.
+                    // Keep only the latest reconstructed state beyond the bootstrap.
                     ReplaceForwardHistoryWith(rebuilt);
                     return;
                 }
@@ -831,10 +826,11 @@ namespace PositronicVariables.Variables
                 return;
             }
 
-            // Emergency override for when we're flailing outside the loop like a time-traveling otter
+            // ---------- Forward, outside the loop ----------
+            // Emergency override for when we're flailing outside the loop like a time-traveling otter.
             if (runtime.Entropy > 0 && !InConvergenceLoop)
             {
-                // First ever forward write OR first after Unify → APPEND
+                // First ever forward write OR first after Unify → APPEND.
                 if (timeline.Count == 1)
                 {
                     _temporalRecords.SnapshotAppend(this, qb);
@@ -860,7 +856,7 @@ namespace PositronicVariables.Variables
                 }
                 else
                 {
-                    // Otherwise we need to preserve causality - else Marty McFly's hand will disappear again.
+                    // Preserve causality, or Marty McFly fades again.
                     _temporalRecords.SnapshotAppend(this, qb);
                     StampAppendCurrentEpoch();
                     _ops.SawForwardWrite = true;
@@ -878,11 +874,10 @@ namespace PositronicVariables.Variables
 
             Remember(qb.ToCollapsedValues());
 
-            // --- Reverse‐time pass (Entropy < 0) -----------------------------
+            // ---------- Reverse, outside the loop ----------
             if (runtime.Entropy < 0)
             {
-                // Cross-variable outside-loop: do not run replay; rebuild locally and replace.
-                // This prevents mutating the source and avoids duplicate slices.
+                // Cross-variable outside-loop: rebuild locally and replace (don't mutate the source, don't duplicate slices).
                 if (crossSource is not null && !isFeedbackFromSelf)
                 {
                     T[] incomingVals = [.. qb.ToCollapsedValues()];
@@ -915,7 +910,7 @@ namespace PositronicVariables.Variables
                         rebuilt = q;
                     }
 
-                    // Outside loop: keep a single rebuilt slice beyond bootstrap
+                    // Outside loop: keep a single rebuilt slice beyond bootstrap.
                     ReplaceForwardHistoryWith(rebuilt);
                     OnTimelineAppended?.Invoke();
                     return;
@@ -927,17 +922,17 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                // True reverse replay for self-feedback or same-variable
+                // True reverse replay for self-feedback or same-variable.
                 QuBit<T> rebuiltStd = _reverseReplay.ReplayReverseCycle(qb, this);
                 AppendFromReverse(rebuiltStd);
                 OnTimelineAppended?.Invoke();
                 return;
             }
 
-            // --- Forward‐time pass (Entropy > 0) -----------------------------
+            // ---------- Forward, generic ----------
             if (runtime.Entropy > 0)
             {
-                // — overwrite bootstrap if that's all we have
+                // Overwrite bootstrap if that's all we have.
                 if (bootstrapSuperseded && timeline.Count == 1)
                 {
                     _temporalRecords.SnapshotAppend(this, qb);
@@ -945,7 +940,7 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                // — first real forward write: snapshot+append
+                // First real forward write: snapshot+append.
                 if (!bootstrapSuperseded && timeline.Count == 1)
                 {
                     _temporalRecords.SnapshotAppend(this, qb);
@@ -954,7 +949,7 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                // — overwrite (merge) if this is the very first forward write
+                // Overwrite (merge) if this is the very first forward write this epoch.
                 if (replace && !_ops.SawForwardWrite)
                 {
                     T[] merged = [.. timeline[^1]
@@ -968,17 +963,17 @@ namespace PositronicVariables.Variables
                     _ops.SawForwardWrite = true;
                     return;
                 }
-                // — otherwise decide append vs. merge
+                // Otherwise decide append vs. merge.
                 if (!replace || (!_ops.SawForwardWrite && !SameStates(qb, timeline[^1])))
                 {
-                    // snapshot-append the new slice
+                    // Snapshot-append the new slice.
                     _temporalRecords.SnapshotAppend(this, qb);
                     StampAppendCurrentEpoch();
                     _ops.SawForwardWrite = true;
                 }
                 else
                 {
-                    // merge into the last slice if it's a duplicate scalar write
+                    // Merge into the last slice if it's a duplicate scalar write.
                     T[] merged = [.. timeline[^1]
                                           .ToCollapsedValues()
                                           .Union(qb.ToCollapsedValues())
@@ -990,7 +985,7 @@ namespace PositronicVariables.Variables
                 }
 
 
-                // — detect any small cycle and unify
+                // Detect any small cycle and unify.
                 for (int cycle = 2; cycle <= 20; cycle++)
                 {
                     if (timeline.Count >= cycle + 1 && SameStates(timeline[^1], timeline[^(cycle + 1)]))
@@ -1043,7 +1038,7 @@ namespace PositronicVariables.Variables
             resultQB.Any();
             if (left._runtime.Entropy >= 0)
             {
-                // Record addition using the collapsed value from the right variable.
+                // Log the addition using the right-hand's collapsed operand.
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
             }
@@ -1069,7 +1064,7 @@ namespace PositronicVariables.Variables
             resultQB.Any();
             if (right._runtime.Entropy >= 0)
             {
-                // Use a reversed subtraction so that the inverse is: value = left - result.
+                // Use a reversed subtraction so the inverse is: value = left - result.
                 QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
@@ -1112,7 +1107,7 @@ namespace PositronicVariables.Variables
         // --- Multiplication Overloads ---
         public static QExpr operator *(PositronicVariable<T> left, T right)
         {
-            // Build from the freshest slice when the expression is *used*
+            // Build from the freshest slice when the expression is used.
             QuBit<T> lazy()
             {
                 QuBit<T> srcQB = left.GetCurrentQBit();
@@ -1135,7 +1130,7 @@ namespace PositronicVariables.Variables
 
         public static QExpr operator *(T left, PositronicVariable<T> right)
         {
-            // Build from the freshest slice when the expression is *used*
+            // Build from the freshest slice when the expression is used.
             QuBit<T> lazy()
             {
                 QuBit<T> srcQB = right.GetCurrentQBit();
@@ -1259,7 +1254,7 @@ namespace PositronicVariables.Variables
             return new QExpr(left, resultQB);
         }
 
-        // --- Comparison Operators Using Comparer<T>.Default ---
+        // --- Comparison operators (Comparer<T>.Default) riding shotgun ---
 
         public static bool operator <(PositronicVariable<T> left, T right)
         {
@@ -1503,7 +1498,7 @@ namespace PositronicVariables.Variables
         /// Retrieves the freshest slice of existence, still warm from the cosmic oven.
         /// Return the "current" qubit:
         ///  - outside the loop: last slice wins (legacy behavior)
-        ///  - inside the loop : last slice of the *current epoch*
+        ///  - inside the loop : last slice of the current epoch (if tagged), else newest slice
         /// </summary>
         public QuBit<T> GetCurrentQBit()
         {
@@ -1517,9 +1512,9 @@ namespace PositronicVariables.Variables
                 return timeline[^1];
             }
 
-            // Inside convergence loop: Where are we in the epochs? Who are we today? When is now? How do i work this? Where is my large automobile? This is not my beautiful house! This is not my beautiful wife!
+            // Inside the convergence loop: drift to the most recent slice stamped for this epoch.
             int epoch = CurrentEpoch;
-            // Defensive: keeps us from yeeting ourselves off the end of the timeline
+            // Defensive: avoid stepping out the airlock if tags are short.
             int lastStamped = Math.Min(timeline.Count, _sliceEpochs.Count) - 1;
             for (int i = lastStamped; i >= 0; i--)
             {
@@ -1528,8 +1523,8 @@ namespace PositronicVariables.Variables
                     return timeline[i];
                 }
             }
-            // Fallback when tags are missing or out of sync (e.g., after Unify):
-            return timeline[^1];  // newest slice wins
+            // Fallback when tags are missing or out of sync (e.g., after Unify): newest slice wins.
+            return timeline[^1];
 
         }
 
@@ -1564,7 +1559,7 @@ namespace PositronicVariables.Variables
 
         internal void AppendCloneOfCurrentForReverseTick()
         {
-            // Ensure the reverse half-cycle has its own epoch stamp before we append.
+            // Ensure the reverse half-cycle gets its own epoch stamp before we append.
             if (InConvergenceLoop)
             {
                 int e = _runtime.Entropy;
@@ -1586,7 +1581,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Flushes the existential junk drawer and repopulates it with what we *currently* believe to be true.
+        /// Flushes the existential junk drawer and repopulates it with what we currently believe to be true.
         /// </summary>
         internal void ResetDomainToCurrent()
         {
@@ -1624,7 +1619,7 @@ namespace PositronicVariables.Variables
         }
         // ---------- PositronicVariable<T> ⊗ QuBit<T> / QExpr ----------
         /// <summary>
-        /// Momma is doing some dirty synactics here. This is not a bitwise shift, but an assignment of a QuBit to a PositronicVariable.
+        /// This is not a bitwise shift; it's a ceremonial grafting of a QuBit onto a PositronicVariable.
         /// </summary>
         public static QExpr operator <<(PositronicVariable<T> target, QuBit<T> qb)
         {
@@ -1632,7 +1627,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Momma is doing some dirty synactics here. This is not a bitwise shift, but an assignment of a QExpr to a PositronicVariable.
+        /// This is not a bitwise shift; it's a ceremonial grafting of a QExpr onto a PositronicVariable.
         /// </summary>
         public static QExpr operator <<(PositronicVariable<T> target, QExpr expr)
         {
