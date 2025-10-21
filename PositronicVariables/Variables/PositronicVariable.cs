@@ -25,12 +25,15 @@ namespace PositronicVariables.Variables
     public partial class PositronicVariable<T> : IPositronicVariable
         where T : IComparable<T>
     {
+        [ThreadStatic]
+        private static bool s_SuppressOperatorLogging;
         private static int OutsideEpoch => -1;
 
         private static int s_LastEntropySeenForEpoch = int.MaxValue; // kick the epoch counter awake on first write
         private bool _hasForwardScalarBaseline = false;
         private T _forwardScalarBaseline;
 
+        private bool _hadRequiredThisForward = false;
         private readonly bool isValueType = typeof(T).IsValueType;
         private readonly HashSet<T> _domain = [];
         private static bool _reverseReplayStarted;
@@ -218,7 +221,9 @@ namespace PositronicVariables.Variables
 
 
 
-        // The timeline of quantum slices.
+        /// <summary>
+        /// The timeline of quantum slices, each a breadcrumb trail through the multiverse's tangled yarn.
+        /// </summary>
         public readonly List<QuBit<T>> timeline = [];
         private bool bootstrapSuperseded = false;
 
@@ -256,6 +261,8 @@ namespace PositronicVariables.Variables
         public event Action OnConverged;
         public event Action OnCollapse;
         public event Action OnTimelineAppended;
+
+
 
         /// <summary>
         /// How many alternate realities we've stacked on this poor variable's timeline. More is usually bad.
@@ -447,7 +454,8 @@ namespace PositronicVariables.Variables
                 return 1;
             }
 
-            if (timeline.Count < 3)
+            // We only need two slices to detect "last two equal".
+            if (timeline.Count < 2)
             {
                 return 0;
             }
@@ -473,7 +481,7 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Unifies all timeline slices into a single collapsed state.
+        /// Unifies all timeline slices into a single collapsed state, like herding quantum cats into one box.
         /// </summary>
         public void UnifyAll()
         {
@@ -523,7 +531,7 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Unifies the last 'count' timeline slices into one.
+        /// Unifies the last 'count' timeline slices into one, forcing alternate realities to shake hands and make up.
         /// </summary>
         public void Unify(int count)
         {
@@ -570,7 +578,7 @@ namespace PositronicVariables.Variables
 
 
         /// <summary>
-        /// Disambiguation overload so calls like <c>v.Assign(v + 1)</c> bind deterministically.
+        /// Disambiguation overload so calls like <c>v.Assign(v + 1)</c> bind deterministically, because even in the multiverse, syntax matters more than you'd think.
         /// Delegates to <see cref="Assign(QuBit{T})"/>.
         /// </summary>
         public void Assign(QExpr expr)
@@ -741,6 +749,15 @@ namespace PositronicVariables.Variables
             // ---------- Reverse, in-loop ----------
             if (runtime.Entropy < 0 && InConvergenceLoop)
             {
+                // If the last forward used Required for this variable, do NOT run reverse replay for it.
+                // We want the pre-read slice to match the narrowed state, not to be k-shifted by print-site ops.
+                if (_hadRequiredThisForward)
+                {
+                    AppendFromReverse(qb);              // append the cloned current slice as-is (no replay)
+                    _hadRequiredThisForward = false;    // consume flag
+                    return;
+                }
+
                 // Cross-variable assignment: reconstruct TARGET locally without consuming replay from SOURCE.
                 if (!isFeedbackFromSelf && crossSource is not null)
                 {
@@ -757,14 +774,37 @@ namespace PositronicVariables.Variables
                     T[] incomingVals = [.. qb.ToCollapsedValues()];
                     T[] srcVals = [.. crossSource.GetCurrentQBit().ToCollapsedValues()];
 
+                    // Did this TARGET receive a closing scalar in the last forward half-cycle?
+                    bool hasClosingScalar = _hasForwardScalarBaseline;
+
                     QuBit<T> rebuilt;
+
+                    if (!hasClosingScalar)
+                    {
+                        // No scalar close on TARGET: adopt the incoming expression result as-is.
+                        rebuilt = new QuBit<T>(incomingVals);
+                        rebuilt.Any();
+
+                        // Replace within epoch if we already rebuilt once; otherwise keep a single latest slice.
+                        if (_sliceEpochs.Count > 0 && _sliceEpochs[^1] == CurrentEpoch && timeline.Count == _sliceEpochs.Count)
+                        {
+                            ReplaceLastFromReverse(rebuilt);
+                        }
+                        else
+                        {
+                            ReplaceForwardHistoryWith(rebuilt);
+                        }
+
+                        return;
+                    }
+
+                    // TARGET had a scalar close → compute baseline shift k = incoming − src, and apply to target’s forward baseline.
                     if (incomingVals.Length == 1 && srcVals.Length == 1)
                     {
                         dynamic incoming = incomingVals[0];
                         dynamic src = srcVals[0];
                         dynamic k = incoming - src;
 
-                        // Prefer the target's forward scalar baseline if present; otherwise fall back to last scalar.
                         dynamic baseVal;
                         if (_hasForwardScalarBaseline)
                         {
@@ -779,50 +819,47 @@ namespace PositronicVariables.Variables
                         try
                         {
                             T shifted = (T)(baseVal + k);
-                            QuBit<T> q = new([shifted]); q.Any();
-                            rebuilt = q;
+                            rebuilt = new QuBit<T>(new[] { shifted });
+                            rebuilt.Any();
                         }
                         catch
                         {
-                            QuBit<T> q = new(incomingVals); q.Any();
-                            rebuilt = q;
+                            rebuilt = new QuBit<T>(incomingVals);
+                            rebuilt.Any();
                         }
                     }
                     else
                     {
-                        QuBit<T> q = new(incomingVals); q.Any();
-                        rebuilt = q;
+                        rebuilt = new QuBit<T>(incomingVals);
+                        rebuilt.Any();
                     }
 
-                    // Keep only the latest reconstructed state beyond the bootstrap.
+                    // Keep only a single latest reconstructed slice beyond the bootstrap.
                     ReplaceForwardHistoryWith(rebuilt);
                     return;
                 }
 
+
                 if (ReferenceEquals(qb, timeline[^1]))
                 {
                     qb = new QuBit<T>(qb.ToCollapsedValues().ToArray());
-                    
                 }
 
-                IOperation topOp = QuantumLedgerOfRegret.Peek();
-                if (topOp is null or MerlinFroMarker)
+                IOperation top = QuantumLedgerOfRegret.Peek();
+                if (top is null or MerlinFroMarker)
                 {
                     return;
                 }
 
-                QuBit<T> rebuiltSelf = _reverseReplay.ReplayReverseCycle(qb, this);
+                QuBit<T> rebuiltx = _reverseReplay.ReplayReverseCycle(qb, this);
 
                 if (isFeedbackFromSelf && timeline.Count > 0)
                 {
-                    T[] union = [.. rebuiltSelf.ToCollapsedValues()
-                                       .Union(timeline[^1].ToCollapsedValues())
-                                       .Distinct()];
-                    rebuiltSelf = new QuBit<T>(union);
-                    rebuiltSelf.Any();
+                    T[] union = [.. rebuiltx.ToCollapsedValues().Union(timeline[^1].ToCollapsedValues()).Distinct()];
+                    rebuiltx = new QuBit<T>(union).Any();
                 }
 
-                AppendFromReverse(rebuiltSelf);
+                AppendFromReverse(rebuiltx);
                 return;
             }
 
@@ -1008,24 +1045,22 @@ namespace PositronicVariables.Variables
             QuBit<T> lazy()
             {
                 QuBit<T> srcQB = left.GetCurrentQBit();
-                srcQB.Any();
                 QuBit<T> resultQB = srcQB + right;
-                resultQB.Any();
+                MarkAnyIfSuperposition(resultQB);
                 return resultQB;
             }
-            if (left._runtime.Entropy >= 0)
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, right, left._runtime));
             }
-
             return new QExpr(left, lazy);
         }
 
         public static QExpr operator +(T left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = right.GetCurrentQBit() + left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right, left, right._runtime));
             }
@@ -1035,22 +1070,38 @@ namespace PositronicVariables.Variables
         public static QExpr operator +(PositronicVariable<T> left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                // Log the addition using the right-hand's collapsed operand.
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
 
+        // --- QExpr-aware Addition Overloads ---
+        public static QExpr operator +(PositronicVariable<T> left, QExpr right)
+        {
+            // Materialize the right expression's qubit; do not log here (ops already logged when building 'right')
+            QuBit<T> resultQB = left.GetCurrentQBit() + (QuBit<T>)right;
+            MarkAnyIfSuperposition(resultQB);
+            return new QExpr(left, resultQB);
+        }
+
+        public static QExpr operator +(QExpr left, PositronicVariable<T> right)
+        {
+            QuBit<T> resultQB = (QuBit<T>)left + right.GetCurrentQBit();
+            MarkAnyIfSuperposition(resultQB);
+            // Use left.Source as the QExpr's source
+            return new QExpr(left.Source, resultQB);
+        }
+
         // --- Subtraction Overloads ---
         public static QExpr operator -(PositronicVariable<T> left, T right)
         {
             QuBit<T> resultQB = left.GetCurrentQBit() - right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, right, left._runtime));
             }
@@ -1059,12 +1110,10 @@ namespace PositronicVariables.Variables
 
         public static QExpr operator -(T left, PositronicVariable<T> right)
         {
-            // Here, result = left - rightValue.
             QuBit<T> resultQB = right.GetCurrentQBit() - left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                // Use a reversed subtraction so the inverse is: value = left - result.
                 QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
@@ -1073,8 +1122,8 @@ namespace PositronicVariables.Variables
         public static QExpr operator -(PositronicVariable<T> left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, operand, left._runtime));
@@ -1086,107 +1135,65 @@ namespace PositronicVariables.Variables
         public static QExpr operator -(PositronicVariable<T> value)
         {
             QuBit<T> qb = value.GetCurrentQBit();
-
-            T[] negatedValues = [.. qb
-                .ToCollapsedValues()
-                .Select(v =>
-                {
-                    dynamic dv = v;
-                    return (T)(-dv);
-                })];
-
+            T[] negatedValues = [.. qb.ToCollapsedValues().Select(v => { dynamic dv = v; return (T)(-dv); })];
             QuBit<T> negatedQb = new(negatedValues);
-            negatedQb.Any();
-            if (value._runtime.Entropy >= 0)
-            {
-                QuantumLedgerOfRegret.Record(new NegationOperation<T>(value));
-            }
+            MarkAnyIfSuperposition(negatedQb);
+
             return new QExpr(value, negatedQb);
         }
 
         // --- Multiplication Overloads ---
+
         public static QExpr operator *(PositronicVariable<T> left, T right)
         {
-            // Build from the freshest slice when the expression is used.
             QuBit<T> lazy()
             {
                 QuBit<T> srcQB = left.GetCurrentQBit();
-                srcQB.Any();
                 QuBit<T> resultQB = srcQB * right;
-                resultQB.Any();
+                MarkAnyIfSuperposition(resultQB);
                 return resultQB;
             }
 
-            if (left._runtime.Entropy >= 0)
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(
-                IsMinus1(right)
-                               ? new NegationOperation<T>(left)
-                               : new MultiplicationOperation<T>(left, right));
+                    IsMinus1(right)
+                        ? new NegationOperation<T>(left)
+                        : new MultiplicationOperation<T>(left, right));
             }
-
             return new QExpr(left, lazy);
         }
 
         public static QExpr operator *(T left, PositronicVariable<T> right)
         {
-            // Build from the freshest slice when the expression is used.
             QuBit<T> lazy()
             {
                 QuBit<T> srcQB = right.GetCurrentQBit();
-                srcQB.Any();
                 T[] multiplied = [.. srcQB
                     .ToCollapsedValues()
-                    .Select(v =>
-                    {
-                        dynamic dl = left;
-                        dynamic dv = v;
-                        return (T)(dl * dv);
-                    })
+                    .Select(v => { dynamic dl = left; dynamic dv = v; return (T)(dl * dv); })
                     .Distinct()];
-
                 QuBit<T> resultQB = new(multiplied);
-                resultQB.Any();
+                MarkAnyIfSuperposition(resultQB);
                 return resultQB;
             }
 
-            if (right._runtime.Entropy >= 0)
+            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(
                     IsMinus1(left)
                         ? new NegationOperation<T>(right)
                         : new MultiplicationOperation<T>(right, left));
             }
-
             return new QExpr(right, lazy);
-        }
-
-        public static QExpr operator *(PositronicVariable<T> left, PositronicVariable<T> right)
-        {
-            QuBit<T> resultQB = left.GetCurrentQBit() * right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
-            {
-                T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                if (IsMinus1(operand))
-                {
-                    QuantumLedgerOfRegret.Record(new NegationOperation<T>(left));
-                }
-                else
-                {
-                    QuantumLedgerOfRegret.Record(new MultiplicationOperation<T>(left, operand));
-                }
-            }
-            return new QExpr(left, resultQB);
         }
 
         // --- Division Overloads ---
         public static QExpr operator /(PositronicVariable<T> left, T right)
         {
-            QuBit<T> currentQB = left.GetCurrentQBit();
-            QuBit<T> resultQB = currentQB / right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            QuBit<T> resultQB = left.GetCurrentQBit() / right;
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, right, left._runtime));
             }
@@ -1196,8 +1203,8 @@ namespace PositronicVariables.Variables
         public static QExpr operator /(T left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = right.GetCurrentQBit() / left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
             }
@@ -1207,8 +1214,8 @@ namespace PositronicVariables.Variables
         public static QExpr operator /(PositronicVariable<T> left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, operand, left._runtime));
@@ -1220,24 +1227,22 @@ namespace PositronicVariables.Variables
         public static QExpr operator %(PositronicVariable<T> left, T right)
         {
             QuBit<T> resultQB = left.GetCurrentQBit() % right;
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
             }
-
             return new QExpr(left, resultQB);
         }
 
         public static QExpr operator %(T left, PositronicVariable<T> right)
         {
             QuBit<T> resultQB = right.GetCurrentQBit() % left;
-            resultQB.Any();
-            if (right._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
             }
-
             return new QExpr(right, resultQB);
         }
 
@@ -1245,12 +1250,11 @@ namespace PositronicVariables.Variables
         {
             T divisor = right.GetCurrentQBit().ToCollapsedValues().First();
             QuBit<T> resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
-            resultQB.Any();
-            if (left._runtime.Entropy >= 0)
+            MarkAnyIfSuperposition(resultQB);
+            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
             }
-
             return new QExpr(left, resultQB);
         }
 
@@ -1326,7 +1330,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Retrieves a specific slice from the timeline.
+        /// Retrieves a specific slice from the timeline, like flipping to a particular episode in your life's never-ending sitcom.
         /// </summary>
         public QuBit<T> GetSlice(int stepsBack)
         {
@@ -1336,7 +1340,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Returns all timeline slices in order.
+        /// Returns all timeline slices in order, for when you need to relive every awkward moment.
         /// </summary>
         public IEnumerable<QuBit<T>> GetTimeline()
         {
@@ -1358,7 +1362,19 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Collapses the timeline using a custom strategy.
+        /// Marks the qubit as "any" if it is still in superposition.
+        /// </summary>
+        /// <param name="qb"></param>
+        private static void MarkAnyIfSuperposition(QuBit<T> qb)
+        {
+            if (qb.GetCurrentType() != QuantumSuperposition.Core.QuantumStateType.CollapsedResult)
+            {
+                qb.Any();
+            }
+        }
+
+        /// <summary>
+        /// Collapses the timeline using a custom strategy, like choosing your own adventure in a book of infinite pages.
         /// </summary>
         public void CollapseToLastSlice(Func<IEnumerable<T>, T> strategy)
         {
@@ -1383,7 +1399,7 @@ namespace PositronicVariables.Variables
         };
 
         /// <summary>
-        /// Creates a new branch by forking the timeline.
+        /// Creates a new branch by forking the timeline, spawning a parallel universe where you finally clean your room.
         /// </summary>
         public PositronicVariable<T> Fork(IPositronicRuntime runtime)
         {
@@ -1401,7 +1417,7 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Forks the timeline and applies a transformation to the final slice.
+        /// Forks the timeline and applies a transformation to the final slice, like editing the ending of your autobiography.
         /// </summary>
         public PositronicVariable<T> Fork(Func<T, T> transform, IPositronicRuntime runtime)
         {
@@ -1451,8 +1467,100 @@ namespace PositronicVariables.Variables
             }
         }
 
+        public void ConstrainEqual(QExpr expr)
+        {
+            ArgumentNullException.ThrowIfNull(expr.Source);
+
+            QuBit<T> qb;
+
+            // Suppress log while materializing a self-sourced constraint, so building the QExpr
+            // doesn't push addition/mul ops for this variable.
+            if (ReferenceEquals(this, expr.Source))
+            {
+                s_SuppressOperatorLogging = true;
+                try
+                {
+                    qb = (QuBit<T>)expr;
+                }
+                finally
+                {
+                    s_SuppressOperatorLogging = false;
+                }
+
+                if (InConvergenceLoop && _runtime.Entropy > 0)
+                {
+                    QuantumLedgerOfRegret.Record(new MerlinFroMarker());
+                }
+            }
+            else
+            {
+                qb = (QuBit<T>)expr;
+            }
+
+            ConstrainEqual(qb);
+        }
+
         /// <summary>
-        /// Gets or sets the current quantum state.
+        /// Narrows this variable to be equal to the given state (equality constraint), like forcing a stubborn cat into a smaller box.
+        /// Replaces the most recent slice (or appends if only bootstrap exists). No union growth.
+        /// </summary>
+        public void ConstrainEqual(QuBit<T> qb)
+        {
+            ArgumentNullException.ThrowIfNull(qb);
+
+            if (InConvergenceLoop)
+            {
+                int e = _runtime.Entropy;
+                if (e != s_LastEntropySeenForEpoch)
+                {
+                    BeginEpoch();
+                    s_LastEntropySeenForEpoch = e;
+                    ResetReverseReplayFlag();
+                }
+            }
+
+            if (_runtime.Entropy > 0)
+            {
+                // replace-or-append current slice with the narrowed state
+                if (timeline.Count <= 1)
+                {
+                    _temporalRecords.SnapshotAppend(this, qb);
+                    StampAppendCurrentEpoch();
+                }
+                else
+                {
+                    _temporalRecords.ReplaceLastSlice(this, qb);
+                    StampReplaceCurrentEpoch();
+                }
+
+                _ops.SawForwardWrite = true;
+
+                // flag: this var used Required in this forward half
+                _hadRequiredThisForward = true;
+                return;
+            }
+
+            if (_runtime.Entropy < 0)
+            {
+                AppendFromReverse(qb);
+                return;
+            }
+
+            // fallback outside-loop
+            if (timeline.Count <= 1)
+            {
+                _temporalRecords.SnapshotAppend(this, qb);
+                StampAppendCurrentEpoch();
+            }
+            else
+            {
+                _temporalRecords.ReplaceLastSlice(this, qb);
+                StampReplaceCurrentEpoch();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the current quantum state, because sometimes you need to peek behind the curtain of reality.
         /// Returns a QExpr to ensure arithmetic operations are logged correctly.
         /// </summary>
         public QExpr State
@@ -1472,7 +1580,7 @@ namespace PositronicVariables.Variables
                 });
 
             }
-            set => Assign(value);  // QExpr has implicit conversion through Assign(QExpr)
+            set => ConstrainEqual(value);
         }
 
         /// <summary>
@@ -1593,9 +1701,8 @@ namespace PositronicVariables.Variables
         }
 
         /// <summary>
-        /// Marks this variable as having had outside-loop forward writes.
-        /// On the next RunConvergenceLoop(), ResetTimelineIfOutsideWrites() will
-        /// quarantine to the bootstrap slice. This does NOT mutate the timeline.
+        /// Marks this variable as having had outside-loop forward writes, like tagging graffiti on the walls of time.
+        /// On the next RunConvergenceLoop(), ResetTimelineIfOutsideWrites() will quarantine to the bootstrap slice. This does NOT mutate the timeline.
         /// </summary>
         public void NoteOutsideWrites()
         {
@@ -1632,6 +1739,46 @@ namespace PositronicVariables.Variables
         public static QExpr operator <<(PositronicVariable<T> target, QExpr expr)
         {
             return new QExpr(target, () => (QuBit<T>)expr);
+        }
+
+        /// <summary>
+        /// Proposes a new quantum state for this variable (assignment), like suggesting a plot twist to the author of the universe.
+        /// </summary>
+        public QExpr Proposed
+        {
+            get
+            {
+                if (InConvergenceLoop && _runtime.Entropy > 0)
+                {
+                    _sawStateReadThisForward = true;
+                }
+                return new QExpr(this, () =>
+                {
+                    QuBit<T> qb = GetCurrentQBit();
+                    return qb;
+                });
+            }
+            set => Assign(value);
+        }
+
+        /// <summary>
+        /// Demands a new quantum state for this variable (equality constraint), because sometimes the universe needs a firm hand.
+        /// </summary>
+        public QExpr Required
+        {
+            get
+            {
+                if (InConvergenceLoop && _runtime.Entropy > 0)
+                {
+                    _sawStateReadThisForward = true;
+                }
+                return new QExpr(this, () =>
+                {
+                    QuBit<T> qb = GetCurrentQBit();
+                    return qb;
+                });
+            }
+            set => ConstrainEqual(value);
         }
     }
 }

@@ -513,8 +513,26 @@ namespace QuantumSuperposition.QuantumSoup
             return _eType;
         }
 
-        public QuBit<T> Any() { SetType(QuantumStateType.SuperpositionAny); return this; }
-        public QuBit<T> All() { SetType(QuantumStateType.SuperpositionAll); return this; }
+        public QuBit<T> Any() { 
+            // If already collapsed, do nothing; avoid flipping type on a frozen instance.
+            if (IsActuallyCollapsed)
+            {
+                return this;
+            }
+
+            SetType(QuantumStateType.SuperpositionAny); 
+            return this;
+        }
+        public QuBit<T> All() { 
+            // If already collapsed, do nothing; avoid flipping type on a frozen instance.
+            if (IsActuallyCollapsed)
+            {
+                return this;
+            }
+
+            SetType(QuantumStateType.SuperpositionAll); 
+            return this;
+        }
 
         #endregion
 

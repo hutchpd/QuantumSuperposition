@@ -4,6 +4,7 @@ using PositronicVariables.DependencyInjection;
 using PositronicVariables.Engine.Logging;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables;
+using QuantumSuperposition.Core;
 using System;
 using System.Collections;
 using System.IO;
@@ -26,6 +27,10 @@ namespace PositronicVariables.Tests
             PositronicAmbient.InitialiseWith(hostBuilder);
             _rt = PositronicAmbient.Current;
 
+            // Preserve unions in ops for cross-var replay tests too
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
             QuantumLedgerOfRegret.Clear();
             if (_rt.Babelfish is StringWriter sw)
                 sw.GetStringBuilder().Clear();
@@ -34,7 +39,7 @@ namespace PositronicVariables.Tests
         [TearDown]
         public void TearDown()
         {
-            if (PositronicAmbient.Services is IDisposable disp)
+            if (PositronicAmbient.IsInitialized && PositronicAmbient.Services is IDisposable disp)
                 disp.Dispose();
             PositronicAmbient.PanicAndReset();
         }
@@ -51,11 +56,11 @@ namespace PositronicVariables.Tests
                 var antival2 = PositronicVariable<int>.GetOrCreate("antival2", 0);
 
                 Console.WriteLine($"The antivals are {antival} {antival2}");
-                antival.State = antival.State + 1;   // +1 then force 10 => print-site 11
+                antival.Assign(antival.State + 1);   // +1 then force 10 => print-site 11
                 antival.Scalar = 10;
 
                 // Cross-variable: antival2 from antival (+2), then force 20 => print-site 22
-                antival2.State = antival.State + 2;
+                antival2.Assign(antival.State + 2);
                 antival2.Scalar = 20;
             }
 
@@ -164,11 +169,11 @@ namespace PositronicVariables.Tests
 
                 var _ = $"The antivals are {antival} {antival2}";
 
-                antival.State = antival.State + 1;
+                antival.Assign(antival.State + 1);
                 antival.Assign(10);
 
                 // Cross-variable: derive b from a (+2), then force 20
-                antival2.State = antival.State + 2;
+                antival2.Assign(antival.State + 2);
                 antival2.Assign(20);
             }
 

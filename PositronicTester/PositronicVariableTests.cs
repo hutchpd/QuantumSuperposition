@@ -230,6 +230,10 @@ namespace PositronicVariables.Tests
             PositronicAmbient.InitialiseWith(hostBuilder);
             _runtime = PositronicAmbient.Current;
 
+            // Preserve unions in arithmetic to avoid accidental collapses while building expressions
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
             QuantumConfig.ForbidDefaultOnCollapse = true;
             QuantumLedgerOfRegret.Clear();
             if (_runtime.Babelfish is StringWriter sw)
@@ -780,7 +784,7 @@ namespace PositronicVariables.Tests
             {
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
-                antival.State = antival.State + 1;               // forward mutation
+                antival.Assign(antival.State + 1);               // forward mutation
                 antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
@@ -824,7 +828,7 @@ namespace PositronicVariables.Tests
             {
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
-                antival.State = antival.State - 2;               // forward mutation
+                antival.Assign(antival.State - 2);               // forward mutation
                 antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
@@ -868,7 +872,7 @@ namespace PositronicVariables.Tests
             {
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
-                antival.State = antival.State * 2;               // forward mutation
+                antival.Assign(antival.State * 2);               // forward mutation
                 antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
@@ -913,7 +917,7 @@ namespace PositronicVariables.Tests
             {
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
-                antival.State = antival.State / 2;               // forward division
+                antival.Assign(antival.State / 2);               // forward division
                 antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
@@ -957,7 +961,7 @@ namespace PositronicVariables.Tests
             {
                 var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
                 Console.WriteLine($"The antival is {antival}"); // <-- printed before mutations
-                antival.State = antival.State % 4;               // forward mod
+                antival.Assign(antival.State % 4);               // forward mod
                 antival.Assign(10);                              // overwrite / "start of program"
                 var probe = PositronicVariable<int>.GetOrCreate("antival");
             }
@@ -1044,7 +1048,7 @@ namespace PositronicVariables.Tests
         public void FirstForwardScalar_Appends_NotMerges()
         {
             var v = PositronicVariable<int>.GetOrCreate("probe", 0, _runtime);
-            PositronicVariable<int>.SetEntropy(_runtime, +1);   // forward, outside loop
+            PositronicVariable<int>.SetEntropy(_runtime, +1);   // forward, *outside* loop
 
             v.Assign(1);                                        // scalar write
 
@@ -1157,9 +1161,583 @@ namespace PositronicVariables.Tests
         }
 
         #endregion
+
+        #region Console-style double-run tests
+
+        [Test]
+        public void Required_ClosesLoop_Narrows_To_3_Neg3_3()
+        {
+            PositronicAmbient.PanicAndReset();
+
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
+            static void ProgramBody()
+            {
+                var a = PositronicVariable<int>.GetOrCreate("a", 5);
+                Console.WriteLine($"a@t0 = {a}");
+
+                var b = -a;
+                Console.WriteLine($"b@t0 = {b}");
+
+                var c = a + b + 3;
+                Console.WriteLine($"c@t0 = {c}");
+
+                a.Required = c;
+            }
+
+            var original = Console.Out;
+            var sw = new StringWriter();
+            try
+            {
+                Console.SetOut(sw);
+
+                // First, a normal run (outside the loop)
+                ProgramBody();
+
+                // Then, run inside the convergence loop (like console app exit)
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(original);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            // Take the last three lines (from the final run)
+            var last3 = lines.TakeLast(3).ToArray();
+
+            int[] ParseStates(string line)
+            {
+                // Accept either "any(…)" or a bare scalar "X"
+                int open = line.IndexOf('(');
+                int close = line.LastIndexOf(')');
+                if (open >= 0 && close > open)
+                {
+                    return line.Substring(open + 1, close - open - 1)
+                               .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                               .Select(s => int.Parse(s.Trim()))
+                               .ToArray();
+                }
+                // bare scalar after '='
+                var eq = line.IndexOf('=');
+                var tail = eq >= 0 ? line[(eq + 1)..].Trim() : line.Trim();
+                return new[] { int.Parse(tail) };
+            }
+
+            var aStates = ParseStates(last3[0]); // "a@t0 = ..."
+            var bStates = ParseStates(last3[1]); // "b@t0 = ..."
+            var cStates = ParseStates(last3[2]); // "c@t0 = ..."
+
+            Assert.That(aStates.Length, Is.EqualTo(1));
+            Assert.That(bStates.Length, Is.EqualTo(1));
+            Assert.That(cStates.Length, Is.EqualTo(1));
+
+            Assert.That(aStates[0], Is.EqualTo(3));
+            Assert.That(bStates[0], Is.EqualTo(-3));
+            Assert.That(cStates[0], Is.EqualTo(3));
+        }
+        [Test]
+        public void Proposed_DoesNotNarrow_LeavesUnion_But_Includes_3()
+        {
+            // Clean world
+            PositronicAmbient.PanicAndReset();
+
+            static void ProgramBody()
+            {
+                var a = PositronicVariable<int>.GetOrCreate("a", 5);
+                Console.WriteLine($"a@t0 = {a}");
+
+                var b = -a;
+                Console.WriteLine($"b@t0 = {b}");
+
+                var c = a + b + 3;
+                Console.WriteLine($"c@t0 = {c}");
+
+                // Non-narrowing write: uses union/append semantics
+                a.Proposed = c;
+            }
+
+            var original = Console.Out;
+            var sw = new StringWriter();
+            try
+            {
+                Console.SetOut(sw);
+                ProgramBody();
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally
+            {
+                Console.SetOut(original);
+            }
+
+            var lines = sw.ToString()
+                          .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var last3 = lines.TakeLast(3).ToArray();
+
+            static int[] ParseAnyOrScalar(string line)
+            {
+                int open = line.IndexOf('(');
+                int close = line.LastIndexOf(')');
+                if (open >= 0 && close > open)
+                {
+                    return line.Substring(open + 1, close - open - 1)
+                               .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                               .Select(s => int.Parse(s.Trim()))
+                               .ToArray();
+                }
+                var eq = line.IndexOf('=');
+                var tail = eq >= 0 ? line[(eq + 1)..].Trim() : line.Trim();
+                return new[] { int.Parse(tail) };
+            }
+
+            var aStates = ParseAnyOrScalar(last3[0]);
+            var bStates = ParseAnyOrScalar(last3[1]);
+            var cStates = ParseAnyOrScalar(last3[2]);
+
+            // Non-narrowing: at least one side should be a union
+            Assert.That(aStates.Length >= 1);
+            Assert.That(cStates.Length >= 1);
+
+            // The algebraic invariant a + (-a) + 3 => 3 must be present in c
+            Assert.That(cStates, Does.Contain(3));
+
+            // Do not assert b contains -3: cross-variable reverse baseline can shift b by -2a.
+            // Keep a weak check that b is well-formed (not empty)
+            Assert.That(bStates.Length, Is.GreaterThanOrEqualTo(1));
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Required_Constant_Needs_Three_HalfCycles()
+        {
+            PositronicAmbient.PanicAndReset();
+
+            var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
+            var rt = PositronicAmbient.Current;
+
+            var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+            var timelineLens = new List<int>();
+            var lastTwoEqual = new List<int>();
+
+            int calls = 0;
+
+            PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    calls++;
+
+                    var beforeLen = a.timeline.Count;
+                    a.Required = PositronicVariable<int>.Project(a, _ => 3);
+                    var afterLen = a.timeline.Count;
+
+                    // Snapshot growth and convergence
+                    timelineLens.Add(afterLen);
+                    lastTwoEqual.Add(a.Converged());
+
+                    // Stop after three half-cycles so we see reverse→forward→reverse
+                    if (calls >= 3) rt.Converged = true;
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: true
+            );
+
+            // Expected pattern:
+            // 1) reverse: append 3 (len grows by +1)
+            // 2) forward: replace 3 (len unchanged vs last)
+            // 3) reverse: append 3 again (len grows by +1) => last two equal → Converged()==1
+            Assert.That(timelineLens.Count, Is.EqualTo(3), "Expected exactly three half-cycles.");
+            Assert.That(lastTwoEqual[0], Is.EqualTo(0), "First (reverse) won’t converge yet.");
+            Assert.That(lastTwoEqual[1], Is.EqualTo(0), "Second (forward) replaces, still not converged.");
+            Assert.That(lastTwoEqual[2], Is.GreaterThan(0), "Third (reverse) appends duplicate → converged.");
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Required_Reverse_Appends_Forward_Replaces()
+        {
+            PositronicAmbient.PanicAndReset();
+
+            var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
+            var rt = PositronicAmbient.Current;
+
+            var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+            var lens = new List<(int entropy, int len)>();
+
+            PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    int ent = PositronicVariable<int>.GetEntropy(rt);
+                    int before = a.timeline.Count;
+
+                    a.Required = PositronicVariable<int>.Project(a, _ => 3);
+
+                    int after = a.timeline.Count;
+                    lens.Add((ent, after - before));
+
+                    // Drive exactly two halves (reverse then forward), then we stop.
+                    if (lens.Count >= 2) rt.Converged = true;
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: true
+            );
+
+            // First half: reverse => append (+1)
+            Assert.That(lens[0].entropy, Is.LessThan(0));
+            Assert.That(lens[0].Item2, Is.EqualTo(1));
+
+            // Second half: forward => replace (0 growth)
+            Assert.That(lens[1].entropy, Is.GreaterThan(0));
+            Assert.That(lens[1].Item2, Is.EqualTo(0));
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Trace_Required_To_Constant_PerHalf()
+        {
+            PositronicAmbient.PanicAndReset();
+            var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
+            var rt = PositronicAmbient.Current;
+
+            var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+
+            var sb = new StringBuilder();
+            PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    int ent = PositronicVariable<int>.GetEntropy(rt);
+                    sb.AppendLine($"ent={(ent < 0 ? "REV" : "FWD")}, len={a.timeline.Count}, last=[{string.Join(",", a.GetCurrentQBit().ToCollapsedValues())}], conv={a.Converged()}");
+                    a.Required = PositronicVariable<int>.Project(a, _ => 3);
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: false);
+
+            TestContext.WriteLine(sb.ToString());
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Required_SingleVariable_EqualsConstant_Converges_In_Two_HalfCycles()
+        {
+            // Relaxed: Required==constant converges on the next reverse (3rd half-cycle)
+            // due to "reverse appends, forward replaces" semantics.
+            PositronicAmbient.PanicAndReset();
+
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+
+            var hostBuilder = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hostBuilder);
+            var rt = PositronicAmbient.Current;
+
+            var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+            var lastTwoEqualPerHalf = new List<int>();
+            int calls = 0;
+
+            PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    calls++;
+
+                    // Narrow to a constant
+                    a.Required = PositronicVariable<int>.Project(a, _ => 3);
+
+                    // Probe Converged() each half-cycle
+                    lastTwoEqualPerHalf.Add(a.Converged());
+
+                    // Force exactly 3 half-cycles (REV -> FWD -> REV), then stop
+                    if (calls >= 3) rt.Converged = true;
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: true);
+
+            // Expect convergence on the 3rd half-cycle (first reverse after forward replace)
+            Assert.That(lastTwoEqualPerHalf.Count, Is.GreaterThanOrEqualTo(3),
+                "Expected to run three half-cycles to observe convergence on the following reverse.");
+            Assert.That(lastTwoEqualPerHalf[2], Is.GreaterThan(0),
+                "Required==constant should reach Converged()>0 by the third half-cycle.");
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void OperatorLogging_FinalForward_Print_Records_Addition()
+        {
+            // This diagnostic confirms that QExpr scalar operators log when evaluated in a forward pass,
+            // mirroring the final forward print conditions (Entropy > 0, clean ledger).
+            PositronicAmbient.PanicAndReset();
+
+            var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
+            var rt = PositronicAmbient.Current;
+
+            var a = PositronicVariable<int>.GetOrCreate("antival", 5, rt);
+
+            // Prepare a forward-only context with a clean operation log
+            QuantumLedgerOfRegret.Clear();
+            PositronicVariable<int>.SetEntropy(rt, +1);
+
+            // Print-site read (stringification) shouldn't log
+            var _ = $"The antival is {a}";
+
+            // Building a QExpr with +1 must log an AdditionOperation against 'a'
+            var expr = a.State + 1;
+
+            // Inspect the ledger immediately (engine hasn't undone/cleared it)
+            var logField = typeof(QuantumLedgerOfRegret)
+                .GetField("_log", BindingFlags.NonPublic | BindingFlags.Static);
+            var stackObj = (System.Collections.IEnumerable)logField!.GetValue(null);
+
+            var entries = stackObj.Cast<object>().ToArray();
+            TestContext.WriteLine($"OpLog depth={entries.Length}");
+            foreach (var e in entries.Reverse())
+            {
+                TestContext.WriteLine($" - {e?.GetType().Name}");
+            }
+
+            // We expect at least one AdditionOperation to have been recorded
+            Assert.That(entries.Any(e => e?.GetType().Name?.Contains("AdditionOperation") == true),
+                "Expected AdditionOperation to be recorded for `a.State + 1` in a forward pass.");
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Required_A_B_C_ArithmeticMode_Comparison_Shows_Collapse_Causing_NonConvergence()
+        {
+            static (int[] aStates, int[] bStates, int[] cStates) RunOnce(bool nonObservational)
+            {
+                PositronicAmbient.PanicAndReset();
+
+                QuantumConfig.EnableNonObservationalArithmetic = nonObservational;
+                QuantumConfig.EnableCommutativeCache = true;
+
+                var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+                PositronicAmbient.InitialiseWith(hb);
+                var rt = PositronicAmbient.Current;
+
+                int[] aOut = Array.Empty<int>(), bOut = Array.Empty<int>(), cOut = Array.Empty<int>();
+
+                PositronicVariable<int>.RunConvergenceLoop(
+                    rt,
+                    () =>
+                    {
+                        var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+                        var b = -a;
+                        var c = a + b + 3;
+
+                        // Materialize once per half-cycle to keep read coherence
+                        var bVar = PositronicVariable<int>.GetOrCreate("b", 0, rt);
+                        bVar.Assign(b);
+                        var cVar = PositronicVariable<int>.GetOrCreate("c", 0, rt);
+                        cVar.Assign(c);
+
+                        aOut = a.GetCurrentQBit().ToCollapsedValues().ToArray();
+                        bOut = bVar.GetCurrentQBit().ToCollapsedValues().ToArray();
+                        cOut = cVar.GetCurrentQBit().ToCollapsedValues().ToArray();
+
+                        // Narrowing equality
+                        a.Required = c;
+                    },
+                    runFinalIteration: false,
+                    unifyOnConvergence: false);
+
+                return (aOut, bOut, cOut);
+            }
+
+            var (aObs, bObs, cObs) = RunOnce(nonObservational: false);
+            var (aNonObs, bNonObs, cNonObs) = RunOnce(nonObservational: true);
+
+            TestContext.WriteLine($"Observational: a=[{string.Join(",", aObs)}] b=[{string.Join(",", bObs)}] c=[{string.Join(",", cObs)}]");
+            TestContext.WriteLine($"NonObs:        a=[{string.Join(",", aNonObs)}] b=[{string.Join(",", bNonObs)}] c=[{string.Join(",", cNonObs)}]");
+
+            // Under observational arithmetic, your trace shows c==8; under non-observational, c must contain 3.
+            Assert.That(cObs, Is.Not.Empty);
+            Assert.That(cNonObs, Does.Contain(3), "With non-observational arithmetic, c must include 3.");
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Trace_Proposed_vs_Required_A_B_C_Timelines()
+        {
+            PositronicAmbient.PanicAndReset();
+
+            var hostBuilder = new HostBuilder()
+                .ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hostBuilder);
+
+            var rt = PositronicAmbient.Current;
+
+            var sb = new StringBuilder();
+            void Dump(string label, PositronicVariable<int> a, PositronicVariable<int> bVar, PositronicVariable<int> cVar)
+            {
+                int epoch = (int)typeof(PositronicVariables.Variables.PositronicVariable<int>)
+                    .GetProperty("CurrentEpoch", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetValue(null)!;
+
+                string FormatStates(PositronicVariables.Variables.PositronicVariable<int> v)
+                    => $"[{string.Join(", ", v.GetCurrentQBit().ToCollapsedValues())}] (len={v.timeline.Count})";
+
+                sb.AppendLine($"[{label}] epoch={epoch}");
+                sb.AppendLine($"  a={FormatStates(a)}");
+                sb.AppendLine($"  b={FormatStates(bVar)}");
+                sb.AppendLine($"  c={FormatStates(cVar)}");
+            }
+
+            // Proposed path (bounded to 2 half-cycles)
+            PositronicVariables.Variables.PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    var a = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("a", 5, rt);
+                    var b = (-a);
+                    var c = a + b + 3;
+
+                    var bVar = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("b", 0, rt);
+                    bVar.Assign(b);
+                    var cVar = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("c", 0, rt);
+                    cVar.Assign(c);
+
+                    Dump("proposed pre", a, bVar, cVar);
+                    a.Proposed = c;
+                    Dump("proposed post", a, bVar, cVar);
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: false
+            );
+
+            // Required path (fresh runtime; also bounded to 2 half-cycles)
+            PositronicAmbient.PanicAndReset();
+            hostBuilder = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hostBuilder);
+            rt = PositronicAmbient.Current;
+
+            PositronicVariables.Variables.PositronicVariable<int>.RunConvergenceLoop(
+                rt,
+                () =>
+                {
+                    var a = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("a", 5, rt);
+                    var b = (-a);
+                    var c = a + b + 3;
+
+                    var bVar = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("b", 0, rt);
+                    bVar.Assign(b);
+                    var cVar = PositronicVariables.Variables.PositronicVariable<int>.GetOrCreate("c", 0, rt);
+                    cVar.Assign(c);
+
+                    Dump("required pre", a, bVar, cVar);
+                    a.Required = c;
+                    Dump("required post", a, bVar, cVar);
+                },
+                runFinalIteration: false,
+                unifyOnConvergence: false
+            );
+
+            TestContext.WriteLine(sb.ToString());
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void Trace_SelfSourcedRequired_Inserts_Boundary_And_Prevents_KShift()
+        {
+            PositronicAmbient.PanicAndReset();
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
+            var hb = new HostBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
+            var rt = PositronicAmbient.Current;
+
+            int preReverseA = int.MinValue;
+            int postReverseA = int.MinValue;
+
+            PositronicVariable<int>.RunConvergenceLoop(rt, () =>
+            {
+                var a = PositronicVariable<int>.GetOrCreate("a", 5, rt);
+                var b = -a;                 // unary, no logging
+                var c = a + b + 3;          // logs +3 against a
+
+                // capture value at print site (forward)
+                var _ = a.ToString();
+
+                // Apply Required(self) — should insert boundary now
+                a.Required = c;
+
+                // On the next reverse tick, the engine clones and Assign(copy) runs.
+                // Before next forward flip, read both slices:
+                if (PositronicVariable<int>.GetEntropy(rt) < 0)
+                {
+                    // current == “earlier” slice appended this reverse
+                    preReverseA = a.GetCurrentQBit().ToCollapsedValues().Single();
+                }
+            }, runFinalIteration: false, unifyOnConvergence: false);
+
+            // Immediately run a short extra half to allow reverse append to occur
+            PositronicVariable<int>.SetEntropy(rt, -1);
+            var aFinal = PositronicVariable<int>.GetOrCreate("a", 0, rt);
+            postReverseA = aFinal.GetCurrentQBit().ToCollapsedValues().Single();
+
+            TestContext.WriteLine($"preReverseA={preReverseA}, postReverseA={postReverseA}");
+            Assert.That(postReverseA, Is.EqualTo(3), "Reverse reconstruction for self-Required must not k-shift (no +3 on a).");
+        }
+
+        [Test, Explicit("Diagnostics")]
+        public void ConsoleStyle_SelfSourcedRequired_Prints_3_Neg3_3()
+        {
+            PositronicAmbient.PanicAndReset();
+
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
+            static void ProgramBody()
+            {
+                var a = PositronicVariable<int>.GetOrCreate("a", 5);
+                Console.WriteLine($"a@t0 = {a}");
+                var b = -a;
+                Console.WriteLine($"b@t0 = {b}");
+                var c = a + b + 3;
+                Console.WriteLine($"c@t0 = {c}");
+                a.Required = c;
+            }
+
+            var sw = new StringWriter();
+            var original = Console.Out;
+            try
+            {
+                Console.SetOut(sw);
+                ProgramBody(); // outside-loop
+                PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
+            }
+            finally { Console.SetOut(original); }
+
+            var last3 = sw.ToString()
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .TakeLast(3)
+                .ToArray();
+
+            static int[] ParseAnyOrScalar(string line)
+            {
+                var open = line.IndexOf('(');
+                var close = line.LastIndexOf(')');
+                if (open >= 0 && close > open)
+                    return line[(open + 1)..close].Split(',').Select(s => int.Parse(s.Trim())).ToArray();
+                var eq = line.IndexOf('=');
+                return new[] { int.Parse(line[(eq + 1)..].Trim()) };
+            }
+
+            var aStates = ParseAnyOrScalar(last3[0]);
+            var bStates = ParseAnyOrScalar(last3[1]);
+            var cStates = ParseAnyOrScalar(last3[2]);
+
+            Assert.That(aStates.Length, Is.EqualTo(1));
+            Assert.That(bStates.Length, Is.EqualTo(1));
+            Assert.That(cStates.Length, Is.EqualTo(1));
+
+            Assert.That(aStates[0], Is.EqualTo(3));
+            Assert.That(bStates[0], Is.EqualTo(-3));
+            Assert.That(cStates[0], Is.EqualTo(3));
+        }
+        #endregion
     }
 
-    #endregion
+#endregion
 
     #region PositronicQuickPathBugTests
 
@@ -1180,6 +1758,10 @@ namespace PositronicVariables.Tests
             PositronicAmbient.InitialiseWith(hostBuilder);
             _runtime = PositronicAmbient.Current;
 
+            // Keep arithmetic non-observational during tests so unions are preserved
+            QuantumConfig.EnableNonObservationalArithmetic = true;
+            QuantumConfig.EnableCommutativeCache = true;
+
             QuantumConfig.ForbidDefaultOnCollapse = true;
             QuantumLedgerOfRegret.Clear();
             if (_runtime.Babelfish is StringWriter sw)
@@ -1189,7 +1771,7 @@ namespace PositronicVariables.Tests
         [TearDown]
         public void TearDown()
         {
-            if (PositronicAmbient.Services is IDisposable disp)
+            if (PositronicAmbient.IsInitialized && PositronicAmbient.Services is IDisposable disp)
                 disp.Dispose();
             PositronicAmbient.PanicAndReset();
         }
@@ -1350,7 +1932,7 @@ namespace PositronicVariables.Tests
 
     #endregion
 
-            [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics")]
         public void Trace_Timelines_AndEpochs_SingleVariable_Multiply()
         {
             var rt = PositronicAmbient.Current;

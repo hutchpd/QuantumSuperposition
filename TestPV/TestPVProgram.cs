@@ -1,16 +1,26 @@
-﻿using PositronicVariables.Attributes;
+﻿using System;
+using PositronicVariables.Attributes;
 using PositronicVariables.Variables;
-using static PositronicVariables.Variables.QSugar;
+
+using QuantumSuperposition.Core;
 
 internal static class Program
 {
     [DontPanic]
     private static void Main()
     {
-        var antival = PositronicVariable<int>.GetOrCreate("antival", 0);
+        QuantumConfig.EnableNonObservationalArithmetic = true;
+        QuantumConfig.EnableCommutativeCache = true;
 
-        Console.WriteLine($"The antivals are {antival} ");
-        antival = antival + 2;
-        antival <<= Q(10);
+        var a = PositronicVariable<int>.GetOrCreate("a", 5);
+        Console.WriteLine($"a@t0 = {a}");
+
+        var b = -a;
+        Console.WriteLine($"b@t0 = {b}");
+
+        var c = a + b + 3;
+        Console.WriteLine($"c@t0 = {c}");
+
+        a.Required = c;
     }
 }
