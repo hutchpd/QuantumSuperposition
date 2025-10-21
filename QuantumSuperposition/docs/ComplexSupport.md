@@ -9,6 +9,7 @@ using System.Numerics;
 using QuantumSuperposition.Core;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
+```
 
 QuantumSuperposition supports complex numbers for advanced quantum operations. This section will guide you through the usage of complex numbers in the library.
 
