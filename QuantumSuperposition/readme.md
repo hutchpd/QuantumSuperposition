@@ -4,10 +4,10 @@
 
 .NET’s most confident way to say "maybe"
 
-QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
+QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously - just like Schrödinger’s cat, but with less moral ambiguity.
 
 ### Why Use QuantumSuperposition?
-In quantum mechanics, superposition means a system can be in many states at once — until observed. In your code, this means:
+In quantum mechanics, superposition means a system can be in many states at once - until observed. In your code, this means:
 
 - Want to check if a number is divisible by any value in a set?
 - Need to assert that all values match a condition, without a loop forest?
@@ -32,7 +32,7 @@ Congratulations. You want quantum variables. And now you can have them, without 
 
 Because behaving normally is for classical variables.
 
-- **Superposition**: Your variable is now every possible version of itself — until someone looks. Schrödinger vibes fully engaged.
+- **Superposition**: Your variable is now every possible version of itself - until someone looks. Schrödinger vibes fully engaged.
 - **Probability Amplitudes**: Assign complex numbers to your indecision. It's not overengineering, it's *science*.
 - **Amplitude Normalization**: Keeps your chaos unit-balanced. Otherwise the math police show up.
 - **Observation & Collapse**: You peek, it breaks. Just like your dev environment.
@@ -46,16 +46,16 @@ Because behaving normally is for classical variables.
 The weird just got weirder. QuBits can now share destiny in style:
 
 - **Entangled Variable Linking**: Tie variables together like they're in a codependent relationship.
-- **Collapse Propagation**: Observing one causes collapse across the entire group — because misery loves company.
+- **Collapse Propagation**: Observing one causes collapse across the entire group - because misery loves company.
 - **Tensor Product Expansion**: Generate all state combos across multiple QuBits, like a quantum group project.
 - **Entangled Group Mutation Propagation**: Mutate one, mutate them all. Drama ensues.
 - **Entanglement Group Versioning**: Track generational history of entangled graphs, because even quantum relationships have baggage.
 - **Entanglement Guardrails**: Blocks self-links, paradoxes, and other crimes against nature.
 - **Multi-Party Collapse Agreement**: Observers agree on a shared reality. For once.
-- **Entanglement Locking / Freezing**: Prevent changes during critical operations — useful when the multiverse needs a time-out.
+- **Entanglement Locking / Freezing**: Prevent changes during critical operations - useful when the multiverse needs a time-out.
 - **Entanglement Group Tagging / Naming**: Name your entanglement groups like pets. Examples: `BellPair_A`, `QuantumDrama42`.
 - **Partial Collapse Staging**: Observe one qubit now, another later. Suspense!
-- **Entanglement Graph Diagnostics**: Inspect group sizes, circular references, and the chaos % — an actual metric we now regret naming.
+- **Entanglement Graph Diagnostics**: Inspect group sizes, circular references, and the chaos % - an actual metric we now regret naming.
 
 
 ## QuBit<T> Enhancements
@@ -63,9 +63,9 @@ The weird just got weirder. QuBits can now share destiny in style:
 - **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
 - **Sampling Methods**:
   - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
-  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
+  - `.MostProbable()` returns the state with the highest chance of happening - much like your coffee spilling on your keyboard.
 - **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
-- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
+- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. 
 - **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
 
 ## Eigenstates<T> Gets Fancy Too
@@ -79,14 +79,14 @@ The weird just got weirder. QuBits can now share destiny in style:
 
 ## Probabilistic & Functional Sorcery
 
-Because collapsing reality should be optional. These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
+Because collapsing reality should be optional. These features let you get freaky with logic and structure - *without* observation causing your fragile multiverse to unravel.
 
 - **`p_op` – Conditional Without Collapse**: Choose branches based on conditions without collapsing the state. Schrödinger's choice logic.
-- **`p_func` – Functional State Transforms**: Map, filter, flatten — all without collapsing. LINQ for the superposed soul.
+- **`p_func` – Functional State Transforms**: Map, filter, flatten - all without collapsing. LINQ for the superposed soul.
 - **Non-Observational Arithmetic**: Enable operations like `+`, `*`, etc., without collapsing your QuBit. You get the math, *and* you keep the quantum soup. Have your waveform and eat it too.
 - **Weighted Function Composition**: Let probabilistic weights affect how branching logic plays out. Now your uncertainty has influence.
 - **Commutative Optimization**: Cache results of pure, commutative operations. Why recompute 2+3 when 3+2 already suffered that fate?
-- **Monad-Compatible Superpositions**: LINQ-style `.Select()`, `.Where()`, `.SelectMany()` with lazy evaluation — the cool kind of lazy that optimizes performance, not just vibes.
+- **Monad-Compatible Superpositions**: LINQ-style `.Select()`, `.Where()`, `.SelectMany()` with lazy evaluation - the cool kind of lazy that optimizes performance, not just vibes.
 
 ## Quantum Logic Gates
 
@@ -101,8 +101,8 @@ Because collapsing reality should be optional. These features let you get freaky
 
 ## Quantum Algorithms
 
-- **Built-in Quantum Algorithms**: Run real QFT and Grover’s Search logic on `QuantumSystem` like a true quantum dev — no PhD required.
-- **Quantum Fourier Transform (QFT)**: A core building block in many quantum algorithms. It reveals periodicity in a quantum state, turning time-based signals into frequency — like a quantum DJ mixing up the basis.
+- **Built-in Quantum Algorithms**: Run real QFT and Grover’s Search logic on `QuantumSystem` like a true quantum dev - no PhD required.
+- **Quantum Fourier Transform (QFT)**: A core building block in many quantum algorithms. It reveals periodicity in a quantum state, turning time-based signals into frequency - like a quantum DJ mixing up the basis.
 - **Grover’s Search Algorithm**: A quantum algorithm for searching unsorted databases with quadratic speedup. It’s like having a quantum search engine that actually works.
 
 Each algorithm internally schedules gate operations, which you can inspect, visualize, or export using the gate queue.
@@ -152,8 +152,8 @@ You *can* still go full Cartesian if you want, but we don’t do it for you beca
 ## Advanced Concepts
 
 ### Superposition Modes
-- Disjunctive (Any) — "Any of these values might work."  
-- Conjunctive (All) — "They all better pass, or we riot."
+- Disjunctive (Any) - "Any of these values might work."  
+- Conjunctive (All) - "They all better pass, or we riot."
 
 ### Arithmetic & Logic That Feels Like Sorcery
 Math just works across your whole quantum cloud.  
@@ -171,13 +171,4 @@ Questions, fan mail, obscure quantum jokes?
 support@findonsoftware.com
 
 ## Acknowledgements  
-Inspired by Damian Conway’s Quantum::Superpositions Perl module — where variables have been spooky since before it was cool.
-
-## QuantumSuperposition Logo
-                 ~   ~     ~     ~   ~    
-             ~    __Q__    ___     ~
-            ~    /  |  \  / _ \   ~    ~
-    ~       ~    |  |  | | |_| |       ~
-         ~       \__|__/  \___/    ~
-                QuantumSuperposition
-           Collapse your state. Collapse your doubts.
+Inspired by Damian Conway’s Quantum::Superpositions Perl module - where variables have been spooky since before it was cool.
