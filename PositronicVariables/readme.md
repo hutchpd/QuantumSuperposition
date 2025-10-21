@@ -111,6 +111,8 @@ The final value (of the not empty list) is the one that successfully stabilized 
 This is not a program that calculates Pascal's Triangle. This is a program that remembers the future row of Pascal's Triangle and tries to convince the past to believe it.
 
 ```csharp
+using PositronicVariables.Attributes;
+using PositronicVariables.Variables;
 
 internal static class Program
 {
@@ -131,7 +133,8 @@ internal static class Program
 
         // “Give me the version of this variable that finally stopped fighting itself. I'll use that.”
         // The value hasn't been computed yet - it's being repeatedly derived in time.
-        ComparableList currentRowWrapper = row.ToValues().Last();
+        // Choose the longest known row so we always advance.
+        ComparableList currentRowWrapper = row.ToValues().OrderBy(v => v.Items.Count).Last();
         List<int> currentRow = currentRowWrapper.Items;
 
         if (currentRow.Count < TargetRowLength)
@@ -141,8 +144,9 @@ internal static class Program
             List<int> nextRow = ComputeNextRow(currentRow);
             var nextComparable = new ComparableList(nextRow.ToArray());
 
-            // Assign the next row.
-            row.State = nextComparable;
+            // Narrow (Required) instead of plain Assign so reverse half-cycles
+            // append slices and the union grows across iterations.
+            row.Required = PositronicVariable<ComparableList>.Project(row, _ => nextComparable);
             // (No explicit printing or looping here-the simulation will re-invoke Main() automatically.)
         }
         else
@@ -221,6 +225,7 @@ public class ComparableList : IComparable<ComparableList>
         return string.Join(" ", Items);
     }
 }
+
 
 ```
 Pascal's Triangle via convergence is just the beginning.

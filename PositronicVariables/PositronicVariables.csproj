@@ -29,7 +29,8 @@
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
 	<None Include="icon.png" Pack="true" PackagePath="" />
 	<None Include="readme.md" Pack="true" PackagePath="" />
-	<None Include="LICENSE" Pack="true" PackagePath="" />  
+	<None Include="LICENSE" Pack="true" PackagePath="" />
+	<None Include="CHANGELOG.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
 	<ItemGroup>
