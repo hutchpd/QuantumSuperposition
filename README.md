@@ -10,6 +10,10 @@ This repository contains two interlinked .NET libraries for working with uncerta
 
 ---
 
+## Explainer video
+
+A 10 minute walk through of the history and a brief walkthrough of some examples [youtube](https://www.youtube.com/watch?v=bQ9JxqP5kBQ)
+
 ##  Included Libraries
 
 ###  QuantumSuperposition
