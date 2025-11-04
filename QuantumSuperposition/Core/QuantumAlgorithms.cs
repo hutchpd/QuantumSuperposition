@@ -8,7 +8,7 @@ namespace QuantumSuperposition.Core
     {
         /// <summary>
         /// Applies the Quantum Fourier Transform (QFT) to the specified qubits.
-        /// This algorithm rotates the state space to reveal periodicity —
+        /// This algorithm rotates the state space to reveal periodicity -
         /// basically, it's a fancy way to turn time into frequency like a quantum DJ.
         /// </summary>
         public static void QuantumFourierTransform(QuantumSystem system, int[] qubits)
@@ -56,7 +56,7 @@ namespace QuantumSuperposition.Core
         }
 
         /// <summary>
-        /// Constructs and applies the oracle gate —
+        /// Constructs and applies the oracle gate -
         /// it flips the sign (adds a -1 phase) of any state deemed "special" by the oracle function.
         /// This is like tagging certain quantum states as cursed, so Grover can sniff them out.
         /// </summary>
@@ -80,7 +80,7 @@ namespace QuantumSuperposition.Core
         }
 
         /// <summary>
-        /// Applies the Grover diffusion operator — a reflection over the mean amplitude.
+        /// Applies the Grover diffusion operator - a reflection over the mean amplitude.
         /// Think of it as quantum gaslighting: it makes the marked states stand out
         /// by subtly making everything else doubt its own existence.
         /// </summary>
