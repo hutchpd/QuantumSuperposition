@@ -1,135 +1,233 @@
+Here’s a proposed new README that keeps the humour but makes the “look how much this thing actually does” story a lot clearer.
+
+Feel free to copy–paste and tweak, but I’ve written it so you can more or less drop it in as-is.
+
+---
+
 ## QuantumSuperposition (.NET Library)
+
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 ![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
 
-.NET’s most confident way to say "maybe"
+> .NET’s most confident way to say “maybe”
 
-QuantumSuperposition is a .NET library that brings a dash of quantum weirdness to your C# code. Inspired by the bizarre beauty of quantum mechanics, it lets your variables exist in multiple states simultaneously — just like Schrödinger’s cat, but with less moral ambiguity.
+QuantumSuperposition is a .NET library that lets your variables live in several states at once, then collapse them when you finally make up your mind. Think Schrödinger’s cat, but with fewer ethical questions and more LINQ. 
 
-### Why Use QuantumSuperposition?
-In quantum mechanics, superposition means a system can be in many states at once — until observed. In your code, this means:
+It has two main personalities:
 
-- Want to check if a number is divisible by any value in a set?
-- Need to assert that all values match a condition, without a loop forest?
-- Want to write math expressions that magically apply to all possible inputs at once?
+1. **Generic superposition engine** for `QuBit<T>` and `Eigenstates<T>`
+   Use it to run arithmetic, comparisons and LINQ-style queries over many possible values at once, with complex weights, sampling, entanglement and non-observational operations. 
 
-Congratulations. You want quantum variables. And now you can have them, without building a particle accelerator in your garage.
+2. **Physics flavoured quantum system** with actual gates and algorithms
+   Use `QuantumSystem`, `QuantumGate`, and `QuantumAlgorithms` to build circuits with Hadamards, CNOTs, QFT and Grover’s search. You get gate queues, ASCII circuit visualisation, partial observation and real multi-qubit tensor products. 
 
-## Features
+---
 
-- **Superposition Modes**: Conjunctive (All) and Disjunctive (Any) states.
-- **Arithmetic Ops**: Use `+`, `-`, `*`, `/`, `%` on entire sets of possibilities.
-- **Smart Comparisons**: Logical ops like `<`, `>=`, `==` work across superpositions and scalars.
-- **Eigenstates**: Maintain original inputs even after transformation (yes, you’re basically a quantum historian).
-- **State Filtering**: Find what you want without lifting a `foreach`.
-- **Weighted Superpositions**: Attach complex amplitudes to your chaos.
-- **Sampling**: Collapse deterministically, probabilistically, or mock it for tests and demo wizardry.
-- **Entanglement Support**: Because what’s better than one indecisive variable? A whole clique of them, sharing their fate.
-- **Basis Transforms**: Observe in the Hadamard basis (or invent your own) because reality is optional.
-- **Collapse Replay / Versioning**: Deterministically re-watch the same quantum accident over and over like it's a sitcom.
+## TL;DR: What can it actually do?
 
-## Core Quantum Behavior
+### 1. Complex amplitudes and real tensor products
 
-Because behaving normally is for classical variables.
-
-- **Superposition**: Your variable is now every possible version of itself — until someone looks. Schrödinger vibes fully engaged.
-- **Probability Amplitudes**: Assign complex numbers to your indecision. It's not overengineering, it's *science*.
-- **Amplitude Normalization**: Keeps your chaos unit-balanced. Otherwise the math police show up.
-- **Observation & Collapse**: You peek, it breaks. Just like your dev environment.
-- **Multi-Basis Sampling**: Observe in Hadamard, or invent your own bizarre dimension to peek from.
-- **Collapse Effects**: Entangled variables react when one is observed. Think of it like drama between emotionally attached functions.
-- **Collapse Replay**: Deterministically relive your mistakes using a fixed seed. Because debugging *is* time travel.
-- **Collapse Mocking**: Force a specific outcome, for testing, demonstrations, or satisfying your inner control freak.
-
-## Entanglement Mechanics
-
-The weird just got weirder. QuBits can now share destiny in style:
-
-- **Entangled Variable Linking**: Tie variables together like they're in a codependent relationship.
-- **Collapse Propagation**: Observing one causes collapse across the entire group — because misery loves company.
-- **Tensor Product Expansion**: Generate all state combos across multiple QuBits, like a quantum group project.
-- **Entangled Group Mutation Propagation**: Mutate one, mutate them all. Drama ensues.
-- **Entanglement Group Versioning**: Track generational history of entangled graphs, because even quantum relationships have baggage.
-- **Entanglement Guardrails**: Blocks self-links, paradoxes, and other crimes against nature.
-- **Multi-Party Collapse Agreement**: Observers agree on a shared reality. For once.
-- **Entanglement Locking / Freezing**: Prevent changes during critical operations — useful when the multiverse needs a time-out.
-- **Entanglement Group Tagging / Naming**: Name your entanglement groups like pets. Examples: `BellPair_A`, `QuantumDrama42`.
-- **Partial Collapse Staging**: Observe one qubit now, another later. Suspense!
-- **Entanglement Graph Diagnostics**: Inspect group sizes, circular references, and the chaos % — an actual metric we now regret naming.
-
-
-## QuBit<T> Enhancements
-
-- **Weighted Superpositions**: QuBits can now carry probabilistic weight! Each state can be weighted, and arithmetic magically respects those weights.
-- **Sampling Methods**:
-  - `.SampleWeighted()` gives you a random outcome based on weight distribution (great for simulations, or indecision).
-  - `.MostProbable()` returns the state with the highest chance of happening — much like your coffee spilling on your keyboard.
-- **Equality & Hashing** are now *weight-aware*, so you can compare QuBits without triggering an existential crisis.
-- **Implicit Cast to T**: Want to collapse a QuBit into a value without typing `.SampleWeighted()` like a peasant? Now you can just assign it and let the compiler do the work. ✨
-- **`.WithWeights(...)` Functional Constructor**: Apply new weights to your existing multiverse without rewriting the whole thing. Just like therapy, but for code.
-
-## Eigenstates<T> Gets Fancy Too
-
-- **Weighted Keys**: Same idea, but applied to key-value preservation. Now you can weight how much you believe each key deserves to exist.
-- **TopNByWeight(n)**: Because sometimes you just want the best few parallel universes.
-- **FilterByWeight(...)**: Drop the low-probability riff-raff.
-- **CollapseWeighted() / SampleWeighted()**: Similar to QuBit, these collapse to the most likely or randomly chosen key.
-- **Safe Arithmetic Expansion**: Instead of producing terrifying M×N state space blowups, we now **combine results** with merged weights. No infinite loops. No RAM meltdowns. You're welcome.
-- **Weight-aware equality and GetHashCode()** so that equality comparisons no longer pretend the world is flat.
-
-## Probabilistic & Functional Sorcery
-
-Because collapsing reality should be optional. These features let you get freaky with logic and structure — *without* observation causing your fragile multiverse to unravel.
-
-- **`p_op` – Conditional Without Collapse**: Choose branches based on conditions without collapsing the state. Schrödinger's choice logic.
-- **`p_func` – Functional State Transforms**: Map, filter, flatten — all without collapsing. LINQ for the superposed soul.
-- **Non-Observational Arithmetic**: Enable operations like `+`, `*`, etc., without collapsing your QuBit. You get the math, *and* you keep the quantum soup. Have your waveform and eat it too.
-- **Weighted Function Composition**: Let probabilistic weights affect how branching logic plays out. Now your uncertainty has influence.
-- **Commutative Optimization**: Cache results of pure, commutative operations. Why recompute 2+3 when 3+2 already suffered that fate?
-- **Monad-Compatible Superpositions**: LINQ-style `.Select()`, `.Where()`, `.SelectMany()` with lazy evaluation — the cool kind of lazy that optimizes performance, not just vibes.
-
-## Quantum Logic Gates
-
-- **`q_logic` - State Transforms** lets you apply gate-like transformations to states, like a quantum wizard casting spells on your variables.
-- **Built-in Gate Examples: Root-NOT, Hadamard, etc.** - Because who doesn't want to play with quantum gates?
-- **Gate Set Registration: Plug in custom gates easily** - Like adding a new spell to your grimoire.
-- **Gate Inversion: Auto-generate or define inverse gates** - Because sometimes you need to undo your quantum shenanigans.
-- **Gate Timing/Ordering Strategy: Queue or sequence logic gate application** - Like a quantum conductor orchestrating your variables.
-- **Quantum Gate Composition API: Allow X.Then(H).Then(CNOT) patterns** - Because chaining is the new black.
-- **Parametric Gates: Define gates like RX(angle: π/4) for QAOA, QFT, etc.** - Because who doesn't love a good parameterized gate?
-- **Gate Scheduling Visualizer: Generate ASCII/graph diagrams from gate sequences** - Because sometimes you need to see your quantum chaos in a pretty format.
-
-## Quantum Algorithms
-
-- **Built-in Quantum Algorithms**: Run real QFT and Grover’s Search logic on `QuantumSystem` like a true quantum dev — no PhD required.
-- **Quantum Fourier Transform (QFT)**: A core building block in many quantum algorithms. It reveals periodicity in a quantum state, turning time-based signals into frequency — like a quantum DJ mixing up the basis.
-- **Grover’s Search Algorithm**: A quantum algorithm for searching unsorted databases with quadratic speedup. It’s like having a quantum search engine that actually works.
-
-Each algorithm internally schedules gate operations, which you can inspect, visualize, or export using the gate queue.
-
-### Enabling Non-Observational Arithmetic (if you're into that kind of thing)
+* `QuBit<T>` supports **complex amplitudes** with weight-aware equality, sampling and arithmetic.
+* `QuantumMathUtility.TensorProduct` builds full multi-qubit joint states from `QuBit<int>` basis states.
+* `PhysicsQubit` is a friendly `QuBit<int>` for computational basis {0, 1} with Bloch sphere constructors and `Zero` / `One` shortcuts. 
 
 ```csharp
-QuantumConfig.EnableNonObservationalArithmetic = true;
+using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Utilities;
+
+// Two 1-qubit states in the computational basis
+var q1 = new QuBit<int>(new[] { 0, 1 });
+var q2 = new QuBit<int>(new[] { 0, 1 });
+
+// Full 2-qubit joint state with complex amplitudes
+var joint = QuantumMathUtility<int>.TensorProduct(q1, q2);
 ```
 
-This allows arithmetic to operate without forcing a collapse. We don't judge. It's your multiverse (as a default this is on, but you can turn it off if you want to be a purist).
+You get an actual tensor product over basis indices, not hand-wavy “we multiplied some lists and hoped”.
 
-## Getting Started
+---
 
-### Installation  
-Via .NET CLI:
+### 2. QuantumSystem: multi-qubit state, partial observation and scheduling
+
+`QuantumSystem` is the “physics core” that tracks qubits by index, builds the joint state from tensor products and lets you peek at just part of the universe.
+
+* Register qubits and build the full state with `SetFromTensorProduct(...)`.
+* Partially observe selected qubits with `PartialObserve`, while leaving the rest in suspense.
+* Schedule gates on specific qubit indices and process them as a queue.
+
+```csharp
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Core;
+
+// Create a system with three qubits
+var system = new QuantumSystem();
+
+// Build joint state from individual qubits
+system.SetFromTensorProduct(autoNormalise: true,
+    new QuBit<int>(system, new[] { 0 }),
+    new QuBit<int>(system, new[] { 1 }),
+    new QuBit<int>(system, new[] { 2 }));
+
+// Peek only at qubits 0 and 2
+var outcome = system.PartialObserve(new[] { 0, 2 });
 ```
+
+---
+
+### 3. Entanglement groups, collapse propagation and diagnostics
+
+This is not just “make EPR pair, call Collapse” and go home.
+
+QuantumSuperposition gives you a full **entanglement graph**:
+
+* Entanglement groups with labels and versioning.
+* Collapse propagation across a group when any member is observed.
+* Partial collapse staging: observe some qubits now, others later.
+* Locking / freezing: “Schrödinger’s do not disturb” for critical sections.
+* Diagnostics: print entanglement stats and inspect graph structure. 
+
+```csharp
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Entanglement;
+using QuantumSuperposition.QuantumSoup;
+using System.Numerics;
+
+var system = new QuantumSystem();
+var qA = new QuBit<int>(system, new[] { 0 });
+var qB = new QuBit<int>(system, new[] { 1 });
+
+qA.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
+qB.WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } }, autoNormalise: true);
+
+system.Entangle("BellPair_A", qA, qB);
+system.SetFromTensorProduct(true, qA, qB);
+
+// Observe A; B collapses in solidarity
+var observed = qA.Observe();
+```
+
+Compared to simpler libraries that give you one EPR pair and a prayer, this is a proper entanglement manager with tagging, locking, multi-party agreement and guardrails against nonsense like cross-system linking. 
+
+---
+
+### 4. Gate abstraction and full circuit scheduling
+
+QuantumSuperposition comes with a **gate model**:
+
+* `QuantumGate` for a single matrix.
+* `QuantumGates` for built-ins: Root-NOT, Hadamard, Pauli-X, T, T†, parametric RX and more.
+* `QuantumGateTools` for matrix inversion, comparison and helpers. 
+
+You can compose, invert and schedule gates on a `QuantumSystem`, then visualise the gate queue as ASCII circuit diagrams.
+
+```csharp
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Core;
+
+var system = new QuantumSystem();
+
+// Queue some gates
+system.ApplySingleQubitGate(0, QuantumGates.Hadamard, "H");
+system.ApplyTwoQubitGate(0, 1, QuantumGates.CNOT.Matrix, "CNOT");
+
+// Visualise circuit before processing
+var schedule = system.VisualizeGateSchedule(totalQubits: 2);
+Console.WriteLine(schedule);
+
+// Process queue
+system.ProcessGateQueue();
+```
+
+Composition and inversion:
+
+```csharp
+var rootNot = new QuantumGate(QuantumGates.RootNot);
+var doubleRoot = rootNot.Then(rootNot);     // Should become Pauli-X
+var pauliX = new QuantumGate(QuantumGates.PauliX);
+
+var invertedT = QuantumGateTools.InvertGate(QuantumGates.T);
+var tDagger = new QuantumGate(QuantumGates.T_Dagger);
+```
+
+---
+
+### 5. Quantum algorithms: QFT and Grover’s search
+
+On top of gates and `QuantumSystem` you get real quantum algorithms:
+
+* **Quantum Fourier Transform (QFT)** on any list of qubits.
+* **Grover’s Search** with plug-in oracle, multi-controlled Z and diffusion operator. 
+
+```csharp
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Core;
+
+// QFT on three qubits
+var system = new QuantumSystem();
+int[] qftQubits = { 0, 1, 2 };
+QuantumAlgorithms.QuantumFourierTransform(system, qftQubits);
+
+// Grover search for a marked item on two qubits
+int[] groverQubits = { 0, 1 };
+Func<int[], bool> oracle = bits => bits[0] == 1 && bits[1] == 0;
+QuantumAlgorithms.GroverSearch(system, groverQubits, oracle);
+```
+
+These algorithms are built in terms of the same gate primitives you can use yourself, so you can inspect, tweak and extend the circuits rather than treating them as mysterious black boxes. 
+
+---
+
+### 6. Generic superposition layer: QuBit<T> and Eigenstates<T>
+
+All of this sits on top of a **generic superposition engine** that works for any `T`, not just physics bits. 
+
+You get:
+
+* `QuBit<T>`: a weighted collection of possible values with complex amplitudes.
+* `Eigenstates<T>`: preserve original keys while you transform the derived values.
+* LINQ-style operations like `.Select`, `.Where`, `.SelectMany`.
+* `p_op` and `p_func` for conditional and functional transforms without collapse.
+* Weighted sampling (`SampleWeighted`, `MostProbable`) and multi-basis observation.
+* Collapse replay, mockable collapse and seeded randomness for deterministic tests. 
+
+Basic example:
+
+```csharp
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Core;
+
+var qubit = new QuBit<int>(new[] { 1, 2, 3 });
+var doubled = qubit.Select(x => x * 2);
+
+// Sample according to current weights
+var sample = doubled.SampleWeighted();
+```
+
+More interesting: ask the multiverse which numbers are prime, or which values evenly divide a target, without writing your own loops. 
+
+---
+
+## Quick start
+
+### Installation
+
+Using .NET CLI:
+
+```bash
 dotnet add package QuantumSuperposition
 ```
-Or with NuGet Package Manager Console:
-```
+
+Using NuGet Package Manager Console:
+
+```powershell
 Install-Package QuantumSuperposition
 ```
 
-### Required Namespaces
+### Namespaces
 
-For most usage, you'll want:
+For generic superpositions:
 
 ```csharp
 using QuantumSuperposition.Core;
@@ -137,47 +235,70 @@ using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
 ```
 
-## Documentation
+For physics-style gates and systems:
 
-- [Getting Started](#getting-started)
-- [Usage Examples](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/UsageExamples.md)
-- [Entanglement & Collapse Propagation](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Entanglement.md)
-- [Functional & LINQ Operations](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/FunctionalOps.md)
-- [Working with Complex Numbers](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/ComplexSupport.md)
-- [Quantum Algorithms](https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/QuantumAlgorithms.md)
+```csharp
+using System.Numerics;
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;
+```
 
-## Performance Note
-You *can* still go full Cartesian if you want, but we don’t do it for you because we respect your CPU. If you're feeling brave, build `QuBit<(A,B)>` yourself and join the fun in exponential land.
+---
 
-## Advanced Concepts
+## Documentation map (so you know where the good stuff is)
 
-### Superposition Modes
-- Disjunctive (Any) — "Any of these values might work."  
-- Conjunctive (All) — "They all better pass, or we riot."
+Think of the main README as the trailer. The full movie lives in the docs:
 
-### Arithmetic & Logic That Feels Like Sorcery
-Math just works across your whole quantum cloud.  
-No loops. No boilerplate. Just operations that make sense across many states.
+## Documentation Map
 
-## Contributing  
-Bug spotted in the matrix?  
-Submit an issue. Write a pull request. We’d love your brain on this.
+A tour of the full library, from functional superpositions to full quantum circuits:
 
-## License  
-This library is released under the Unlicense. That means it's free, unshackled, and yours to tinker with.
+* **Functional Operations**
+  High-level LINQ-style transforms, `p_op`, `p_func`, non-observational arithmetic, and functional pipelines.
+   `docs/FunctionalOps.md`
 
-## Contact  
-Questions, fan mail, obscure quantum jokes?  
-support@findonsoftware.com
+* **Entanglement & Collapse**
+  Entanglement groups, collapse propagation, partial collapse, locking, and diagnostic tooling.
+   `docs/Entanglement.md`
 
-## Acknowledgements  
-Inspired by Damian Conway’s Quantum::Superpositions Perl module — where variables have been spooky since before it was cool.
+* **Complex Number Support**
+  Working with complex amplitudes, projections, probability magnitudes, and complex superpositions.
+   `docs/ComplexSupport.md`
 
-## QuantumSuperposition Logo
-                 ~   ~     ~     ~   ~    
-             ~    __Q__    ___     ~
-            ~    /  |  \  / _ \   ~    ~
-    ~       ~    |  |  | | |_| |       ~
-         ~       \__|__/  \___/    ~
-                QuantumSuperposition
-           Collapse your state. Collapse your doubts.
+* **Logic Gates & QuantumSystem**
+  Built-in gates (H, X, T, Root-NOT, RX…), gate composition/inversion, scheduling, and ASCII circuit diagrams.
+   `docs/LogicGates.md`
+
+* **Quantum Algorithms**
+  Quantum Fourier Transform (QFT), Grover’s Search, diffusion operators, controlled-phase tools, and algorithm scaffolding.
+   `docs/QuantumAlgorithms.md`
+
+* **PhysicsQubit - Bloch Sphere & Basis Shortcuts**
+  A specialised computational-basis qubit with amplitude constructors, Bloch-sphere initialisation, and `Zero` / `One` helpers.
+   `docs/PhysicsQubit.md`
+
+---
+
+## Contributing
+
+Bug spotted in the multiverse, or a new gate you want to summon?
+
+* Open an issue
+* Send a pull request
+* Bring your own obscure quantum joke
+
+---
+
+## License
+
+Released under the **Unlicense**: do whatever you like with it, short of blaming us if you accidentally open a portal.
+
+---
+
+## Contact
+
+Questions, fan mail, or a probability amplitude shaped like a duck:
+
+`support@findonsoftware.com`
+
+---
