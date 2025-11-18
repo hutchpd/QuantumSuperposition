@@ -209,6 +209,47 @@ More interesting: ask the multiverse which numbers are prime, or which values ev
 
 ---
 
+## QuantumRegister
+
+A compact, high-level abstraction for treating one or more qubit indices as a coherent register inside a `QuantumSystem`. It provides a convenient value view over part of the global wavefunction.
+
+QuantumRegister is designed for scenarios where you want to work with qubit groups as meaningful units, for example decoding integers, extracting structured values, or collapsing only a subset of the system.
+
+Key features include:
+
+* Construction from `QuBit<int>` or `PhysicsQubit` instances
+* Construction from integer values, creating a single basis-state register
+* Construction from explicit complex amplitude vectors
+* Partial collapse of only the qubits in the register
+* Integer decoding over arbitrary bit ranges
+* Safe interaction with `QuantumSystem` using sorted index sets and collapse locking
+
+```csharp
+// From qubits already in the system
+var system = new QuantumSystem();
+var q0 = new QuBit<int>(system, new[] { 0 });
+var q1 = new QuBit<int>(system, new[] { 1 });
+var reg = new QuantumRegister(q0, q1);
+
+// From a basis integer
+var encoded = QuantumRegister.FromInt(value: 3, bits: 2, system);
+
+// From explicit amplitudes
+var amps = new[] { Complex.One / Math.Sqrt(2), Complex.One / Math.Sqrt(2) };
+var regAmp = QuantumRegister.FromAmplitudes(amps, system);
+
+// Collapse only this register
+int[] measured = reg.Collapse();
+
+// Decode values
+int full = reg.GetValue();
+int low3 = reg.GetValue(offset: 0, length: 3);
+```
+
+For full documentation see `docs/QuantumRegister.md`. 
+
+---
+
 ## Quick start
 
 ### Installation
@@ -276,6 +317,10 @@ A tour of the full library, from functional superpositions to full quantum circu
 * **PhysicsQubit - Bloch Sphere & Basis Shortcuts**
   A specialised computational-basis qubit with amplitude constructors, Bloch-sphere initialisation, and `Zero` / `One` helpers.
    `docs/PhysicsQubit.md`
+
+* **QuantumRegister - Coherent Qubit Groups**
+  A compact, high-level abstraction for treating one or more qubit indices as a coherent register inside a `QuantumSystem`.
+   `docs/QuantumRegister.md`
 
 ---
 

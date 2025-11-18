@@ -719,5 +719,10 @@ namespace QuantumSuperposition.Systems
         /// Be careful: direct modifications can break normalisation.
         /// </summary>
         public IReadOnlyDictionary<int[], Complex> Amplitudes => _amplitudes;
+
+        /// <summary>
+        /// Exposes registered references (internal use for QuantumRegister).
+        /// </summary>
+        internal IEnumerable<IQuantumReference> GetRegisteredReferences() => _registered;
     }
 }

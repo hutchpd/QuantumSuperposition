@@ -72,7 +72,7 @@ namespace QuantumSuperposition.Core
                 double factor = oracle(basis) ? -1.0 : 1.0;
                 for (int j = 0; j < dim; j++)
                 {
-                    oracleMatrix[i, j] = (i == j) ? factor : 0;
+                    oracleMatrix[i, j] = (i == j) ? factor : Complex.Zero;
                 }
             }
             // Apply the constructed oracle unitary to the target qubits.
@@ -121,13 +121,8 @@ namespace QuantumSuperposition.Core
             }
         }
 
-        #region Helper Methods
-
-        /// <summary>
-        /// Converts an integer into its binary representation as an array,
-        /// with the most significant bit first. Useful for peeking behind the matrix.
-        /// </summary>
-        private static int[] IndexToBits(int index, int length)
+        // Public helpers used externally (QuantumRegister, tests, docs)
+        public static int[] IndexToBits(int index, int length)
         {
             int[] bits = new int[length];
             for (int i = length - 1; i >= 0; i--)
@@ -138,47 +133,26 @@ namespace QuantumSuperposition.Core
             return bits;
         }
 
-        /// <summary>
-        /// Reverses what IndexToBits did. Translates a binary array back into
-        /// a good old-fashioned base-10 integer, just like grandma used to use.
-        /// </summary>
-        /// <param name="bits">An array of bits where the first element is the MSB.</param>
-        /// <returns>The integer value represented by the bits.</returns>
-        private static int BitsToIndex(int[] bits)
+        public static int BitsToIndex(int[] bits)
         {
-            int index = 0;
+            int value = 0;
             for (int i = 0; i < bits.Length; i++)
             {
-                index = (index << 1) | bits[i];
+                value = (value << 1) | bits[i];
             }
-            return index;
+            return value;
         }
 
-        /// <summary>
-        /// Given a full system index, extracts the value of a subset of qubits as an integer.
-        /// Handy when you want to zoom in on just a few bits of drama in a massive entangled soap opera.
-        /// </summary>
-        /// <param name="fullIndex">The integer representing the full quantum state.</param>
-        /// <param name="targetQubits">
-        /// An array of qubit positions to extract. These should correspond to the positions in the full state 
-        /// (with 0 representing the most significant qubit).
-        /// </param>
-        /// <param name="totalQubits">The total number of qubits in the full state representation.</param>
-        /// <returns>The integer value of the extracted substate.</returns>
-        private static int ExtractSubstate(int fullIndex, int[] targetQubits, int totalQubits)
+        public static int ExtractSubstate(int fullIndex, int[] targetQubits, int totalQubits)
         {
-            int subIndex = 0;
+            int sub = 0;
             foreach (int qubit in targetQubits)
             {
-                // Extract the bit at the given qubit position.
-                // Assumes that qubit 0 corresponds to the MSB in the full state.
                 int bit = (fullIndex >> (totalQubits - 1 - qubit)) & 1;
-                subIndex = (subIndex << 1) | bit;
+                sub = (sub << 1) | bit;
             }
-            return subIndex;
+            return sub;
         }
-
-        #endregion
     }
 
 }

@@ -9,6 +9,7 @@ namespace QuantumSuperposition.QuantumSoup
 {
     public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     {
+        private bool _systemCollapseAttempted; // recursion guard for system collapse
         private new readonly Func<T, bool> _valueValidator;
 
         private readonly int[] _qubitIndices;
@@ -1414,81 +1415,56 @@ namespace QuantumSuperposition.QuantumSoup
 
         public void NotifyWavefunctionCollapsed(Guid collapseId)
         {
-            // If already collapsed, ensure we update the system-observed value if missing.
-            if (_isActuallyCollapsed)
-            {
-                if (_systemObservedValue == null && System != null)
-                {
-                    int[] fullObserved;
-                    try
-                    {
-                        fullObserved = System.GetCollapsedState();
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        int[] unionIndices = GetUnionOfGroupIndices();
-                        fullObserved = System.ObserveGlobal(unionIndices, Random.Shared);
-                    }
+            _collapseHistoryId = collapseId;
 
-                    if (_qubitIndices.Length == 1)
-                    {
-                        int value = fullObserved[_qubitIndices[0]];
-                        object val = typeof(T) == typeof(bool) ? value != 0 : value;
-                        _systemObservedValue = val;
-                        _collapsedValue = (T)val;
-                    }
-                    else
-                    {
-                        int[] values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
-                        object val = typeof(T) == typeof(bool[]) ? values.Select(v => v != 0).ToArray() : values;
-                        _systemObservedValue = val;
-                        if (val is T t)
-                        {
-                            _collapsedValue = t;
-                        }
-                    }
+            if (System == null)
+            {
+                return; 
+            }
+
+            if (System.Amplitudes.Count != 1 && !_systemCollapseAttempted)
+            {
+                _systemCollapseAttempted = true;
+                try
+                {
+                    int[] projection = System.ObserveGlobal(_qubitIndices, Random.Shared);
+                    return;
                 }
-                _collapseHistoryId = collapseId;
+                catch
+                {
+                    // Ignore and proceed!
+                }
+            }
+
+            if (System.Amplitudes.Count != 1)
+            {
+                _isCollapsedFromSystem = true;
+                _isActuallyCollapsed = true;
+                _eType = QuantumStateType.CollapsedResult;
                 return;
             }
 
-            _isCollapsedFromSystem = true;
-            _collapseHistoryId = collapseId;
-
-            if (System != null)
+            int[] fullObserved = System.GetCollapsedState();
+            if (_qubitIndices.Length == 1)
             {
-                int[] fullObserved;
-                try
-                {
-                    fullObserved = System.GetCollapsedState();
-                }
-                catch (InvalidOperationException)
-                {
-                    int[] unionIndices = GetUnionOfGroupIndices();
-                    fullObserved = System.ObserveGlobal(unionIndices, Random.Shared);
-                }
-
-                if (_qubitIndices.Length == 1)
-                {
-                    int value = fullObserved[_qubitIndices[0]];
-                    object val = typeof(T) == typeof(bool) ? value != 0 : value;
-                    _systemObservedValue = val;
-                    _collapsedValue = (T)val;
-                }
-                else
-                {
-                    int[] values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
-                    object val = typeof(T) == typeof(bool[]) ? values.Select(v => v != 0).ToArray() : values;
-                    _systemObservedValue = val;
-                    if (val is T t)
-                    {
-                        _collapsedValue = t;
-                    }
-                }
-
-                _isActuallyCollapsed = true;
-                _eType = QuantumStateType.CollapsedResult;
+                int value = fullObserved[_qubitIndices[0]];
+                object val = typeof(T) == typeof(bool) ? value != 0 : value;
+                _systemObservedValue = val;
+                _collapsedValue = (T)val;
             }
+            else
+            {
+                int[] values = _qubitIndices.Select(i => fullObserved[i]).ToArray();
+                object val = typeof(T) == typeof(bool[]) ? values.Select(v => v != 0).ToArray() : values;
+                _systemObservedValue = val;
+                if (val is T t)
+                {
+                    _collapsedValue = t;
+                }
+            }
+            _isCollapsedFromSystem = true;
+            _isActuallyCollapsed = true;
+            _eType = QuantumStateType.CollapsedResult;
         }
 
 
