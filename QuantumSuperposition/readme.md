@@ -330,6 +330,10 @@ A tour of the full library, from functional superpositions to full quantum circu
   Extension methods for applying gates directly on `QuantumRegister` instances.
    `docs/GateRegisterSugar.md`
 
+* **Gate Catalogue Extensions**
+  New gates and factories exposed via `QuantumGates` for parity with common algorithm needs.
+   `docs/GateCatalogue.md`
+
 ---
 
 ## Contributing
