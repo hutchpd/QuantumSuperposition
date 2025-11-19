@@ -11,7 +11,7 @@ namespace QuantumSuperposition.Core
     /// Represents a contiguous (or disjoint) logical group of qubits inside a QuantumSystem.
     /// Provides construction from qubits, integer values, or explicit amplitude vectors.
     /// </summary>
-    public readonly struct QuantumRegister
+    public readonly struct QuantumRegister : IEquatable<QuantumRegister>
     {
         public QuantumSystem System { get; }
         public int[] QubitIndices { get; }
@@ -172,6 +172,28 @@ namespace QuantumSuperposition.Core
             return new QuantumRegister(system, Enumerable.Range(0, bits).ToArray());
         }
 
+        private static Complex[] BuildSubspaceVector(QuantumRegister reg)
+        {
+            var sys = reg.System ?? throw new InvalidOperationException("Register not bound to a QuantumSystem.");
+            int[] indices = reg.QubitIndices;
+            int n = indices.Length;
+            int dim = 1 << n;
+            Complex[] vec = new Complex[dim];
+            foreach (var kv in sys.Amplitudes)
+            {
+                int[] full = kv.Key;
+                Complex amp = kv.Value;
+                int code = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    int bit = full[indices[i]] & 1;
+                    code = (code << 1) | bit;
+                }
+                vec[code] += amp;
+            }
+            return vec;
+        }
+
         // ---------------- Canonical Named States -----------------
         /// <summary>
         /// Creates a 2-qubit EPR pair (Bell state) |00> + |11> over the given system.
@@ -279,6 +301,53 @@ namespace QuantumSuperposition.Core
             return new QuantumRegister(system, targets.ToArray());
         }
         // ----------------------------------------------------------
+
+        // ---------------- Equality & Approximate Equality ----------
+        /// <summary>
+        /// Compares this register with another by aggregating the underlying system amplitudes
+        /// over just the qubits in each register and checking elementwise closeness with tolerance.
+        /// </summary>
+        public bool AlmostEquals(QuantumRegister other, double tolerance = 1e-10)
+        {
+            // struct cannot be null; compare sizes
+            if (QubitIndices.Length != other.QubitIndices.Length) return false;
+            Complex[] v1 = BuildSubspaceVector(this);
+            Complex[] v2 = BuildSubspaceVector(other);
+            if (v1.Length != v2.Length) return false;
+            for (int i = 0; i < v1.Length; i++)
+            {
+                if (Complex.Abs(v1[i] - v2[i]) > tolerance)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Exact equality check using zero tolerance on subspace amplitudes.
+        /// </summary>
+        public bool Equals(QuantumRegister other)
+        {
+            return AlmostEquals(other, 0.0);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is QuantumRegister qr && Equals(qr);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + (System?.GetHashCode() ?? 0);
+                foreach (var i in QubitIndices) hash = hash * 23 + i.GetHashCode();
+                return hash;
+            }
+        }
+        // ------------------------------------------------------------
 
         private IEnumerable<IQuantumReference> GetQubitReferences()
         {

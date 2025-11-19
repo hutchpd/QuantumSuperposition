@@ -1032,6 +1032,25 @@ namespace QuantumSuperposition.QuantumSoup
             return true;
         }
 
+        public bool AlmostEquals(Eigenstates<T> other, double tolerance = 1e-10)
+        {
+            if (other is null) return false;
+            // Compare value sets
+            HashSet<T> keysA = [.. _qDict.Keys];
+            HashSet<T> keysB = [.. other._qDict.Keys];
+            if (!keysA.SetEquals(keysB)) return false;
+
+            // Compare probability masses for shared keys
+            foreach (T key in keysA)
+            {
+                double p1 = 0.0;
+                double p2 = 0.0;
+                if (_weights != null && _weights.TryGetValue(key, out Complex w1)) p1 = w1.Magnitude * w1.Magnitude; else p1 = 1.0;
+                if (other._weights != null && other._weights.TryGetValue(key, out Complex w2)) p2 = w2.Magnitude * w2.Magnitude; else p2 = 1.0;
+                if (Math.Abs(p1 - p2) > tolerance) return false;
+            }
+            return true;
+        }
 
     }
 

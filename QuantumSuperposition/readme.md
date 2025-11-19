@@ -334,6 +334,10 @@ A tour of the full library, from functional superpositions to full quantum circu
   New gates and factories exposed via `QuantumGates` for parity with common algorithm needs.
    `docs/GateCatalogue.md`
 
+* **Equality and AlmostEquals**
+  Weight-aware equality checks, amplitude tolerances, and complex number comparisons.
+   `docs/Equality.md`
+
 ---
 
 ## Contributing
