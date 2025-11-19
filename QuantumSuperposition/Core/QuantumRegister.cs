@@ -158,7 +158,6 @@ namespace QuantumSuperposition.Core
             int length = amplitudes.Length;
             if (length == 0 || (length & (length - 1)) != 0) throw new ArgumentException("Length must be power of two", nameof(amplitudes));
             int bits = (int)Math.Log2(length);
-            // Build full amplitude dictionary before registering qubits so SetAmplitudes result persists
             var dict = new Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer());
             for (int i = 0; i < length; i++)
             {
@@ -166,7 +165,6 @@ namespace QuantumSuperposition.Core
                 dict[bitsArr] = amplitudes[i];
             }
             system.SetAmplitudes(dict);
-            // Now create/register qubits so they receive collapse notification without triggering new collapse
             for (int i = 0; i < bits; i++)
             {
                 _ = new QuBit<int>(system, new[] { i });
@@ -174,9 +172,78 @@ namespace QuantumSuperposition.Core
             return new QuantumRegister(system, Enumerable.Range(0, bits).ToArray());
         }
 
+        // ---------------- Canonical Named States -----------------
+        /// <summary>
+        /// Creates a 2-qubit EPR pair (Bell state) |00> + |11> over the given system.
+        /// Returns a QuantumRegister spanning qubits [0,1] and links them via an entanglement group label "EPRPair_A".
+        /// </summary>
+        public static QuantumRegister EPRPair(QuantumSystem system)
+        {
+            if (system == null) throw new ArgumentNullException(nameof(system));
+            int n = 2;
+            double norm = 1.0 / Math.Sqrt(2.0);
+            var dict = new Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer())
+            {
+                { new[] { 0, 0 }, new Complex(norm, 0) },
+                { new[] { 1, 1 }, new Complex(norm, 0) }
+            };
+            system.SetAmplitudes(dict);
+            QuBit<int>[] qubits = new QuBit<int>[n];
+            for (int i = 0; i < n; i++) qubits[i] = new QuBit<int>(system, new[] { i });
+            _ = system.Entanglement.Link("EPRPair_A", qubits);
+            return new QuantumRegister(qubits);
+        }
+
+        /// <summary>
+        /// Creates an n-qubit W state: equal superposition of all basis states with Hamming weight 1.
+        /// |100...0> + |010...0> + ... + |0...001>, normalised.
+        /// Links qubits with entanglement label "WState_A".
+        /// </summary>
+        public static QuantumRegister WState(QuantumSystem system, int length = 3)
+        {
+            if (system == null) throw new ArgumentNullException(nameof(system));
+            if (length < 2) throw new ArgumentOutOfRangeException(nameof(length), "W state requires length >= 2");
+            double amp = 1.0 / Math.Sqrt(length);
+            var dict = new Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer());
+            for (int pos = 0; pos < length; pos++)
+            {
+                int[] bitsArr = new int[length];
+                bitsArr[pos] = 1;
+                dict[bitsArr] = new Complex(amp, 0);
+            }
+            system.SetAmplitudes(dict);
+            QuBit<int>[] qubits = new QuBit<int>[length];
+            for (int i = 0; i < length; i++) qubits[i] = new QuBit<int>(system, new[] { i });
+            _ = system.Entanglement.Link("WState_A", qubits);
+            return new QuantumRegister(qubits);
+        }
+
+        /// <summary>
+        /// Creates an n-qubit GHZ state: |00...0> + |11...1> normalised.
+        /// Links qubits with entanglement label "GHZState_A".
+        /// </summary>
+        public static QuantumRegister GHZState(QuantumSystem system, int length = 3)
+        {
+            if (system == null) throw new ArgumentNullException(nameof(system));
+            if (length < 2) throw new ArgumentOutOfRangeException(nameof(length), "GHZ state requires length >= 2");
+            double amp = 1.0 / Math.Sqrt(2.0);
+            int[] allZero = Enumerable.Repeat(0, length).ToArray();
+            int[] allOne = Enumerable.Repeat(1, length).ToArray();
+            var dict = new Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer())
+            {
+                { allZero, new Complex(amp, 0)},
+                { allOne, new Complex(amp, 0)}
+            };
+            system.SetAmplitudes(dict);
+            QuBit<int>[] qubits = new QuBit<int>[length];
+            for (int i = 0; i < length; i++) qubits[i] = new QuBit<int>(system, new[] { i });
+            _ = system.Entanglement.Link("GHZState_A", qubits);
+            return new QuantumRegister(qubits);
+        }
+        // ----------------------------------------------------------
+
         private IEnumerable<IQuantumReference> GetQubitReferences()
         {
-            // Internal helper: filter registered references whose indices intersect set
             var set = new HashSet<int>(QubitIndices);
             return System.GetRegisteredReferences().Where(r => r.GetQubitIndices().Any(set.Contains));
         }
