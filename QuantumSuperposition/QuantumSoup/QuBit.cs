@@ -86,7 +86,7 @@ namespace QuantumSuperposition.QuantumSoup
         }
 
         /// <summary>
-        /// Applies a quantum conditional — like an if-else, but across all timelines.
+        /// Applies a quantum conditional - like an if-else, but across all timelines.
         /// Each branch of the superposition is checked with a predicate.
         /// If the predicate is true, the <paramref name="ifTrue"/> function is applied to that branch;
         /// otherwise, <paramref name="ifFalse"/> is applied.
@@ -102,7 +102,7 @@ namespace QuantumSuperposition.QuantumSoup
         /// Think of this as the "yes, and..." timeline.
         /// </param>
         /// <param name="ifFalse">
-        /// Transformation for the other branches — the "meh, fine" timeline.
+        /// Transformation for the other branches - the "meh, fine" timeline.
         /// </param>
         /// <returns>
         /// A new QuBit that merges the transformed branches into one beautifully indecisive superposition.
@@ -147,7 +147,7 @@ namespace QuantumSuperposition.QuantumSoup
         }
 
         /// <summary>
-        /// Applies a transformation to every possible state in the qubit — like a map,
+        /// Applies a transformation to every possible state in the qubit - like a map,
         /// but across all realities at once.
         ///
         /// Each branch is run through the <paramref name="selector"/> function, producing
@@ -182,7 +182,7 @@ namespace QuantumSuperposition.QuantumSoup
             IQuantumOperators<TResult> newOps = QuantumOperatorsFactory.GetOperators<TResult>();
 
             // Create a new superposition in the new type space.
-            // Note: nothing actually happens until someone observes this — classic quantum laziness.
+            // Note: nothing actually happens until someone observes this - classic quantum laziness.
             return new QuBit<TResult>(mappedWeightedValues, newOps);
         }
 
@@ -231,7 +231,7 @@ namespace QuantumSuperposition.QuantumSoup
 
         /// <summary>
         /// Projects each quantum state into a new qubit, then combines the original and
-        /// resulting states into a final value using a result selector —
+        /// resulting states into a final value using a result selector -
         /// like a cosmic buddy-cop movie across entangled timelines.
         ///
         /// This is the monadic version of "yes, and…"
@@ -282,7 +282,7 @@ namespace QuantumSuperposition.QuantumSoup
         }
 
         /// <summary>
-        /// Filters the multiverse down to only those branches that satisfy your criteria —
+        /// Filters the multiverse down to only those branches that satisfy your criteria -
         /// a little quantum Marie Kondo moment.
         ///
         /// Any state that doesn’t spark joy (or pass the predicate) is quietly discarded into
@@ -1381,7 +1381,7 @@ namespace QuantumSuperposition.QuantumSoup
         }
 
         // A convenient way to slap some probabilities onto your states after the fact.
-        // Like putting sprinkles on a Schrödinger cupcake — you won't know how it tastes until you eat it, and then it's too late.
+        // Like putting sprinkles on a Schrödinger cupcake - you won't know how it tastes until you eat it, and then it's too late.
         /// </summary>
         public QuBit<T> WithWeightsNormalised(Dictionary<T, Complex> weights)
         {

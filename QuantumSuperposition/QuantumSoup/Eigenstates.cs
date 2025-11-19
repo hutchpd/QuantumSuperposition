@@ -483,7 +483,7 @@ namespace QuantumSuperposition.QuantumSoup
 
 
         /// <summary>
-        /// Checks if all weights are equal. If so, congratulations — your data achieved perfect balance, Thanos-style.
+        /// Checks if all weights are equal. If so, congratulations - your data achieved perfect balance, Thanos-style.
         /// </summary>
         /// <param name="dict"></param>
         /// <returns></returns>

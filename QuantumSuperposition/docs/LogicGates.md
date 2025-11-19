@@ -14,7 +14,7 @@ using QuantumSuperposition.Systems;
 ## Quantum Gate Composition
 Composing quantum gates applies them sequentially.
 
-### Example: Root-NOT Twice Equals Pauli-X
+### Example: Root NOT Twice Equals Pauli X
 ```csharp
 QuantumGate rootNot = new QuantumGate(QuantumGates.RootNot);
 QuantumGate composed = rootNot.Then(rootNot);
@@ -25,7 +25,7 @@ Assert.IsTrue(QuantumGateTools.AreMatricesEqual(composed.Matrix, pauliX.Matrix))
 ```
 
 ## Quantum Gate Inversion
-Quantum gates can be inverted; applying inversion twice returns the original gate.
+Quantum gates can be inverted. Applying inversion twice returns the original gate.
 
 ### Example: Hadamard Double Inversion
 ```csharp
@@ -58,7 +58,7 @@ Assert.IsTrue(QuantumGateTools.AreMatricesEqual(rxGate.Matrix, expectedMatrix));
 ## Chained Quantum Gate Operations
 Quantum gates can be chained in sequence for complex operations.
 
-### Example: Hadamard → RX → Root-NOT Chain
+### Example: Hadamard -> RX -> Root NOT Chain
 ```csharp
 QuantumGate hadamard = QuantumGates.Hadamard;
 QuantumGate rxGate = QuantumGates.RX(Math.PI / 2);
@@ -71,29 +71,29 @@ QuantumGate expectedChain = hadamard.Then(rxGate).Then(rootNot);
 Assert.IsTrue(QuantumGateTools.AreMatricesEqual(chainedGate.Matrix, expectedChain.Matrix));
 ```
 
-## Quantum Gate Queue Visualization
-Visualizing quantum gates scheduled on the system.
+## Quantum Gate Queue Visualisation
+Visualising quantum gates scheduled on the system.
 
-### Example: Visualizing Gate Schedule
+### Example: Visualising Gate Schedule
 ```csharp
 QuantumSystem system = new QuantumSystem();
 system.ApplySingleQubitGate(0, QuantumGates.Hadamard, "Hadamard");
 system.ApplyTwoQubitGate(0, 1, QuantumGates.CNOT.Matrix, "CNOT");
 
-// Visualization before processing
+// Visualisation before processing
 string schedule = system.VisualizeGateSchedule(totalQubits: 2);
 Assert.IsNotEmpty(schedule);
 
 // Process queue
 system.ProcessGateQueue();
 
-// Visualization after processing
+// Visualisation after processing
 string postSchedule = system.VisualizeGateSchedule(totalQubits: 2);
 Assert.IsTrue(postSchedule.Contains("no operations") || string.IsNullOrWhiteSpace(postSchedule));
 ```
 
-## Gate Inversion: T and T-Dagger Gates
-Inverting T gate yields T-dagger.
+## Gate Inversion: T and T Dagger Gates
+Inverting T gate yields T dagger.
 
 ### Example: T Gate Inversion
 ```csharp
@@ -101,12 +101,12 @@ QuantumGate tGate = new QuantumGate(QuantumGates.T);
 Complex[,] invertedT = QuantumGateTools.InvertGate(tGate.Matrix);
 QuantumGate tDagger = new QuantumGate(QuantumGates.T_Dagger);
 
-// Confirming T-Dagger inversion
+// Confirming T Dagger inversion
 Assert.IsTrue(QuantumGateTools.AreMatricesEqual(invertedT, tDagger.Matrix));
 ```
 
 ## Custom Quantum Gates
-Create and use custom-defined quantum gates.
+Create and use custom defined quantum gates.
 
 ### Example: Custom Phase Gate
 ```csharp
@@ -124,5 +124,5 @@ QuantumGate composedGate = customPhaseGate.Then(identityGate);
 Assert.IsTrue(QuantumGateTools.AreMatricesEqual(composedGate.Matrix, customPhaseGate.Matrix));
 ```
 
-These examples illustrate how to leverage the quantum gate functionalities provided by the QuantumSuperposition library effectively.
+These examples show how to leverage quantum gate functionality in QuantumSuperposition effectively.
 

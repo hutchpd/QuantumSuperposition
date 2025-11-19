@@ -2,7 +2,7 @@
 
 ## Required Namespaces
 
- Make sure to import the correct namespaces, for these examples we use.
+Make sure to import the correct namespaces for these examples.
 
 ```csharp
 using System.Numerics;
@@ -11,11 +11,11 @@ using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
 ```
 
-QuantumSuperposition supports complex numbers for advanced quantum operations. This section will guide you through the usage of complex numbers in the library.
+QuantumSuperposition supports complex numbers for advanced quantum operations. This section guides you through using complex numbers in the library.
 
 ### Basic Complex Number Operations
 
-You can perform basic arithmetic operations on complex numbers within a superposition. Here’s an example:
+You can perform basic arithmetic on complex numbers within a superposition. Here is an example:
 
 ```csharp
 var complex1 = new QuBit<Complex>(new Complex(1, 2));
@@ -34,7 +34,7 @@ Console.WriteLine($"Quotient: {quotient}");
 
 ### Complex Number Superpositions
 
-You can create superpositions of complex numbers and perform operations on them. Here’s an example:
+Create superpositions of complex numbers and operate on them:
 
 ```csharp
 var complexSuperposition1 = new QuBit<Complex>(new[] { new Complex(1, 2), new Complex(3, 4) });
@@ -49,7 +49,7 @@ Console.WriteLine($"Superposition Product: {superpositionProduct}");
 
 ### Weighted Complex Superpositions
 
-You can also create weighted superpositions of complex numbers. Here’s an example:
+Create weighted superpositions of complex numbers:
 
 ```csharp
 var weightedComplexSuperposition = new QuBit<Complex>(
@@ -67,7 +67,7 @@ Console.WriteLine($"Weighted Sum: {weightedSum}");
 
 ### Observing Complex Superpositions
 
-You can observe complex superpositions to get a single collapsed value. Here’s an example:
+Collapse a complex superposition to get a single value:
 
 ```csharp
 var complexSuperposition = new QuBit<Complex>(new[] { new Complex(1, 2), new Complex(3, 4), new Complex(5, 6) });
@@ -79,7 +79,7 @@ Console.WriteLine($"Observed Value: {observedValue}");
 
 ### Complex Number Functions
 
-You can apply complex number functions to superpositions. Here’s an example:
+Apply complex number functions to superpositions:
 
 ```csharp
 var complexSuperposition = new QuBit<Complex>(new[] { new Complex(1, 2), new Complex(3, 4) });
@@ -89,4 +89,3 @@ var phaseSuperposition = complexSuperposition.Select(c => c.Phase);
 
 Console.WriteLine($"Magnitude Superposition: {magnitudeSuperposition}");
 Console.WriteLine($"Phase Superposition: {phaseSuperposition}");
-```

@@ -1,4 +1,4 @@
-﻿# PhysicsQubit — Bloch Sphere Constructors and |0>, |1> Shortcuts
+﻿# PhysicsQubit - Bloch Sphere Constructors and |0>, |1> Shortcuts
 
 `PhysicsQubit` is a specialised `QuBit<int>` constrained to the computational basis {0, 1}. It provides convenient constructors to initialise amplitudes directly or via Bloch sphere parameters, and static shortcuts for the basis states.
 

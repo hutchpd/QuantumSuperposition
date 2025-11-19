@@ -2,7 +2,7 @@
 
 ## Required Namespaces
 
- Make sure to import the correct namespaces, for these examples we use.
+Make sure to import the correct namespaces for these examples.
 
 ```csharp
 using System.Numerics;
@@ -11,9 +11,10 @@ using QuantumSuperposition.Utilities;
 using QuantumSuperposition.Entanglement;
 using QuantumSuperposition.Core;
 using QuantumSuperposition.QuantumSoup;
+```
 
 ### Entangled Variable Linking
-Entanglement in quantum systems allows variables to be linked such that the state of one variable directly affects the state of another. This is akin to having two variables that are "quantum married" — their states are intertwined.
+Entanglement links variables so the state of one directly affects the state of another. Think two variables that are "quantum married" with intertwined states.
 
 #### Example
 ```csharp
@@ -22,18 +23,18 @@ var qubitB = new QuBit<int>(_system, new[] { 1 });
 
 _system.Entangle("BellPair_A", qubitA, qubitB);
 
-// Confirm they’re now officially "quantum married"
+// Confirm they are linked
 Assert.NotNull(qubitA.EntanglementGroupId);
 Assert.NotNull(qubitB.EntanglementGroupId);
 Assert.AreEqual(qubitA.EntanglementGroupId.Value, qubitB.EntanglementGroupId.Value);
 
-// Check the group registry hasn't filed for divorce
+// Check the group registry
 var allGroups = _manager.GetGroupsForReference(qubitA);
 Assert.AreEqual(1, allGroups.Count);
 ```
 
 ### Collapse Propagation
-When one qubit in an entangled group collapses, the collapse propagates to the other qubits in the group. This means that observing one qubit will cause the entire group to collapse to a consistent state.
+Observing one member of an entangled group propagates collapse to the others so the group settles on a consistent state.
 
 #### Example
 ```csharp
@@ -48,14 +49,13 @@ QuantumConfig.ForbidDefaultOnCollapse = false;
 
 var observedA = qubitA.Observe();
 
-// If A collapses in the forest, B hears it scream.
 Assert.IsTrue(qubitB.IsCollapsed);
 Assert.IsTrue(qubitA.IsCollapsed);
 Assert.NotNull(qubitB.GetObservedValue());
 ```
 
 ### Tensor Product Expansion
-The tensor product of two qubits combines their states into a larger state space, representing all possible combinations of their individual states.
+The tensor product of two qubits combines their states into a larger state space representing all combinations of their individual states.
 
 #### Example
 ```csharp
@@ -68,12 +68,11 @@ Assert.AreEqual(4, productDict.Count);
 var zeroZero = productDict.Keys.FirstOrDefault(arr => arr[0] == 0 && arr[1] == 0);
 var amplitude00 = productDict[zeroZero];
 
-// Confirm the amplitudes are mathematically sound and spiritually fulfilling.
 Assert.AreEqual(new Complex(2, 0), amplitude00);
 ```
 
 ### Entangled Group Mutation Propagation
-When one qubit in an entangled group changes its state, the change propagates to the other qubits in the group. This ensures that the entire group remains consistent.
+Mutating one qubit in an entangled group propagates the change so the group remains consistent.
 
 #### Example
 ```csharp
@@ -92,7 +91,7 @@ Assert.AreEqual(qubitA.EntanglementGroupId, qubitB.EntanglementGroupId);
 ```
 
 ### Entanglement Group Versioning
-Entanglement groups can be versioned to track changes over time. This allows for the history of entangled groups to be recorded and analyzed.
+Version groups to track changes over time and inspect history.
 
 #### Example
 ```csharp
@@ -102,14 +101,13 @@ var qubitC = new QuBit<int>(_system, new[] { 2 });
 
 var groupId = _manager.Link("FirstPair", qubitA, qubitB);
 
-// We expect the group label to reflect their original love story.
 Assert.AreEqual("FirstPair", _manager.GetGroupLabel(groupId));
 var groupMembers = _manager.GetGroup(groupId);
 Assert.AreEqual(2, groupMembers.Count);
 ```
 
 ### Entanglement Guardrails
-Entanglement guardrails ensure that certain invalid operations, such as linking qubits from different systems or linking a single qubit to itself, are prevented.
+Prevent invalid operations such as linking qubits from different systems or linking a qubit to itself.
 
 #### Example
 ```csharp
@@ -121,19 +119,18 @@ var qubitInSecond = new QuBit<bool>(secondSystem, new[] { 0 });
 Assert.Throws<InvalidOperationException>(() =>
 {
     _manager.Link("ContradictionGroup", qubitInFirst, qubitInSecond);
-}, "Linking across timelines is not just rude — it's forbidden.");
+}, "Linking across timelines is forbidden.");
 
 var qubit = new QuBit<int>(_system, new[] { 0 });
 
 Assert.DoesNotThrow(() =>
 {
-    // Either a philosophical crisis or just a self-aware test case.
     _manager.Link("SelfLink?", qubit);
-}, "If self-linking is wrong, update this test to throw existential errors.");
+});
 ```
 
-### Multi-Party Collapse Agreement
-In a multi-party collapse agreement, all qubits in an entangled group agree on the same observed value when collapsed.
+### Multi Party Collapse Agreement
+In multi party agreements all qubits in the group agree on the observed value when collapsed.
 
 #### Example
 ```csharp
@@ -148,25 +145,25 @@ _system.SetFromTensorProduct(true, qubitX, qubitY);
 var valueX = qubitX.Observe(1234);
 var valueY = qubitY.GetObservedValue();
 
-Assert.NotNull(valueY, "Everyone saw the same thing. For once.");
+Assert.NotNull(valueY);
 Assert.IsTrue(qubitY.IsCollapsed);
 ```
 
-### Entanglement Locking / Freezing
-Entanglement locking or freezing prevents changes to a qubit during critical operations. This ensures that the qubit remains in a consistent state.
+### Entanglement Locking and Freezing
+Lock a qubit during critical operations to keep state consistent.
 
 #### Example
 ```csharp
 var qubitA = new QuBit<int>(_system, new[] { 0 });
 var groupId = _manager.Link("LockTestGroup", qubitA);
 
-qubitA.Lock(); // Schrödinger’s DO NOT DISTURB sign
+qubitA.Lock();
 
 if (qubitA.IsLocked)
 {
     Assert.Throws<InvalidOperationException>(() =>
     {
-        qubitA.Append(42); // Sir, this is a locked multiverse
+        qubitA.Append(42);
     });
 }
 else
@@ -175,8 +172,8 @@ else
 }
 ```
 
-### Entanglement Group Tagging / Naming
-Entanglement groups can be assigned custom labels or tags for easier identification and management.
+### Entanglement Group Tagging and Naming
+Assign labels or tags for easier identification and management.
 
 #### Example
 ```csharp
@@ -186,11 +183,11 @@ var qubitB = new QuBit<bool>(_system, new[] { 1 });
 var groupId = _manager.Link("BellPair_A", qubitA, qubitB);
 
 var label = _manager.GetGroupLabel(groupId);
-Assert.AreEqual("BellPair_A", label, "The naming ceremony was successful.");
+Assert.AreEqual("BellPair_A", label);
 ```
 
 ### Partial Collapse Staging
-Partial collapse staging allows for the observation of one qubit in an entangled group, followed by the observation of another qubit at a later time. This ensures that the observations remain consistent.
+Observe one qubit now and another later and keep observations consistent.
 
 #### Example
 ```csharp
@@ -208,15 +205,15 @@ bool observedQ1 = outcomeQ1[0] != 0;
 Assert.True(qubit1.IsCollapsed);
 Assert.AreEqual(observedQ1, (bool)qubit1.GetObservedValue());
 
-Assert.False(qubit2.IsCollapsed, "Qubit2 is still playing it cool.");
+Assert.False(qubit2.IsCollapsed);
 Assert.IsNull(qubit2.GetObservedValue());
 
 var observedQ2 = qubit2.Observe(100);
-Assert.True(qubit2.IsCollapsed, "Qubit2 finally made up its mind.");
+Assert.True(qubit2.IsCollapsed);
 ```
 
 ### Entanglement Graph Diagnostics
-Entanglement graph diagnostics provide insights into the structure and state of entangled groups, including group sizes, circular references, and other metrics.
+Diagnostics provide insights into the structure and state of entangled groups including sizes, circular references and other metrics.
 
 #### Example
 ```csharp
@@ -229,6 +226,5 @@ _manager.Link("GroupB", qB, qC);
 
 Assert.DoesNotThrow(() =>
 {
-    _manager.PrintEntanglementStats(); // Should print a cosmic diagnostic, not a stack trace.
+    _manager.PrintEntanglementStats();
 });
-```

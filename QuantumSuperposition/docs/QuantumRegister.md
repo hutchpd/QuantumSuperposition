@@ -13,7 +13,7 @@ It lets you treat a slice of the global wavefunction as a register you can:
 
 ```csharp
 // From qubits already bound to a system
-tvar system = new QuantumSystem();
+var system = new QuantumSystem();
 var q0 = new QuBit<int>(system, new[] { 0 });
 var q1 = new QuBit<int>(system, new[] { 1 });
 var reg = new QuantumRegister(q0, q1);
@@ -21,14 +21,14 @@ var reg = new QuantumRegister(q0, q1);
 // From integer value (populates amplitudes as a single basis state)
 var regConst = QuantumRegister.FromInt(value: 3, bits: 2, system);
 
-// From explicit amplitude vector (length must be power-of-two)
+// From explicit amplitude vector (length must be a power of two)
 var regAmp = QuantumRegister.FromAmplitudes(new[] { Complex.One/Math.Sqrt(2), Complex.One/Math.Sqrt(2) }, system);
 ```
 
 ## Collapse
 
 ```csharp
-// Collapses only this register's qubits
+// Collapse only this register's qubits
 int[] measuredBits = reg.Collapse();
 ```
 
@@ -47,7 +47,7 @@ Internally this uses `QuantumAlgorithms.BitsToIndex` and falls back to `PartialO
 
 ## Notes
 
-- Creating from amplitudes or integer value overwrites system amplitudes for the involved qubits.
-- `Collapse()` locks underlying qubits to prevent accidental mutation after measurement.
-- Supports disjoint index sets; indices are stored sorted.
+- Creating from amplitudes or integer value overwrites system amplitudes for the involved qubits
+- `Collapse()` locks underlying qubits to prevent accidental mutation after measurement
+- Supports disjoint index sets. Indices are stored sorted
 
