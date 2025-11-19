@@ -322,7 +322,7 @@ A tour of the full library, from functional superpositions to full quantum circu
   A compact, high-level abstraction for treating one or more qubit indices as a coherent register inside a `QuantumSystem`.
    `docs/QuantumRegister.md`
 
-* Canonical Quantum States
+* **Canonical Quantum States - Factories for Common States**
   Built-in factories for common multi-qubit states: EPR pairs, W states, GHZ states.
    `docs/CanonicalStates.md`
 ---
