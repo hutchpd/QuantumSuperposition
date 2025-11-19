@@ -196,8 +196,6 @@ namespace QuantumSuperposition.Core
 
         /// <summary>
         /// Creates an n-qubit W state: equal superposition of all basis states with Hamming weight 1.
-        /// |100...0> + |010...0> + ... + |0...001>, normalised.
-        /// Links qubits with entanglement label "WState_A".
         /// </summary>
         public static QuantumRegister WState(QuantumSystem system, int length = 3)
         {
@@ -220,7 +218,6 @@ namespace QuantumSuperposition.Core
 
         /// <summary>
         /// Creates an n-qubit GHZ state: |00...0> + |11...1> normalised.
-        /// Links qubits with entanglement label "GHZState_A".
         /// </summary>
         public static QuantumRegister GHZState(QuantumSystem system, int length = 3)
         {
@@ -239,6 +236,47 @@ namespace QuantumSuperposition.Core
             for (int i = 0; i < length; i++) qubits[i] = new QuBit<int>(system, new[] { i });
             _ = system.Entanglement.Link("GHZState_A", qubits);
             return new QuantumRegister(qubits);
+        }
+        // ----------------------------------------------------------
+
+        // ---------------- Operator Sugar: gate * register ----------
+        /// <summary>
+        /// Applies a QuantumGate to the entire register (arity inferred from gate dimension).
+        /// For 1-qubit gates: enqueued then processed. For 2-qubit gates: enqueued then processed.
+        /// For >2 qubits: applied immediately via multi-qubit gate API.
+        /// Returns a new register view on the same indices.
+        /// </summary>
+        public static QuantumRegister operator *(QuantumGate gate, QuantumRegister register)
+        {
+            if (gate == null) throw new ArgumentNullException(nameof(gate));
+            if (register.System == null) throw new InvalidOperationException("Register not bound to a QuantumSystem.");
+            int dim = gate.Matrix.GetLength(0);
+            if (dim != gate.Matrix.GetLength(1)) throw new ArgumentException("Gate matrix must be square.");
+            if ((dim & (dim - 1)) != 0) throw new ArgumentException("Gate dimension must be a power of two.");
+            int qubitCount = (int)Math.Log2(dim);
+            if (qubitCount != register.QubitIndices.Length)
+            {
+                throw new ArgumentException("Gate arity mismatch");
+            }
+            QuantumSystem system = register.System;
+            int[] targets = register.QubitIndices;
+            string gateName = $"U{dim}"; // generic name
+            if (qubitCount == 1)
+            {
+                system.ApplySingleQubitGate(targets[0], gate.Matrix, gateName);
+                system.ProcessGateQueue();
+            }
+            else if (qubitCount == 2)
+            {
+                system.ApplyTwoQubitGate(targets[0], targets[1], gate.Matrix, gateName);
+                system.ProcessGateQueue();
+            }
+            else
+            {
+                system.ApplyMultiQubitGate(targets, gate.Matrix, gateName);
+            }
+            // Return a fresh register pointing to same indices
+            return new QuantumRegister(system, targets.ToArray());
         }
         // ----------------------------------------------------------
 

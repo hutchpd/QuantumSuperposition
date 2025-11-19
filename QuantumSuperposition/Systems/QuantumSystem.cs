@@ -21,60 +21,42 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         public void ApplyMultiQubitGate(int[] targetQubits, Complex[,] gate, string gateName)
         {
-            // Get the current amplitudes (assumed accessible via a property or internal field).
-            Dictionary<int[], Complex> currentAmps = new(Amplitudes, new IntArrayComparer());
+            Dictionary<int[], Complex> currentAmps = new(_amplitudes, new IntArrayComparer());
             int numTargets = targetQubits.Length;
             int d = 1 << numTargets;
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
-
             _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, targetQubits, gate, gateName));
-
-            // Group the basis states by the bits in positions not among the target qubits.
-            IEnumerable<IGrouping<string, int[]>> groups = currentAmps.Keys.GroupBy(state =>
+            // Group by unaffected qubits pattern
+            var groups = currentAmps.Keys.GroupBy(state => string.Join(",", state.Select((v,i) => targetQubits.Contains(i)? "*" : v.ToString())));
+            foreach (var group in groups)
             {
-                // Create a key from the bits of the state at indices not in targetQubits.
-                List<int> keyBits = [];
-                for (int i = 0; i < state.Length; i++)
+                int[] exemplar = group.First();
+                // Build all 2^n variants
+                var variants = new Dictionary<int, int[]>();
+                for (int mask=0; mask<d; mask++)
                 {
-                    if (!targetQubits.Contains(i))
+                    int[] basis = (int[])exemplar.Clone();
+                    for (int bit=0; bit<numTargets; bit++)
                     {
-                        keyBits.Add(state[i]);
+                        int qIndex = targetQubits[bit];
+                        basis[qIndex] = (mask >> (numTargets-1-bit)) & 1; // MSB-first ordering
                     }
+                    variants[mask] = basis;
                 }
-                return string.Join(",", keyBits);
-            });
-
-            foreach (IGrouping<string, int[]> group in groups)
-            {
-                // Order the states in the group by the integer value of the substate on the target qubits.
-                List<int[]> stateList = group.ToList();
-                stateList.Sort((a, b) =>
-                {
-                    int idxA = BitsToIndex(ExtractSubstate(a, targetQubits));
-                    int idxB = BitsToIndex(ExtractSubstate(b, targetQubits));
-                    return idxA.CompareTo(idxB);
-                });
-
-                // Build the vector of amplitudes for the target subspace.
                 Complex[] vec = new Complex[d];
-                for (int i = 0; i < d; i++)
+                for (int i=0;i<d;i++)
                 {
-                    _ = currentAmps.TryGetValue(stateList[i], out Complex amp);
+                    _ = currentAmps.TryGetValue(variants[i], out Complex amp);
                     vec[i] = amp;
                 }
-
-                // Apply the gate to the vector.
                 Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-
-                // Update the corresponding entries in newAmps.
-                for (int i = 0; i < d; i++)
+                for (int i=0;i<d;i++)
                 {
-                    newAmps[stateList[i]] = newVec[i];
+                    if (newVec[i] != Complex.Zero)
+                        newAmps[variants[i]] = newVec[i];
                 }
             }
-
-            // Replace the system's amplitudes (assume you add a setter method).
-            SetAmplitudes(newAmps);
+            _amplitudes = newAmps.Count>0? newAmps : newAmps;
             NormaliseAmplitudes();
         }
 
@@ -596,22 +578,24 @@ namespace QuantumSuperposition.Systems
         private void ProcessSingleQubitGate(int qubit, Complex[,] gate)
         {
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
-            foreach (int[]? state in _amplitudes.Keys.ToList())
+            // Group states by all other qubits (pattern with *)
+            var groups = _amplitudes.Keys.GroupBy(state => string.Join(",", state.Select((v, idx) => idx == qubit ? "*" : v.ToString())));
+            foreach (var group in groups)
             {
-                int bit = state[qubit];
-
-                int[] basis0 = (int[])state.Clone(); basis0[qubit] = 0;
-                int[] basis1 = (int[])state.Clone(); basis1[qubit] = 1;
-
-                Complex a0 = _amplitudes.TryGetValue(basis0, out Complex amp0) ? amp0 : Complex.Zero;
-                Complex a1 = _amplitudes.TryGetValue(basis1, out Complex amp1) ? amp1 : Complex.Zero;
-
-                // Note: if you need to adapt the math to your ordering you may do so here.
-                Complex newAmp = (gate[bit, 0] * a0) + (gate[bit, 1] * a1);
-
-                newAmps[state] = newAmp;
+                // Build amplitudes a0,a1 from existing or zero
+                int[] exemplar = group.First();
+                int length = exemplar.Length;
+                int[] basis0 = (int[])exemplar.Clone(); basis0[qubit] = 0;
+                int[] basis1 = (int[])exemplar.Clone(); basis1[qubit] = 1;
+                _ = _amplitudes.TryGetValue(basis0, out Complex a0);
+                _ = _amplitudes.TryGetValue(basis1, out Complex a1);
+                // Apply gate: new amplitudes for |0> and |1>
+                Complex new0 = gate[0,0]*a0 + gate[0,1]*a1;
+                Complex new1 = gate[1,0]*a0 + gate[1,1]*a1;
+                if (new0 != Complex.Zero) newAmps[basis0] = new0;
+                if (new1 != Complex.Zero) newAmps[basis1] = new1;
             }
-            _amplitudes = newAmps;
+            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps; // keep even if empty
             NormaliseAmplitudes();
         }
 
@@ -621,38 +605,47 @@ namespace QuantumSuperposition.Systems
         private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
         {
             Dictionary<string, List<int[]>> grouped = [];
-            foreach (int[]? state in _amplitudes.Keys.ToList())
+            foreach (int[] state in _amplitudes.Keys.ToList())
             {
                 string key = string.Join(",", state.Select((val, idx) => (idx != qubitA && idx != qubitB) ? val.ToString() : "*"));
-                if (!grouped.ContainsKey(key))
-                {
-                    grouped[key] = [];
-                }
-
+                if (!grouped.ContainsKey(key)) grouped[key] = [];
                 grouped[key].Add(state);
             }
-
             Dictionary<int[], Complex> newAmplitudes = new(new IntArrayComparer());
-            foreach (List<int[]> group in grouped.Values)
+            foreach (var group in grouped)
             {
-                Dictionary<(int, int), int[]> basisMap = [];
-                Complex[] vec = new Complex[4];
-                foreach (int[] basis in group)
+                // Build complete 4 basis variants for local two qubits combined with other fixed bits.
+                int[] exemplar = group.Value.First();
+                int length = exemplar.Length;
+                var localVariants = new Dictionary<(int a,int b), int[]>();
+                for (int a=0;a<2;a++)
                 {
-                    int a = basis[qubitA];
-                    int b = basis[qubitB];
-                    int index = (a << 1) | b;
-                    vec[index] = _amplitudes.TryGetValue(basis, out Complex amp) ? amp : Complex.Zero;
-                    basisMap[(a, b)] = basis;
+                    for (int b=0;b<2;b++)
+                    {
+                        int[] basis = (int[])exemplar.Clone();
+                        basis[qubitA] = a;
+                        basis[qubitB] = b;
+                        localVariants[(a,b)] = basis;
+                    }
                 }
-                Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-                foreach (((int a, int b), int[] state) in basisMap)
+                // Build input vector
+                Complex[] vec = new Complex[4];
+                foreach (var kv in localVariants)
                 {
-                    int idx = (a << 1) | b;
-                    newAmplitudes[state] = newVec[idx];
+                    _ = _amplitudes.TryGetValue(kv.Value, out Complex amp);
+                    int idx = (kv.Key.a << 1) | kv.Key.b;
+                    vec[idx] = amp;
+                }
+                // Apply gate
+                Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
+                foreach (var kv in localVariants)
+                {
+                    int idx = (kv.Key.a << 1) | kv.Key.b;
+                    if (newVec[idx] != Complex.Zero)
+                        newAmplitudes[kv.Value] = newVec[idx];
                 }
             }
-            _amplitudes = newAmplitudes;
+            _amplitudes = newAmplitudes.Count>0? newAmplitudes : newAmplitudes;
             NormaliseAmplitudes();
         }
 

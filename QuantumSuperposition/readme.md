@@ -325,6 +325,11 @@ A tour of the full library, from functional superpositions to full quantum circu
 * **Canonical Quantum States - Factories for Common States**
   Built-in factories for common multi-qubit states: EPR pairs, W states, GHZ states.
    `docs/CanonicalStates.md`
+
+* **Gate Register Sugar**
+  Extension methods for applying gates directly on `QuantumRegister` instances.
+   `docs/GateRegisterSugar.md`
+
 ---
 
 ## Contributing
