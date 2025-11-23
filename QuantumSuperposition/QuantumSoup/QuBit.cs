@@ -174,25 +174,22 @@ namespace QuantumSuperposition.QuantumSoup
                 throw new ArgumentNullException(nameof(selector));
             }
 
-            // This is the quantum equivalent of "map", but without picking a side.
-            // Each state gets passed through the selector, but their identity crisis (weight) stays intact.
-            IEnumerable<(TResult value, Complex weight)> mappedWeightedValues = ToWeightedValues()
-                .Select(pair => (value: selector(pair.value), pair.weight));
+            // Manual iterator – avoids LINQ .Select allocation over large superpositions.
+            IEnumerable<(TResult value, Complex weight)> Mapped()
+            {
+                foreach ((T value, Complex weight) in ToWeightedValues())
+                {
+                    yield return (selector(value), weight);
+                }
+            }
 
-            // The new qubit lives in a different type universe now, so we find its corresponding math handlers.
             IQuantumOperators<TResult> newOps = QuantumOperatorsFactory.GetOperators<TResult>();
-
-            // Create a new superposition in the new type space.
-            // Note: nothing actually happens until someone observes this - classic quantum laziness.
-            return new QuBit<TResult>(mappedWeightedValues, newOps);
+            return new QuBit<TResult>(Mapped(), newOps);
         }
 
         /// <summary>
-        /// Projects each quantum branch into a new qubit and flattens the result,
-        /// producing a tangled multiverse of possibilities with inherited probabilities.
-        ///
-        /// Think of it like quantum fanfiction: every state gets its own spinoff series,
-        /// and we stitch them all together into one tangled narrative.
+        /// Projects each quantum branch into a new qubit and flattens the result.
+        /// Uses a manual iterator to reduce LINQ overhead for large state spaces.
         /// </summary>
         /// <typeparam name="TResult">
         /// The resulting type of each new quantum reality after transformation.
@@ -214,13 +211,10 @@ namespace QuantumSuperposition.QuantumSoup
 
             IEnumerable<(TResult value, Complex weight)> Combined()
             {
-                // For each weighted state in the current qubit...
                 foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
                 {
-                    // ...get the resulting qubit from the selector.
-                    QuBit<TResult> innerQuBit = selector(outerValue);
-                    // Multiply the outer weight by each inner weight.
-                    foreach ((TResult innerValue, Complex innerWeight) in innerQuBit.ToWeightedValues())
+                    QuBit<TResult> inner = selector(outerValue);
+                    foreach ((TResult innerValue, Complex innerWeight) in inner.ToWeightedValues())
                     {
                         yield return (innerValue, outerWeight * innerWeight);
                     }
@@ -231,11 +225,8 @@ namespace QuantumSuperposition.QuantumSoup
         }
 
         /// <summary>
-        /// Projects each quantum state into a new qubit, then combines the original and
-        /// resulting states into a final value using a result selector -
-        /// like a cosmic buddy-cop movie across entangled timelines.
-        ///
-        /// This is the monadic version of "yes, and…"
+        /// Projects each quantum state into a new qubit, then combines outer & inner values.
+        /// Manual iterator removes intermediate LINQ allocations.
         /// </summary>
         /// <typeparam name="TResult">
         /// The intermediate state produced by the selector.
@@ -260,7 +251,6 @@ namespace QuantumSuperposition.QuantumSoup
             {
                 throw new ArgumentNullException(nameof(selector));
             }
-
             if (resultSelector == null)
             {
                 throw new ArgumentNullException(nameof(resultSelector));
@@ -270,10 +260,9 @@ namespace QuantumSuperposition.QuantumSoup
             {
                 foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
                 {
-                    QuBit<TResult> innerQuBit = selector(outerValue);
-                    foreach ((TResult innerValue, Complex innerWeight) in innerQuBit.ToWeightedValues())
+                    QuBit<TResult> inner = selector(outerValue);
+                    foreach ((TResult innerValue, Complex innerWeight) in inner.ToWeightedValues())
                     {
-                        // Combine the outer and inner values via the result selector.
                         yield return (resultSelector(outerValue, innerValue), outerWeight * innerWeight);
                     }
                 }

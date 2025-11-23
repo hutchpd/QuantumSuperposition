@@ -50,6 +50,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Commutative optimisation avoids duplicate evaluation of pure operations (e.g. caching results for `a + b` vs `b + a`).
 - Select / Where chains retain lazy non collapse semantics reducing unnecessary sampling.
 - Multi-qubit gate grouping no longer performs string concatenations; structural pattern hashing accelerates Grover / QFT circuits.
+- Reduced LINQ allocation overhead in `QuBit<T>.Select`, `SelectMany`, and `SelectMany` with result selector by replacing chained LINQ with manual iterator methods for large superpositions.
 
 ### Documentation
 - Added usage examples for prime detection, factors, minimum value extraction and multi qubit gate application.
