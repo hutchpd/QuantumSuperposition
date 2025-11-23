@@ -31,6 +31,7 @@ namespace QuantumSuperposition.QuantumSoup
         private bool _isCollapsedFromSystem;
         private object? _systemObservedValue;
         public QuantumSystem? System { get; }
+        QuantumSystem? IQuantumReference.System => System;
 
         public Guid? EntanglementGroupId { get; private set; }
         public void SetEntanglementGroup(Guid id) => EntanglementGroupId = id;

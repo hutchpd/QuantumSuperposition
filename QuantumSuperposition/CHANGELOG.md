@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ### Changed
 - Generalised entanglement collapse propagation in `QuantumSystem.ObserveGlobal` removing type-specific `QuBit<int|bool|Complex>` checks; now iterates all entanglement groups for any `IQuantumReference` enabling future custom qubit types without engine changes.
+- Entanglement linking generalised: added `QuantumSystem? System` property to `IQuantumReference` and refactored `EntanglementManager.Link` to remove type-specific `QuBit<int|bool|Complex>` checks. Now any future qubit flavour implementing `IQuantumReference` can participate without modification.
 
 ### Internal
 - Refactored notification loop to call `Entanglement.GetGroupsForReference(refQ)` and propagate for each group id.
@@ -27,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ### Notes
 - This release targets reliability of entanglement and measurement propagation and adds flexible basis mapping. No breaking public API changes.
+- Minor API surface change (interface addition) – bump minor version. Backwards compatible for existing implementations (only `QuBit<T>` in library updated).
 
 ## [1.7.4] - 2025-11-19
 ### Added

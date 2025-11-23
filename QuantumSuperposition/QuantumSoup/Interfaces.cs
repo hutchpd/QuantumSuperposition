@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using QuantumSuperposition.Systems;
 
 namespace QuantumSuperposition.QuantumSoup
 {
@@ -72,5 +73,11 @@ namespace QuantumSuperposition.QuantumSoup
         /// Or subspace of the global wavefunction if entangled.
         /// </summary>
         void ApplyLocalUnitary(Complex[,] gate, string gateName);
+
+        /// <summary>
+        /// Gets the owning QuantumSystem for this qubit, if applicable.
+        /// This may be null for standalone qubits not currently assigned to a system.
+        /// </summary>
+        QuantumSystem? System { get; }
     }
 }

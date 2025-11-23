@@ -21,186 +21,73 @@ namespace QuantumSuperposition.Entanglement
         /// </summary>
         public Guid Link(string groupLabel, params IQuantumReference[] qubits)
         {
-            QuantumSystem? firstSystem = null;
+            if (qubits == null || qubits.Length == 0)
+            {
+                throw new ArgumentException("At least one qubit required for entanglement link.");
+            }
+
+            QuantumSystem? system = null;
             foreach (IQuantumReference q in qubits)
             {
-                // If the reference is a QuBit<int> or QuBit<bool> or QuBit<Complex>, they have _system
-                if (q is QuBit<int> qi && qi.System is { } sys)
+                if (system == null)
                 {
-                    if (firstSystem == null)
-                    {
-                        firstSystem = sys;
-                    }
-                    else if (firstSystem != sys)
-                    {
-                        throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
-                    }
+                    system = q.System;
                 }
-                else if (q is QuBit<bool> qb && qb.System is { } sysB)
+                else if (q.System != system)
                 {
-                    if (firstSystem == null)
-                    {
-                        firstSystem = sysB;
-                    }
-                    else if (firstSystem != sysB)
-                    {
-                        throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
-                    }
-                }
-                else if (q is QuBit<Complex> qc && qc.System is { } sysC)
-                {
-                    if (firstSystem == null)
-                    {
-                        firstSystem = sysC;
-                    }
-                    else if (firstSystem != sysC)
-                    {
-                        throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
-                    }
-                }
-                else
-                {
-                    throw new InvalidOperationException("Unsupported qubit type for linking.");
+                    throw new InvalidOperationException("All qubits must belong to the same QuantumSystem.");
                 }
             }
 
             Guid id = Guid.NewGuid();
             _groups[id] = qubits.ToList();
             _groupLabels[id] = groupLabel;
-
-            // After creating the group, also update the referenceToGroups dictionary
             foreach (IQuantumReference q in qubits)
             {
-                if (!_referenceToGroups.TryGetValue(q, out HashSet<Guid>? groupSet))
+                if (!_referenceToGroups.TryGetValue(q, out HashSet<Guid>? set))
                 {
-                    groupSet = [];
-                    _referenceToGroups[q] = groupSet;
+                    set = [];
+                    _referenceToGroups[q] = set;
                 }
-                _ = groupSet.Add(id);
+                _ = set.Add(id);
             }
-
-            _groupHistory[id] =
-            [
-                new EntanglementGroupVersion
-                {
-                    GroupId = id,
-                    Members = qubits.ToList(),
-                    ReasonForChange = "Initial link"
-                },
-            ];
-
+            _groupHistory[id] = [ new EntanglementGroupVersion { GroupId = id, Members = qubits.ToList(), ReasonForChange = "Initial link" } ];
             return id;
         }
 
-        public string GetGroupLabel(Guid groupId)
-        {
-            return _groupLabels.TryGetValue(groupId, out string? label) ? label : "Unnamed Group";
-        }
-
-        /// <summary>
-        /// Gets all references in the same entangled group, by ID.
-        /// </summary>
-        public IReadOnlyList<IQuantumReference> GetGroup(Guid id)
-        {
-            return _groups.TryGetValue(id, out List<IQuantumReference>? list) ? list : Array.Empty<IQuantumReference>();
-        }
-
-        /// <summary>
-        /// Propagate a collapse event to all references in the same entangled group.
-        /// Each reference should update its internal state accordingly.
-        /// </summary>
+        public string GetGroupLabel(Guid groupId) => _groupLabels.TryGetValue(groupId, out string? label) ? label : "Unnamed Group";
+        public IReadOnlyList<IQuantumReference> GetGroup(Guid id) => _groups.TryGetValue(id, out List<IQuantumReference>? list) ? list : Array.Empty<IQuantumReference>();
         public void PropagateCollapse(Guid groupId, Guid collapseId)
         {
             HashSet<Guid> visitedGroups = [];
-            HashSet<IQuantumReference> visitedReferences = [];
-
-            PropagateRecursive(groupId, collapseId, visitedGroups, visitedReferences);
+            HashSet<IQuantumReference> visitedRefs = [];
+            PropagateRecursive(groupId, collapseId, visitedGroups, visitedRefs);
         }
-
-        private void PropagateRecursive(Guid currentGroupId, Guid collapseId,
-                                    HashSet<Guid> visitedGroups,
-                                    HashSet<IQuantumReference> visitedReferences)
+        private void PropagateRecursive(Guid current, Guid collapseId, HashSet<Guid> visitedGroups, HashSet<IQuantumReference> visitedRefs)
         {
-            // If we’ve already visited this group, skip to avoid cycles
-            if (!visitedGroups.Add(currentGroupId))
+            if (!visitedGroups.Add(current)) return;
+            if (!_groups.TryGetValue(current, out List<IQuantumReference>? members)) return;
+            foreach (IQuantumReference q in members)
             {
-                return;
-            }
-
-            // Retrieve group members
-            if (!_groups.TryGetValue(currentGroupId, out List<IQuantumReference>? groupMembers))
-            {
-                return;
-            }
-
-            // For each qubit in the group:
-            foreach (IQuantumReference q in groupMembers)
-            {
-                // If we’ve already visited this reference, skip
-                if (!visitedReferences.Add(q))
-                {
-                    continue;
-                }
-
-                // Notify each qubit
+                if (!visitedRefs.Add(q)) continue;
                 q.NotifyWavefunctionCollapsed(collapseId);
-
-                // Then see which other groups this qubit belongs to
-                List<Guid> otherGroups = GetGroupsForReference(q);
-                foreach (Guid g in otherGroups)
-                {
-                    if (g != currentGroupId)
-                    {
-                        PropagateRecursive(g, collapseId, visitedGroups, visitedReferences);
-                    }
-                }
+                foreach (Guid g in GetGroupsForReference(q)) if (g != current) PropagateRecursive(g, collapseId, visitedGroups, visitedRefs);
             }
         }
-
-        /// <summary>
-        /// Prints out your entanglement mess like a quantum therapist.
-        /// Now featuring graphs, circular drama, and chaos percentages you definitely didn't ask for.
-        /// </summary>
         public void PrintEntanglementStats()
         {
             Console.WriteLine("=== Entanglement Graph Diagnostics ===");
             Console.WriteLine("Total entangled groups: " + _groups.Count);
-
-            // Total unique qubits participating in at least one group
-            int totalUniqueQubits = _referenceToGroups.Count;
-            Console.WriteLine("Total unique qubits: " + totalUniqueQubits);
-
-            // Print each group's size
-            foreach ((Guid id, List<IQuantumReference> list) in _groups)
-            {
-                Console.WriteLine($"Group {id}: {list.Count} qubits");
-            }
-
-            // Circular references: qubits that belong to more than one group
-            int circularCount = _referenceToGroups.Values.Count(g => g.Count > 1);
-            double circularPercent = totalUniqueQubits > 0
-                ? circularCount / (double)totalUniqueQubits * 100.0
-                : 0;
-            Console.WriteLine($"Circular references: {circularCount} qubits ({circularPercent:F2}%)");
-
-            // Chaos %: extra entanglement links relative to unique qubits.
+            int totalUnique = _referenceToGroups.Count;
+            Console.WriteLine("Total unique qubits: " + totalUnique);
+            foreach ((Guid id, List<IQuantumReference> list) in _groups) Console.WriteLine($"Group {id}: {list.Count} qubits");
+            int circular = _referenceToGroups.Values.Count(g => g.Count > 1);
+            double circularPercent = totalUnique > 0 ? circular / (double)totalUnique * 100.0 : 0;
+            Console.WriteLine($"Circular references: {circular} qubits ({circularPercent:F2}%)");
             int totalLinks = _referenceToGroups.Values.Sum(g => g.Count);
-            double chaosPercent = totalUniqueQubits > 0
-                ? (totalLinks - totalUniqueQubits) / (double)totalUniqueQubits * 100.0
-                : 0;
-            Console.WriteLine($"Chaos %: {chaosPercent:F2}%");
+            double chaos = totalUnique > 0 ? (totalLinks - totalUnique) / (double)totalUnique * 100.0 : 0;
+            Console.WriteLine($"Chaos %: {chaos:F2}%");
         }
-
-        /// <summary>
-        /// Returns the social circles this qubit is entangled with.
-        /// Warning: may include toxic group chats.
-        /// </summary>
-        /// <param name="q"></param>
-        /// <returns></returns>
-        public List<Guid> GetGroupsForReference(IQuantumReference q)
-        {
-            return _referenceToGroups.TryGetValue(q, out HashSet<Guid>? s) ? s.ToList() : [];
-        }
-
+        public List<Guid> GetGroupsForReference(IQuantumReference q) => _referenceToGroups.TryGetValue(q, out HashSet<Guid>? s) ? s.ToList() : [];
     }
 }
