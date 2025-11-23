@@ -17,12 +17,8 @@ namespace QuantumSoupTester
         public void SetFromTensorProduct_EnumDefaultMapper_Works()
         {
             var system = new QuantumSystem();
-            // Local enum qubit with two states
             var q = new QuBit<BitEnum>(new[] { BitEnum.Zero, BitEnum.One });
-
             Assert.DoesNotThrow(() => system.SetFromTensorProduct(false, q));
-
-            // Expect two basis states [0] and [1]
             var keys = system.Amplitudes.Keys.ToArray();
             Assert.That(keys.Length, Is.EqualTo(2));
             Assert.That(keys.Any(k => k.Length == 1 && k[0] == 0));
@@ -34,17 +30,41 @@ namespace QuantumSoupTester
         {
             var system = new QuantumSystem();
             var q = new QuBit<FunkyEnum>(new[] { FunkyEnum.Banana, FunkyEnum.Apple });
-
-            // Custom mapper: Banana -> 1, Apple -> 0
             int Mapper(FunkyEnum v) => v == FunkyEnum.Banana ? 1 : 0;
-
             Assert.DoesNotThrow(() => system.SetFromTensorProduct(true, Mapper, q));
-
-            // Should have two states [0] and [1] per mapper
             var keys = system.Amplitudes.Keys.ToArray();
             Assert.That(keys.Length, Is.EqualTo(2));
             Assert.That(keys.Any(k => k.Length == 1 && k[0] == 0));
             Assert.That(keys.Any(k => k.Length == 1 && k[0] == 1));
+        }
+
+        private readonly struct BitPair
+        {
+            public readonly int High; public readonly int Low;
+            public BitPair(int h, int l){ High = h; Low = l; }
+        }
+
+        [Test]
+        public void SetFromTensorProduct_StructCustomMapper_Works()
+        {
+            var system = new QuantumSystem();
+            int Map(BitPair bp) => (bp.High << 1) | bp.Low;
+            var qx = new QuBit<BitPair>(new[] { new BitPair(0,0), new BitPair(0,1) });
+            var qy = new QuBit<BitPair>(new[] { new BitPair(1,0), new BitPair(1,1) });
+            system.SetFromTensorProduct(false, Map, qx, qy);
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(4));
+            Assert.That(system.Amplitudes.Keys.Any(k => k[0] == 0 && k[1] == 2));
+        }
+
+        [Test]
+        public void SetFromTensorProduct_TwoEnumQubits_BuildsFourStates()
+        {
+            var system = new QuantumSystem();
+            var qa = new QuBit<BitEnum>(new[] { BitEnum.Zero, BitEnum.One });
+            var qb = new QuBit<BitEnum>(new[] { BitEnum.Zero, BitEnum.One });
+            system.SetFromTensorProduct(false, qa, qb);
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(4));
+            Assert.That(system.Amplitudes.Keys.Any(k => k[0] == 0 && k[1] == 1));
         }
     }
 }

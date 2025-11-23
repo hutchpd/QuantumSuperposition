@@ -9,7 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Fix: `QuantumSystem.SetFromTensorProduct` now constructs system-managed `QuBit<T>` instances using the `QuBit(QuantumSystem, int[])` constructor for local qubits passed into the method. These qubits are registered with the system and preserve qubit indices so collapse propagation, partial observation and entanglement bookkeeping behave correctly.
 - Extensibility: `SetFromTensorProduct<T>` now accepts an optional `Func<T,int>` basis mapper to support non-int/bool basis types (e.g., enums or custom types). Defaults provided for `int`, `bool`, and any enum via `Convert.ToInt32`.
 - API: Back-compat overload `SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)` retained; it uses the default mapper.
-- Tests updated: new tests cover enum basis mapping and custom mapper usage; entanglement/collapse tests exercise corrected tensor-product wiring and registration behaviour.
+- Tests updated: new tests cover enum and struct basis mapping, entanglement collapse propagation, partial observation edge cases (zero amplitude), and gate queue optimisation (cancelling inverse gates).
+- Benchmarks: Added BenchmarkDotNet project (`QuantumBenchmarks`) with microbenchmarks for `ApplyMultiQubitGate`, `SetFromTensorProduct`, and gate queue optimisation (`ProcessGateQueue`) at qubit counts 6–16 to track throughput and allocation regressions.
 - Robustness: Expanded diagnostic detail in zero-probability exceptions for `PartialObserve` and `ObserveGlobal` (includes measured indices / projection indices, basis state count, group counts, total probability). Gate validation errors now include gate name, target indices and actual dimensions.
 
 ### Changed
