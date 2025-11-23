@@ -15,11 +15,14 @@ namespace QuantumSuperposition.Systems
     {
         /// <summary>
         /// Raised after a gate batch is processed. Provides gate name, target indices and current amplitude count.
-        /// Subscribe for lightweight diagnostics (avoid heavy work inside handlers).
+        /// Subscribe for lightweight diagnostics (avoid heavy work inside handlers). Thread-safety: handlers may be
+        /// added/removed concurrently; invocation copies delegate reference first to avoid race with nulling.
         /// </summary>
         public event Action<string,int[],int>? GateExecuted;
         /// <summary>
         /// Raised after a global collapse. Provides observed indices and the resulting projection.
+        /// Thread-safety: see <see cref="GateExecuted"/> remarks. Core QuantumSystem operations are NOT thread-safe;
+        /// external callers must provide their own synchronisation if invoking from multiple threads.
         /// </summary>
         public event Action<int[],int[]>? GlobalCollapse;
 
@@ -399,7 +402,7 @@ namespace QuantumSuperposition.Systems
                     foreach (Guid groupId in Entanglement.GetGroupsForReference(refQ)) { Entanglement.PropagateCollapse(groupId, collapseId); }
                 }
             }
-            GlobalCollapse?.Invoke(qubitIndices, chosenProjection);
+            SafeRaiseGlobalCollapse(qubitIndices, chosenProjection);
             return chosenProjection;
         }
 
@@ -697,12 +700,9 @@ namespace QuantumSuperposition.Systems
             }
             _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
             NormaliseAmplitudes();
-            GateExecuted?.Invoke("SingleQubitGate", new[]{qubit}, _amplitudes.Count);
+            SafeRaiseGateExecuted("SingleQubitGate", new[]{qubit});
         }
 
-        /// <summary>
-        /// A quantum dance party, but with more entanglement and fewer disco balls.
-        /// </summary>
         private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
         {
             Dictionary<string, List<int[]>> grouped = [];
@@ -742,7 +742,22 @@ namespace QuantumSuperposition.Systems
             }
             _amplitudes = newAmplitudes.Count>0? newAmplitudes : newAmplitudes;
             NormaliseAmplitudes();
-            GateExecuted?.Invoke("TwoQubitGate", new[]{qubitA, qubitB}, _amplitudes.Count);
+            SafeRaiseGateExecuted("TwoQubitGate", new[]{qubitA, qubitB});
+        }
+
+        private void SafeRaiseGateExecuted(string gateName, int[] targets)
+        {
+            var handler = GateExecuted;
+            if (handler != null)
+            {
+                handler(gateName, targets, _amplitudes.Count);
+            }
+        }
+
+        private void SafeRaiseGlobalCollapse(int[] observedIndices, int[] projection)
+        {
+            var handler = GlobalCollapse;
+            handler?.Invoke(observedIndices, projection);
         }
 
         /// <summary>
