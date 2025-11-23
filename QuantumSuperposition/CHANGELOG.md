@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Robustness: Expanded diagnostic detail in zero-probability exceptions for `PartialObserve` and `ObserveGlobal` (includes measured indices / projection indices, basis state count, group counts, total probability). Gate validation errors now include gate name, target indices and actual dimensions.
 - API Cleanliness: Refactored `QuBit<T>` constructors to centralise validator initialisation (DRY) and added XML documentation summaries for `QuBit<T>` and `QuantumSystem` including collapse, entanglement and functional operation behaviour.
 - Diagnostics: Added `QuantumSystem.GateExecuted` and `QuantumSystem.GlobalCollapse` events for external tooling / benchmarks to subscribe and capture gate execution and collapse telemetry.
+- Performance: `ApplyMultiQubitGate` grouping now uses a pooled structural `PatternKey` (sentinel -1 for target indices) with `ArrayPool<int>.Shared` replacing per-state `string.Join` patterns, reducing GC allocations in large multi-qubit operations.
 
 ### Changed
 - Generalised entanglement collapse propagation in `QuantumSystem.ObserveGlobal` removing type-specific `QuBit<int|bool|Complex>` checks; now iterates all entanglement groups for any `IQuantumReference` enabling future custom qubit types without engine changes.

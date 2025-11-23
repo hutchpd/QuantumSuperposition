@@ -84,7 +84,6 @@ namespace QuantumSuperposition.Systems
 
             int[] distinctTargets = targetQubits.Distinct().OrderBy(i => i).ToArray();
             int numTargets = distinctTargets.Length;
-
             int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, distinctTargets.Max() + 1);
             EnsureWavefunctionLength(requiredLength);
 
@@ -98,20 +97,26 @@ namespace QuantumSuperposition.Systems
 
             _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, distinctTargets, gate, gateName));
             bool[] isTarget = new bool[requiredLength];
-            foreach (int tq in distinctTargets) { isTarget[tq] = true; }
+            foreach (int tq in distinctTargets) isTarget[tq] = true;
 
-            Dictionary<int[], List<int[]>> groups = new(new IntArrayComparer());
+            // PatternKey provides lightweight structural grouping without string allocations.
+            // We build patterns using a pooled array, copy to an owned array for the key, then return the pooled buffer.
+            Dictionary<PatternKey, List<int[]>> groups = new();
             foreach (int[] state in _amplitudes.Keys)
             {
-                int[] pattern = new int[requiredLength];
-                for (int i = 0; i < requiredLength; i++) { pattern[i] = isTarget[i] ? -1 : state[i]; }
-                if (!groups.TryGetValue(pattern, out List<int[]>? list)) { list = []; groups[pattern] = list; }
+                int[] tmp = ArrayPool<int>.Shared.Rent(requiredLength);
+                for (int i = 0; i < requiredLength; i++) tmp[i] = isTarget[i] ? -1 : state[i];
+                int[] owned = new int[requiredLength];
+                Array.Copy(tmp, owned, requiredLength);
+                ArrayPool<int>.Shared.Return(tmp);
+                PatternKey key = new(owned);
+                if (!groups.TryGetValue(key, out List<int[]>? list)) { list = []; groups[key] = list; }
                 list.Add(state);
             }
 
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
             Complex[] localVector = new Complex[expectedDim];
-            foreach (KeyValuePair<int[], List<int[]>> group in groups)
+            foreach (KeyValuePair<PatternKey, List<int[]>> group in groups)
             {
                 int[] exemplar = group.Value[0];
                 for (int mask = 0; mask < expectedDim; mask++)
@@ -141,6 +146,29 @@ namespace QuantumSuperposition.Systems
             }
             _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
             NormaliseAmplitudes();
+        }
+
+        private readonly struct PatternKey : IEquatable<PatternKey>
+        {
+            public readonly int[] Pattern;
+            public PatternKey(int[] pattern) { Pattern = pattern; }
+            public bool Equals(PatternKey other)
+            {
+                if (ReferenceEquals(Pattern, other.Pattern)) return true;
+                if (Pattern.Length != other.Pattern.Length) return false;
+                for (int i = 0; i < Pattern.Length; i++) if (Pattern[i] != other.Pattern[i]) return false;
+                return true;
+            }
+            public override bool Equals(object? obj) => obj is PatternKey pk && Equals(pk);
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int h = 17;
+                    for (int i = 0; i < Pattern.Length; i++) h = h * 31 + Pattern[i];
+                    return h;
+                }
+            }
         }
 
         // Helper: Converts the bits from a full basis state based on target indices.
