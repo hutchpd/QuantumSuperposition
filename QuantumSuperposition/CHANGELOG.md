@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Extensibility: `SetFromTensorProduct<T>` now accepts an optional `Func<T,int>` basis mapper to support non-int/bool basis types (e.g., enums or custom types). Defaults provided for `int`, `bool`, and any enum via `Convert.ToInt32`.
 - API: Back-compat overload `SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)` retained; it uses the default mapper.
 - Tests updated: new tests cover enum basis mapping and custom mapper usage; entanglement/collapse tests exercise corrected tensor-product wiring and registration behaviour.
+- Robustness: Expanded diagnostic detail in zero-probability exceptions for `PartialObserve` and `ObserveGlobal` (includes measured indices / projection indices, basis state count, group counts, total probability). Gate validation errors now include gate name, target indices and actual dimensions.
 
 ### Changed
 - Generalised entanglement collapse propagation in `QuantumSystem.ObserveGlobal` removing type-specific `QuBit<int|bool|Complex>` checks; now iterates all entanglement groups for any `IQuantumReference` enabling future custom qubit types without engine changes.
