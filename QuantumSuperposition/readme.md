@@ -67,7 +67,7 @@ Note: In the v1.7.5 release we fixed a subtle bug where `SetFromTensorProduct` c
 
 Also new: you can pass an optional `Func<T,int>` basis mapper to `SetFromTensorProduct` for custom domains (enums, tiny structs pretending to be bits). Defaults for `int`, `bool`, and any enum via `Convert.ToInt32` are provided. Build states your way; just keep them in the computational basis.
 
-Performance tweak: multi-qubit gate application previously grouped basis states via `string.Join` per state (allocating enough tiny strings to fill a small moon). This now uses structural pattern arrays with a sentinel, eliminating those allocations and speeding up Grover/QFT style circuits under large Hilbert spaces. Functional transforms (`Select`, `SelectMany`) also use hand-rolled iterators to cut down transient LINQ allocations when you throw thousands of states at them.
+Performance tweak: multi-qubit gate application previously grouped basis states via `string.Join` per state (allocating enough tiny strings to fill a small moon). This now uses structural pattern arrays with a sentinel, eliminating those allocations and speeding up Grover/QFT style circuits under large Hilbert spaces. Functional transforms (`Select`, `SelectMany`) also use hand-rolled iterators to cut down transient LINQ allocations when you throw thousands of states at them. Entanglement collapse propagation no longer hard-codes qubit generic types – any future qubit flavour implementing `IQuantumReference` gets propagation for free.
 
 ### 3. Entanglement Graph, Collapse Propagation, Diagnostics
 

@@ -11,6 +11,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - API: Back-compat overload `SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)` retained; it uses the default mapper.
 - Tests updated: new tests cover enum basis mapping and custom mapper usage; entanglement/collapse tests exercise corrected tensor-product wiring and registration behaviour.
 
+### Changed
+- Generalised entanglement collapse propagation in `QuantumSystem.ObserveGlobal` removing type-specific `QuBit<int|bool|Complex>` checks; now iterates all entanglement groups for any `IQuantumReference` enabling future custom qubit types without engine changes.
+
+### Internal
+- Refactored notification loop to call `Entanglement.GetGroupsForReference(refQ)` and propagate for each group id.
+
 ### Fixed
 - Bug: Previously `SetFromTensorProduct` created temporary local `QuBit<T>` instances that were not registered with the containing `QuantumSystem`, which caused missing `System` references, lost qubit indices, and incomplete collapse/entanglement propagation. This has been corrected.
 

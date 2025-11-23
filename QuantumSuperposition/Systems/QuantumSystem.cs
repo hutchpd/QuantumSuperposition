@@ -338,29 +338,23 @@ namespace QuantumSuperposition.Systems
                 throw new ArgumentNullException(nameof(qubitIndices));
             }
 
-            // Group amplitudes by projected values on qubitIndices
             Dictionary<int[], List<(int[] state, Complex amplitude)>> projectionGroups = new(new IntArrayComparer());
-
             foreach (KeyValuePair<int[], Complex> kvp in _amplitudes)
             {
                 int[] fullState = kvp.Key;
                 int[] projected = qubitIndices.Select(i => fullState[i]).ToArray();
-
                 if (!projectionGroups.ContainsKey(projected))
                 {
                     projectionGroups[projected] = [];
                 }
-
                 projectionGroups[projected].Add((fullState, kvp.Value));
             }
 
-            // Compute total probabilities for each projection group
             Dictionary<int[], double> probSums = projectionGroups.ToDictionary(
                 g => g.Key,
                 g => g.Value.Sum(x => x.amplitude.Magnitude * x.amplitude.Magnitude),
                 new IntArrayComparer()
             );
-
             double totalProb = probSums.Values.Sum();
             if (totalProb <= 1e-15)
             {
@@ -402,17 +396,10 @@ namespace QuantumSuperposition.Systems
                 if (refQ.GetQubitIndices().Intersect(qubitIndices).Any())
                 {
                     refQ.NotifyWavefunctionCollapsed(collapseId);
-                    if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
+                    // Generic entanglement propagation: propagate for all groups this reference belongs to.
+                    foreach (Guid groupId in Entanglement.GetGroupsForReference(refQ))
                     {
-                        Entanglement.PropagateCollapse(g1, collapseId);
-                    }
-                    else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
-                    {
-                        Entanglement.PropagateCollapse(g2, collapseId);
-                    }
-                    else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
-                    {
-                        Entanglement.PropagateCollapse(g3, collapseId);
+                        Entanglement.PropagateCollapse(groupId, collapseId);
                     }
                 }
             }
