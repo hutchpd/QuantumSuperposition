@@ -236,43 +236,69 @@ namespace QuantumSuperposition.Systems
         public int[] PartialObserve(int[] measuredIndices, Random? rng = null)
         {
             rng ??= Random.Shared;
-            Dictionary<string, List<(int[] state, Complex amplitude)>> groups = [];
+            if (measuredIndices == null || measuredIndices.Length == 0)
+            {
+                throw new ArgumentNullException(nameof(measuredIndices));
+            }
+
+            // Group by projected substate using structural int[] keys (avoids string allocations & parsing)
+            Dictionary<int[], List<(int[] state, Complex amplitude)>> groups = new(new IntArrayComparer());
             foreach (KeyValuePair<int[], Complex> kvp in _amplitudes)
             {
-                int[] state = kvp.Key;
-                int[] projection = measuredIndices.Select(i => state[i]).ToArray();
-                string key = string.Join(",", projection);
-                if (!groups.ContainsKey(key)) { groups[key] = []; }
-                groups[key].Add((state, kvp.Value));
+                int[] fullState = kvp.Key;
+                int[] projection = new int[measuredIndices.Length];
+                for (int i = 0; i < measuredIndices.Length; i++) projection[i] = fullState[measuredIndices[i]];
+                if (!groups.TryGetValue(projection, out List<(int[] state, Complex amplitude)>? list))
+                {
+                    list = new List<(int[] state, Complex amplitude)>();
+                    groups[projection] = list;
+                }
+                list.Add((fullState, kvp.Value));
             }
-            Dictionary<string, double> outcomeProbs = groups.ToDictionary(
-                g => g.Key,
-                g => g.Value.Sum(item => item.amplitude.Magnitude * item.amplitude.Magnitude)
-            );
+
+            // Compute probabilities per projection
+            Dictionary<int[], double> outcomeProbs = new(new IntArrayComparer());
+            foreach (var g in groups)
+            {
+                double p = 0.0;
+                foreach (var item in g.Value)
+                {
+                    double mag2 = item.amplitude.Magnitude * item.amplitude.Magnitude;
+                    p += mag2;
+                }
+                outcomeProbs[g.Key] = p;
+            }
             double totalProb = outcomeProbs.Values.Sum();
             if (totalProb < 1e-15)
             {
                 throw new InvalidOperationException($"Wavefunction is effectively zero. MeasuredIndices=[{string.Join(',', measuredIndices)}], BasisStates={_amplitudes.Count}, OutcomeGroups={groups.Count}, TotalProb={totalProb:E3}");
             }
+
+            // Roulette wheel selection over structural keys
             double roll = rng.NextDouble() * totalProb;
             double cumulative = 0.0;
-            string? chosenKey = null;
-            foreach (KeyValuePair<string, double> kv in outcomeProbs)
+            int[]? chosenProjection = null;
+            foreach (var kv in outcomeProbs)
             {
                 cumulative += kv.Value;
-                if (roll <= cumulative) { chosenKey = kv.Key; break; }
+                if (roll <= cumulative)
+                {
+                    chosenProjection = kv.Key;
+                    break;
+                }
             }
-            chosenKey ??= outcomeProbs.Keys.Last();
-            int[] chosenOutcome = chosenKey.Split(',').Select(int.Parse).ToArray();
+            chosenProjection ??= outcomeProbs.Keys.Last();
+
+            // Notify partial collapse for relevant registered references (bool qubits only for now)
             Guid collapseId = Guid.NewGuid();
             foreach (IQuantumReference refQ in _registered)
             {
                 if (refQ.GetQubitIndices().Intersect(measuredIndices).Any())
                 {
-                    (refQ as QuBit<bool>)?.PartialCollapse(chosenOutcome);
+                    (refQ as QuBit<bool>)?.PartialCollapse(chosenProjection);
                 }
             }
-            return chosenOutcome;
+            return chosenProjection;
         }
 
 
