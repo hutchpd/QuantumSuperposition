@@ -71,6 +71,40 @@ var amplitude00 = productDict[zeroZero];
 Assert.AreEqual(new Complex(2, 0), amplitude00);
 ```
 
+### Custom / Non-int Basis Mapping
+By default `SetFromTensorProduct` supports `int`, `bool` and `enum` types (enums are mapped via `Convert.ToInt32`). For other or non-standard mappings you can pass an optional `Func<T,int>` mapper to convert your domain type into computational basis integers.
+
+#### Example: enum (default mapper)
+```csharp
+// Local enum qubits are supported out-of-the-box (mapped via Convert.ToInt32)
+enum BitEnum { Zero = 0, One = 1 }
+
+var qa = new QuBit<BitEnum>(new[] { BitEnum.Zero, BitEnum.One });
+var qb = new QuBit<BitEnum>(new[] { BitEnum.Zero, BitEnum.One });
+
+_system.Entangle("EnumBell", qa, qb);
+// Use default mapper - enums get converted to their integer values
+_system.SetFromTensorProduct(true, qa, qb);
+
+// The system now contains basis states [0] and [1]
+```
+
+#### Example: custom mapper for arbitrary types
+```csharp
+// Suppose you have an odd domain type and want custom mapping
+enum Funky { Banana = 42, Apple = 7 }
+var qx = new QuBit<Funky>(new[] { Funky.Banana, Funky.Apple });
+var qy = new QuBit<Funky>(new[] { Funky.Banana, Funky.Apple });
+
+// Custom mapper collapses Banana -> 1, Apple -> 0 (your choice)
+int MapFunky(Funky v) => v == Funky.Banana ? 1 : 0;
+
+// Pass the mapper into SetFromTensorProduct
+_system.SetFromTensorProduct(true, MapFunky, qx, qy);
+
+// Now the global wavefunction uses the integers produced by MapFunky
+```
+
 ### Entangled Group Mutation Propagation
 Mutating one qubit in an entangled group propagates the change so the group remains consistent.
 

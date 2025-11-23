@@ -46,7 +46,8 @@ namespace QuantumSuperposition.QuantumSoup
             // I exist yelled the qubit, and the system is my parent! Daddy!!!
             System.Register(this);
 
-            _qList = [(T)Convert.ChangeType(0, typeof(T)), (T)Convert.ChangeType(1, typeof(T))];
+            // Initialise with no local states; system usage will provide weights via WithWeights.
+            _qList = Array.Empty<T>();
 
             // This qubit is in superposition until a collapse occurs
             _eType = QuantumStateType.SuperpositionAny;
@@ -872,6 +873,38 @@ namespace QuantumSuperposition.QuantumSoup
         /// <returns>The collapsed (observed) value.</returns>
         public override T Observe(Random? rng = null)
         {
+            // If this qubit belongs to a QuantumSystem, delegate to system-level observation
+            if (System != null)
+            {
+                object result = ((IQuantumReference)this).Observe(rng);
+                // Map system basis result back to T
+                if (result is T t)
+                {
+                    return t;
+                }
+                if (result is int bi)
+                {
+                    if (typeof(T) == typeof(bool))
+                    {
+                        return (T)(object)(bi != 0);
+                    }
+                    if (typeof(T) == typeof(int))
+                    {
+                        return (T)(object)bi;
+                    }
+                    if (typeof(T).IsEnum)
+                    {
+                        return (T)Enum.ToObject(typeof(T), bi);
+                    }
+                }
+                if (result is int[] arr && typeof(T) == typeof(int[]))
+                {
+                    return (T)(object)arr;
+                }
+                throw new InvalidOperationException($"Unsupported system observe mapping from {result.GetType()} to {typeof(T)}.");
+            }
+
+            // Fallback to local collapse
             return PerformCollapse(rng);
         }
 
@@ -1129,7 +1162,20 @@ namespace QuantumSuperposition.QuantumSoup
                 throw new ArgumentNullException(nameof(weights));
             }
 
-            // Filter weights to only include valid states.
+            if (System != null)
+            {
+                // For system-managed qubits, accept the provided weights verbatim and update local state.
+                _weights = new Dictionary<T, Complex>(weights);
+                _qList = _weights.Keys;
+                if (autoNormalise)
+                {
+                    NormaliseWeights();
+                }
+
+                return this;
+            }
+
+            // Filter weights to only include valid states for local qubits.
             Dictionary<T, Complex> filtered = [];
             foreach (KeyValuePair<T, Complex> kvp in weights)
             {
@@ -1139,32 +1185,18 @@ namespace QuantumSuperposition.QuantumSoup
                 }
             }
 
-            if (System != null)
+            // Because sometimes commitment is optional. Especially in quantum dating.
+            QuBit<T> newQ = new(_qList, filtered, _ops)
             {
-                // Update this instance’s weights in place.
-                _weights = filtered;
-                if (autoNormalise)
-                {
-                    NormaliseWeights();
-                }
-
-                return this;
-            }
-            else
+                _eType = _eType,
+                _weights = filtered
+            };
+            if (autoNormalise)
             {
-                // Because sometimes commitment is optional. Especially in quantum dating.
-                QuBit<T> newQ = new(_qList, filtered, _ops)
-                {
-                    _eType = _eType,
-                    _weights = filtered
-                };
-                if (autoNormalise)
-                {
-                    newQ.NormaliseWeights();
-                }
-
-                return newQ;
+                newQ.NormaliseWeights();
             }
+
+            return newQ;
         }
 
 
@@ -1422,25 +1454,10 @@ namespace QuantumSuperposition.QuantumSoup
                 return; 
             }
 
-            if (System.Amplitudes.Count != 1 && !_systemCollapseAttempted)
-            {
-                _systemCollapseAttempted = true;
-                try
-                {
-                    int[] projection = System.ObserveGlobal(_qubitIndices, Random.Shared);
-                    return;
-                }
-                catch
-                {
-                    // Ignore and proceed!
-                }
-            }
-
+            // Do not attempt to collapse the system here. Only react if the system is already collapsed.
             if (System.Amplitudes.Count != 1)
             {
-                _isCollapsedFromSystem = true;
-                _isActuallyCollapsed = true;
-                _eType = QuantumStateType.CollapsedResult;
+                // System not fully collapsed; nothing to do for this qubit yet.
                 return;
             }
 

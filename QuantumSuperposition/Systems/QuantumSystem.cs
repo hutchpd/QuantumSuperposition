@@ -331,52 +331,87 @@ namespace QuantumSuperposition.Systems
         }
 
         /// <summary>
+        /// Convenience overload preserving the previous API shape. Uses the default basis mapper.
+        /// </summary>
+        public void SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)
+        {
+            SetFromTensorProduct(propagateCollapse, (Func<T, int>?)null, qubits);
+        }
+
+        /// <summary>
         /// Builds a full wavefunction from individual qubits.
         /// It’s like assembling IKEA furniture, but all the screws are in superposition.
+        /// Ensures each qubit participating is system-managed and registered.
+        /// Local qubits (System == null) are replaced with new system qubits preserving their weighted states.
+        /// Existing system qubits are reused to keep entanglement and indices stable.
+        /// Supports optional basis mapping for non-int/bool types (e.g., enums) via mapToBasis.
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="qubits"></param>
-        /// <exception cref="ArgumentException"></exception>
-        /// <exception cref="InvalidOperationException"></exception>
-        public void SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)
+        /// <param name="propagateCollapse">If true, notify registered qubits of a synthetic collapse after construction.</param>
+        /// <param name="mapToBasis">Optional mapper converting values of T to computational basis integers.</param>
+        /// <param name="qubits">Input qubits (local or system-managed).</param>
+        public void SetFromTensorProduct<T>(bool propagateCollapse, Func<T, int>? mapToBasis = null, params QuBit<T>[] qubits)
         {
             if (qubits == null || qubits.Length == 0)
             {
                 throw new ArgumentException("At least one qubit must be provided.");
             }
 
-            int totalQubits = qubits.Length;
+            // Default mapper covers int, bool, and enums; users may supply custom mappers for other types.
+            mapToBasis ??= (v) =>
+            {
+                if (v is int iv) return iv;
+                if (v is bool bv) return bv ? 1 : 0;
+                if (typeof(T).IsEnum) return Convert.ToInt32(v);
+                throw new InvalidOperationException($"Unsupported type {typeof(T)} in tensor product state. Provide a mapToBasis function.");
+            };
 
-            // Update each qubit with a system-linked version.
+            int totalQubits = qubits.Length;
+            QuBit<T>[] systemManaged = new QuBit<T>[totalQubits];
+
             for (int i = 0; i < totalQubits; i++)
             {
                 QuBit<T> original = qubits[i];
-                QuBit<T> systemQubit = new(original.States, original.Operators);
+
+                if (original.System == this)
+                {
+                    // Already system-managed: reuse
+                    systemManaged[i] = original;
+                    continue;
+                }
+
+                // Assign indices sequentially if original had none.
+                int[] indices = original.GetQubitIndices();
+                if (indices == null || indices.Length == 0)
+                {
+                    indices = new[] { i }; // simple sequential mapping
+                }
+
+                // Create a new system qubit using the system constructor so registration occurs.
+                QuBit<T> sysQ = new QuBit<T>(this, indices);
+
+                // Copy weighted states from the original.
                 Dictionary<T, Complex> weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight);
-                QuBit<T> withWeights = systemQubit.WithWeights(weights, autoNormalise: false);
-                qubits[i] = withWeights;
+                _ = sysQ.WithWeights(weights, autoNormalise: false);
+
+                systemManaged[i] = sysQ; // store for product build
             }
 
-            // Compute tensor product using the updated qubits.
-            Dictionary<T[], Complex> product = QuantumMathUtility<T>.TensorProduct(qubits);
+            // Compute tensor product using system-managed qubits only.
+            Dictionary<T[], Complex> product = QuantumMathUtility<T>.TensorProduct(systemManaged);
 
-            // Convert to a global int[] wavefunction.
+            // Convert to a global int[] wavefunction using the mapper.
             Dictionary<int[], Complex> result = new(new IntArrayComparer());
             foreach ((T[] state, Complex amplitude) in product)
             {
-                int[] intState = state.Select(s =>
-                {
-                    return s is int i
-                        ? i
-                        : s is bool b ? b ? 1 : 0 : throw new InvalidOperationException($"Unsupported type {typeof(T)} in tensor product state.");
-                }).ToArray();
-
+                int[] intState = state.Select(s => mapToBasis(s)).ToArray();
                 result[intState] = amplitude;
             }
 
             _amplitudes = result;
             NormaliseAmplitudes();
 
+            // Propagate a synthetic collapse event to wire up entanglement and local observed values.
             if (propagateCollapse)
             {
                 Guid collapseId = Guid.NewGuid();

@@ -4,7 +4,7 @@ Feel free to copy–paste and tweak, but I’ve written it so you can more or le
 
 ---
 
-## QuantumSuperposition (.NET Library)
+## QuantumSuperposition (.NET Library) — v1.7.5
 
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 ![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
@@ -63,6 +63,10 @@ Actual tensor product over basis indices not hand wavy list multiplication.
   var outcome = system.PartialObserve(new[] { 0, 2 });
   ```
 
+Note: In the v1.7.5 release we fixed a subtle bug where `SetFromTensorProduct` created temporary local `QuBit<T>` objects that weren't registered with the `QuantumSystem`. That meant collapse propagation, partial observation and entanglement bookkeeping could get confused like a cat chasing two red dots. Now local qubits passed into `SetFromTensorProduct` are promoted to system-managed `QuBit<T>` instances (constructed via `QuBit(QuantumSystem, int[])`) and registered so they keep their indices and entanglement wiring intact.
+
+Also new: you can pass an optional `Func<T,int>` basis mapper to `SetFromTensorProduct` for custom domains (enums, tiny structs pretending to be bits). Defaults for `int`, `bool`, and any enum via `Convert.ToInt32` are provided. Build states your way; just keep them in the computational basis.
+
 ### 3. Entanglement Graph, Collapse Propagation, Diagnostics
 
 - Group labels and versioning
@@ -103,7 +107,7 @@ Proper entanglement manager with tagging, locking, multi party agreement and gua
   system.ApplyTwoQubitGate(0, 1, QuantumGates.CNOT.Matrix, "CNOT");
 
   // Visualise circuit before processing
-  var schedule = system.VisualizeGateSchedule(totalQubits: 2);
+  var schedule = system.VisualiseGateSchedule(totalQubits: 2);
   Console.WriteLine(schedule);
 
   // Process queue
