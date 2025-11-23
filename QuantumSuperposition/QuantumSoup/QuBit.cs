@@ -7,10 +7,25 @@ using System.Text.Json;
 
 namespace QuantumSuperposition.QuantumSoup
 {
+    /// <summary>
+    /// Represents a quantum superposition over a set of typed values. Each instance may be standalone (local) or
+    /// registered inside a <see cref="QuantumSystem"/> to participate in global wavefunction operations (tensor products,
+    /// gate scheduling, entanglement and collapse propagation).
+    /// <para>Key behaviours:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Local vs System-managed:</b> Local qubits maintain their own amplitude dictionary; system qubits defer observation and collapse to the parent system.</description></item>
+    /// <item><description><b>Collapse:</b> Calling <see cref="Observe"/> probabilistically selects a value based on amplitudes, normalises to a single outcome and sets the internal state type to <c>CollapsedResult</c>. System-managed qubits notify and synchronise via the global wavefunction.</description></item>
+    /// <item><description><b>Entanglement:</b> When linked in an entanglement group via <see cref="EntanglementManager.Link"/> a collapse of any member propagates to others (managed by <see cref="QuantumSystem.ObserveGlobal"/> and <see cref="EntanglementManager.PropagateCollapse"/>).</description></item>
+    /// <item><description><b>Functional operations:</b> Non-observational transforms (e.g. <see cref="Select"/>, <see cref="Where"/>, arithmetic with <c>QuantumConfig.EnableNonObservationalArithmetic</c>) preserve superposition without forcing collapse.</description></item>
+    /// </list>
+    /// </summary>
     public partial class QuBit<T> : QuantumSoup<T>, IQuantumReference
     {
-        private bool _systemCollapseAttempted; // recursion guard for system collapse
-        private new readonly Func<T, bool> _valueValidator;
+        private bool _systemCollapseAttempted;
+        private static Func<T, bool> DefaultValidator => v => !EqualityComparer<T>.Default.Equals(v, default);
+        // Backing field for validator; override base property via expression.
+        private Func<T, bool> _validator = DefaultValidator;
+        protected override Func<T, bool> _valueValidator => _validator;
 
         private readonly int[] _qubitIndices;
         private bool _isCollapsedFromSystem;
@@ -18,364 +33,93 @@ namespace QuantumSuperposition.QuantumSoup
         public QuantumSystem? System { get; }
 
         public Guid? EntanglementGroupId { get; private set; }
-        public void SetEntanglementGroup(Guid id)
-        {
-            EntanglementGroupId = id;
-        }
+        public void SetEntanglementGroup(Guid id) => EntanglementGroupId = id;
 
         public bool IsInSuperposition => _eType == QuantumStateType.SuperpositionAny && !_isActuallyCollapsed;
 
         #region Constructors
-        // Constructors that enable you to manifest chaotic energy into a typed container.
-        // Also known as: Creating a mess in a mathematically defensible way.
 
-
-        // A simpler constructor for the entangled case:
-
-        public QuBit(QuantumSystem system, int[] qubitIndices)
-
+        private void InitValidator(Func<T, bool>? validator)
         {
-
-            // If T = (int,bool) then qubitIndices might be new[] {0,1}.
-            // If T = int only, maybe qubitIndices = new[] {0}, etc.
-
-            System = system;
-            _qubitIndices = qubitIndices ?? Array.Empty<int>();
-            _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
-
-            // I exist yelled the qubit, and the system is my parent! Daddy!!!
-            System.Register(this);
-
-            // Initialise with no local states; system usage will provide weights via WithWeights.
-            _qList = Array.Empty<T>();
-
-            // This qubit is in superposition until a collapse occurs
-            _eType = QuantumStateType.SuperpositionAny;
-
+            _validator = validator ?? DefaultValidator;
         }
 
-        /// <summary>
-        /// If we have no quantum system, we fallback to local states:
-        /// </summary>
-        /// <param name="Items"></param>
-        /// <param name="ops"></param>
-        /// <param name="valueValidator"></param>
+        public QuBit(QuantumSystem system, int[] qubitIndices, Func<T, bool>? valueValidator = null)
+        {
+            System = system;
+            _qubitIndices = qubitIndices ?? Array.Empty<int>();
+            InitValidator(valueValidator);
+            System.Register(this);
+            _qList = Array.Empty<T>();
+            _eType = QuantumStateType.SuperpositionAny;
+        }
+
         public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
             : this(Items, ops)
         {
-            _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+            InitValidator(valueValidator);
+        }
+
+        public QuBit(IEnumerable<T> items)
+            : this(items, _defaultOps)
+        {
+            // Binary compatibility constructor (no validator param) expected by Positronic tests.
+            InitValidator(null);
         }
 
         public QuBit(IEnumerable<T> Items, Func<T, bool>? valueValidator = null)
-            : this(Items, _defaultOps, valueValidator)
-        { }
+            : this(Items, _defaultOps)
+        {
+            InitValidator(valueValidator);
+        }
 
         public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
             : this(weightedItems, ops)
         {
-            _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+            InitValidator(valueValidator);
         }
 
         public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, Func<T, bool>? valueValidator = null)
-            : this(weightedItems, _defaultOps, valueValidator)
-        { }
+            : this(weightedItems, _defaultOps)
+        {
+            InitValidator(valueValidator);
+        }
 
         internal QuBit(IEnumerable<T> items, Dictionary<T, Complex>? weights, IQuantumOperators<T> ops, Func<T, bool>? valueValidator = null)
             : this(items, weights, ops)
         {
-            _valueValidator = valueValidator ?? (v => !EqualityComparer<T>.Default.Equals(v, default));
+            InitValidator(valueValidator);
         }
 
-        /// <summary>
-        /// Applies a quantum conditional - like an if-else, but across all timelines.
-        /// Each branch of the superposition is checked with a predicate.
-        /// If the predicate is true, the <paramref name="ifTrue"/> function is applied to that branch;
-        /// otherwise, <paramref name="ifFalse"/> is applied.
-        /// 
-        /// The resulting states are merged, and their amplitudes are weighted accordingly.
-        /// No collapse occurs. Nobody gets observed. Reality remains deeply confused.
-        /// </summary>
-        /// <param name="predicate">
-        /// A function that decides whether a given branch deserves to go down the happy path. Think Loki season 2 but with weightings.
-        /// </param>
-        /// <param name="ifTrue">
-        /// Transformation applied to branches that satisfy the predicate.
-        /// Think of this as the "yes, and..." timeline.
-        /// </param>
-        /// <param name="ifFalse">
-        /// Transformation for the other branches - the "meh, fine" timeline.
-        /// </param>
-        /// <returns>
-        /// A new QuBit that merges the transformed branches into one beautifully indecisive superposition.
-        /// </returns>
-        public QuBit<T> Conditional(
-            Func<T, Complex, bool> weightedPredicate,
-            Func<QuBit<T>, QuBit<T>> ifTrue,
-            Func<QuBit<T>, QuBit<T>> ifFalse)
-        {
-            Dictionary<T, Complex> newWeights = [];
-            List<T> newStates = [];
-
-            foreach ((T value, Complex weight) in ToWeightedValues())
-            {
-                // Create a branch qubit for the current state with its weight
-                QuBit<T> branchQubit = new QuBit<T>(new[] { value }, Operators)
-                                  .WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
-
-                // Use the weight-aware predicate to choose the branch function.
-                // The predicate now receives the current state value and its weight.
-                QuBit<T> mappedBranch = weightedPredicate(value, weight)
-                    ? ifTrue(branchQubit)
-                    : ifFalse(branchQubit);
-
-                // When recombining, multiply the original branch weight with the branch’s transformation weight.
-                foreach ((T mappedValue, Complex mappedWeight) in mappedBranch.ToWeightedValues())
-                {
-                    Complex combinedWeight = weight * mappedWeight;
-                    if (newWeights.ContainsKey(mappedValue))
-                    {
-                        newWeights[mappedValue] += combinedWeight;
-                    }
-                    else
-                    {
-                        newWeights[mappedValue] = combinedWeight;
-                        newStates.Add(mappedValue);
-                    }
-                }
-            }
-
-            return new QuBit<T>(newStates, newWeights, Operators);
-        }
-
-        /// <summary>
-        /// Applies a transformation to every possible state in the qubit - like a map,
-        /// but across all realities at once.
-        ///
-        /// Each branch is run through the <paramref name="selector"/> function, producing
-        /// a new set of possibilities in a parallel type universe. The original quantum
-        /// amplitudes (weights) are preserved, because we care about continuity.
-        ///
-        /// No collapse happens. No commitment is made. The universe remains beautifully noncommittal.
-        /// </summary>
-        /// <typeparam name="TResult">
-        /// The type each original state gets transformed into. Like evolving your indecision into a new, equally undecided form.
-        /// </typeparam>
-        /// <param name="selector">
-        /// A function that transforms a state from T to TResult, without actually forcing it to pick one.
-        /// </param>
-        /// <returns>
-        /// A new QuBit<TResult> holding the transformed superposition,
-        /// complete with its inherited existential probabilities.
-        /// </returns>
-        public QuBit<TResult> Select<TResult>(Func<T, TResult> selector)
-        {
-            if (selector == null)
-            {
-                throw new ArgumentNullException(nameof(selector));
-            }
-
-            // Manual iterator – avoids LINQ .Select allocation over large superpositions.
-            IEnumerable<(TResult value, Complex weight)> Mapped()
-            {
-                foreach ((T value, Complex weight) in ToWeightedValues())
-                {
-                    yield return (selector(value), weight);
-                }
-            }
-
-            IQuantumOperators<TResult> newOps = QuantumOperatorsFactory.GetOperators<TResult>();
-            return new QuBit<TResult>(Mapped(), newOps);
-        }
-
-        /// <summary>
-        /// Projects each quantum branch into a new qubit and flattens the result.
-        /// Uses a manual iterator to reduce LINQ overhead for large state spaces.
-        /// </summary>
-        /// <typeparam name="TResult">
-        /// The resulting type of each new quantum reality after transformation.
-        /// </typeparam>
-        /// <param name="selector">
-        /// A function that takes a single state and returns a whole new qubit. That’s right,
-        /// each state gets to live its best alternate life.
-        /// </param>
-        /// <returns>
-        /// A new <see cref="QuBit{TResult}"/> representing all possible child states,
-        /// appropriately weighted by quantum guilt (a.k.a. amplitude multiplication).
-        /// </returns>
-        public QuBit<TResult> SelectMany<TResult>(Func<T, QuBit<TResult>> selector)
-        {
-            if (selector == null)
-            {
-                throw new ArgumentNullException(nameof(selector));
-            }
-
-            IEnumerable<(TResult value, Complex weight)> Combined()
-            {
-                foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
-                {
-                    QuBit<TResult> inner = selector(outerValue);
-                    foreach ((TResult innerValue, Complex innerWeight) in inner.ToWeightedValues())
-                    {
-                        yield return (innerValue, outerWeight * innerWeight);
-                    }
-                }
-            }
-
-            return new QuBit<TResult>(Combined(), QuantumOperatorsFactory.GetOperators<TResult>());
-        }
-
-        /// <summary>
-        /// Projects each quantum state into a new qubit, then combines outer & inner values.
-        /// Manual iterator removes intermediate LINQ allocations.
-        /// </summary>
-        /// <typeparam name="TResult">
-        /// The intermediate state produced by the selector.
-        /// </typeparam>
-        /// <typeparam name="TResult2">
-        /// The final projected type, formed by combining the outer and inner results.
-        /// </typeparam>
-        /// <param name="selector">
-        /// A function that transforms each original value into a new qubit.
-        /// </param>
-        /// <param name="resultSelector">
-        /// A function that combines the outer and inner values into something beautiful and final.
-        /// </param>
-        /// <returns>
-        /// A <see cref="QuBit{TResult2}"/> representing the fused aftermath of all superposed transformations.
-        /// </returns>
-        public QuBit<TResult2> SelectMany<TResult, TResult2>(
-            Func<T, QuBit<TResult>> selector,
-            Func<T, TResult, TResult2> resultSelector)
-        {
-            if (selector == null)
-            {
-                throw new ArgumentNullException(nameof(selector));
-            }
-            if (resultSelector == null)
-            {
-                throw new ArgumentNullException(nameof(resultSelector));
-            }
-
-            IEnumerable<(TResult2 value, Complex weight)> Combined()
-            {
-                foreach ((T outerValue, Complex outerWeight) in ToWeightedValues())
-                {
-                    QuBit<TResult> inner = selector(outerValue);
-                    foreach ((TResult innerValue, Complex innerWeight) in inner.ToWeightedValues())
-                    {
-                        yield return (resultSelector(outerValue, innerValue), outerWeight * innerWeight);
-                    }
-                }
-            }
-
-            return new QuBit<TResult2>(Combined(), QuantumOperatorsFactory.GetOperators<TResult2>());
-        }
-
-        /// <summary>
-        /// Filters the multiverse down to only those branches that satisfy your criteria -
-        /// a little quantum Marie Kondo moment.
-        ///
-        /// Any state that doesn’t spark joy (or pass the predicate) is quietly discarded into
-        /// the void. Their amplitudes will not be missed.
-        /// </summary>
-        /// <param name="predicate">
-        /// A function used to judge the life choices of each possible state.
-        /// </param>
-        /// <returns>
-        /// A new <see cref="QuBit{T}"/> containing only the morally and mathematically acceptable states.
-        /// </returns>
-        public QuBit<T> Where(Func<T, bool> predicate)
-        {
-            if (predicate == null)
-            {
-                throw new ArgumentNullException(nameof(predicate));
-            }
-
-            // Lazy iterator filtering the weighted states:
-            IEnumerable<(T value, Complex weight)> Filter()
-            {
-                foreach ((T value, Complex weight) in ToWeightedValues())
-                {
-                    if (predicate(value))
-                    {
-                        yield return (value, weight);
-                    }
-                }
-            }
-
-            return new QuBit<T>(Filter(), Operators);
-        }
-
-
-        public static QuBit<T> Superposed(IEnumerable<T> states)
-        {
-            QuBit<T> qubit = new(states);
-            int distinctCount = qubit.States.Distinct().Count();
-            if (distinctCount > 1)
-            {
-                qubit._eType = QuantumStateType.SuperpositionAny;
-            }
-
-            return qubit;
-        }
-
-        // Main constructor for unweighted items (local useage)
         public QuBit(IEnumerable<T> Items, IQuantumOperators<T> ops)
         {
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
             _qList = Items ?? throw new ArgumentNullException(nameof(Items));
-
-            if (_qList.Distinct().Count() > 1)
-            {
-                _eType = QuantumStateType.SuperpositionAny;
-            }
-
-            // no system
+            if (_qList.Distinct().Count() > 1) _eType = QuantumStateType.SuperpositionAny;
             System = null;
             _qubitIndices = Array.Empty<int>();
-            _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
+            InitValidator(null);
         }
 
-        public QuBit(IEnumerable<T> Items)
-            : this(Items, _defaultOps)
-        { }
-
-
         public QuBit(IEnumerable<(T value, Complex weight)> weightedItems)
-            : this(weightedItems, _defaultOps)
-        { }
+            : this(weightedItems, _defaultOps) { }
 
         public QuBit(IEnumerable<(T value, Complex weight)> weightedItems, IQuantumOperators<T> ops)
         {
-            if (weightedItems == null)
-            {
-                throw new ArgumentNullException(nameof(weightedItems));
-            }
-
+            if (weightedItems == null) throw new ArgumentNullException(nameof(weightedItems));
             _ops = ops ?? throw new ArgumentNullException(nameof(ops));
-
             Dictionary<T, Complex> dict = [];
             foreach ((T val, Complex w) in weightedItems)
             {
-                if (!dict.ContainsKey(val))
-                {
-                    dict[val] = Complex.Zero;
-                }
-
+                if (!dict.ContainsKey(val)) dict[val] = Complex.Zero;
                 dict[val] += w;
             }
             _weights = dict;
-            _qList = dict.Keys; // keep a fallback list of keys
-
-            if (_weights.Count > 1)
-            {
-                SetType(QuantumStateType.SuperpositionAny);
-            }
-
-            // no system
+            _qList = dict.Keys;
+            if (_weights.Count > 1) SetType(QuantumStateType.SuperpositionAny);
             System = null;
             _qubitIndices = Array.Empty<int>();
-            _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
+            InitValidator(null);
         }
 
         internal QuBit(IEnumerable<T> items, Dictionary<T, Complex>? weights, IQuantumOperators<T> ops)
@@ -383,19 +127,11 @@ namespace QuantumSuperposition.QuantumSoup
             _qList = items;
             _weights = weights;
             _ops = ops;
-
-            if (States.Distinct().Count() > 1)
-            {
-                SetType(QuantumStateType.SuperpositionAny);
-            }
-
-            // no system
+            if (States.Distinct().Count() > 1) SetType(QuantumStateType.SuperpositionAny);
             System = null;
             _qubitIndices = Array.Empty<int>();
-            _valueValidator = v => !EqualityComparer<T>.Default.Equals(v, default);
+            InitValidator(null);
         }
-
-
         #endregion
 
 
@@ -1636,5 +1372,104 @@ namespace QuantumSuperposition.QuantumSoup
 
         #endregion
 
+        #region Functional / LINQ-style Operators
+        /// <summary>
+        /// Applies a quantum conditional across all weighted branches without collapsing.
+        /// Each branch is tested via <paramref name="weightedPredicate"/> receiving the value and its amplitude.
+        /// The chosen branch transform (<paramref name="ifTrue"/> or <paramref name="ifFalse"/>) returns a new qubit whose weights are multiplied by the original branch weight.
+        /// </summary>
+        public QuBit<T> Conditional(
+            Func<T, Complex, bool> weightedPredicate,
+            Func<QuBit<T>, QuBit<T>> ifTrue,
+            Func<QuBit<T>, QuBit<T>> ifFalse)
+        {
+            if (weightedPredicate == null) throw new ArgumentNullException(nameof(weightedPredicate));
+            if (ifTrue == null) throw new ArgumentNullException(nameof(ifTrue));
+            if (ifFalse == null) throw new ArgumentNullException(nameof(ifFalse));
+
+            Dictionary<T, Complex> newWeights = [];
+            List<T> newStates = [];
+            foreach ((T value, Complex weight) in ToWeightedValues())
+            {
+                QuBit<T> branchQubit = new QuBit<T>(new[] { value }, Operators)
+                    .WithWeights(new Dictionary<T, Complex> { { value, weight } }, autoNormalise: false);
+                QuBit<T> mappedBranch = weightedPredicate(value, weight) ? ifTrue(branchQubit) : ifFalse(branchQubit);
+                foreach ((T mappedValue, Complex mappedWeight) in mappedBranch.ToWeightedValues())
+                {
+                    Complex combinedWeight = weight * mappedWeight;
+                    if (newWeights.ContainsKey(mappedValue)) newWeights[mappedValue] += combinedWeight;
+                    else { newWeights[mappedValue] = combinedWeight; newStates.Add(mappedValue); }
+                }
+            }
+            return new QuBit<T>(newStates, newWeights, Operators);
+        }
+
+        /// <summary>
+        /// Maps each possible state to a new value preserving amplitudes (non observational).
+        /// </summary>
+        public QuBit<TResult> Select<TResult>(Func<T, TResult> selector)
+        {
+            if (selector == null) throw new ArgumentNullException(nameof(selector));
+            IEnumerable<(TResult value, Complex weight)> Iterator()
+            {
+                foreach ((T v, Complex w) in ToWeightedValues()) yield return (selector(v), w);
+            }
+            return new QuBit<TResult>(Iterator(), QuantumOperatorsFactory.GetOperators<TResult>());
+        }
+
+        /// <summary>
+        /// Projects each state into an inner qubit and flattens, multiplying amplitudes.
+        /// </summary>
+        public QuBit<TResult> SelectMany<TResult>(Func<T, QuBit<TResult>> selector)
+        {
+            if (selector == null) throw new ArgumentNullException(nameof(selector));
+            IEnumerable<(TResult value, Complex weight)> Iterator()
+            {
+                foreach ((T outer, Complex wOuter) in ToWeightedValues())
+                {
+                    QuBit<TResult> inner = selector(outer);
+                    foreach ((TResult innerVal, Complex wInner) in inner.ToWeightedValues())
+                    {
+                        yield return (innerVal, wOuter * wInner);
+                    }
+                }
+            }
+            return new QuBit<TResult>(Iterator(), QuantumOperatorsFactory.GetOperators<TResult>());
+        }
+
+        /// <summary>
+        /// Dual-selector SelectMany variant combining outer and inner values.
+        /// </summary>
+        public QuBit<TResult2> SelectMany<TResult, TResult2>(Func<T, QuBit<TResult>> selector, Func<T, TResult, TResult2> resultSelector)
+        {
+            if (selector == null) throw new ArgumentNullException(nameof(selector));
+            if (resultSelector == null) throw new ArgumentNullException(nameof(resultSelector));
+            IEnumerable<(TResult2 value, Complex weight)> Iterator()
+            {
+                foreach ((T outer, Complex wOuter) in ToWeightedValues())
+                {
+                    QuBit<TResult> inner = selector(outer);
+                    foreach ((TResult innerVal, Complex wInner) in inner.ToWeightedValues())
+                    {
+                        yield return (resultSelector(outer, innerVal), wOuter * wInner);
+                    }
+                }
+            }
+            return new QuBit<TResult2>(Iterator(), QuantumOperatorsFactory.GetOperators<TResult2>());
+        }
+
+        /// <summary>
+        /// Filters weighted states using a predicate without collapsing.
+        /// </summary>
+        public QuBit<T> Where(Func<T, bool> predicate)
+        {
+            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+            IEnumerable<(T value, Complex weight)> Iterator()
+            {
+                foreach ((T v, Complex w) in ToWeightedValues()) if (predicate(v)) yield return (v, w);
+            }
+            return new QuBit<T>(Iterator(), Operators);
+        }
+        #endregion
     }
 }

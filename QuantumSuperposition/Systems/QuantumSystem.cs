@@ -6,11 +6,25 @@ using System.Buffers;
 
 namespace QuantumSuperposition.Systems
 {
+    /// <summary>
+    /// Represents a global quantum wavefunction constructed from one or more <see cref="QuBit{T}"/> instances.
+    /// Provides tensor product construction, gate scheduling and optimisation, global and partial observation,
+    /// and entanglement propagation.
+    /// </summary>
     public class QuantumSystem
     {
+        /// <summary>
+        /// Raised after a gate batch is processed. Provides gate name, target indices and current amplitude count.
+        /// Subscribe for lightweight diagnostics (avoid heavy work inside handlers).
+        /// </summary>
+        public event Action<string,int[],int>? GateExecuted;
+        /// <summary>
+        /// Raised after a global collapse. Provides observed indices and the resulting projection.
+        /// </summary>
+        public event Action<int[],int[]>? GlobalCollapse;
+
         private Dictionary<int[], Complex> _amplitudes = [];
         private readonly List<IQuantumReference> _registered = [];
-
         public EntanglementManager Entanglement { get; } = new();
         private Queue<GateOperation> _gateQueue = new();
 
@@ -331,6 +345,7 @@ namespace QuantumSuperposition.Systems
                     foreach (Guid groupId in Entanglement.GetGroupsForReference(refQ)) { Entanglement.PropagateCollapse(groupId, collapseId); }
                 }
             }
+            GlobalCollapse?.Invoke(qubitIndices, chosenProjection);
             return chosenProjection;
         }
 
@@ -613,25 +628,22 @@ namespace QuantumSuperposition.Systems
         private void ProcessSingleQubitGate(int qubit, Complex[,] gate)
         {
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
-            // Group states by all other qubits (pattern with *)
             var groups = _amplitudes.Keys.GroupBy(state => string.Join(",", state.Select((v, idx) => idx == qubit ? "*" : v.ToString())));
             foreach (var group in groups)
             {
-                // Build amplitudes a0,a1 from existing or zero
                 int[] exemplar = group.First();
-                int length = exemplar.Length;
                 int[] basis0 = (int[])exemplar.Clone(); basis0[qubit] = 0;
                 int[] basis1 = (int[])exemplar.Clone(); basis1[qubit] = 1;
                 _ = _amplitudes.TryGetValue(basis0, out Complex a0);
                 _ = _amplitudes.TryGetValue(basis1, out Complex a1);
-                // Apply gate: new amplitudes for |0> and |1>
                 Complex new0 = gate[0,0]*a0 + gate[0,1]*a1;
                 Complex new1 = gate[1,0]*a0 + gate[1,1]*a1;
                 if (new0 != Complex.Zero) newAmps[basis0] = new0;
                 if (new1 != Complex.Zero) newAmps[basis1] = new1;
             }
-            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps; // keep even if empty
+            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
             NormaliseAmplitudes();
+            GateExecuted?.Invoke("SingleQubitGate", new[]{qubit}, _amplitudes.Count);
         }
 
         /// <summary>
@@ -649,21 +661,17 @@ namespace QuantumSuperposition.Systems
             Dictionary<int[], Complex> newAmplitudes = new(new IntArrayComparer());
             foreach (var group in grouped)
             {
-                // Build complete 4 basis variants for local two qubits combined with other fixed bits.
                 int[] exemplar = group.Value.First();
-                int length = exemplar.Length;
                 var localVariants = new Dictionary<(int a,int b), int[]>();
                 for (int a=0;a<2;a++)
                 {
                     for (int b=0;b<2;b++)
                     {
                         int[] basis = (int[])exemplar.Clone();
-                        basis[qubitA] = a;
-                        basis[qubitB] = b;
+                        basis[qubitA] = a; basis[qubitB] = b;
                         localVariants[(a,b)] = basis;
                     }
                 }
-                // Build input vector
                 Complex[] vec = new Complex[4];
                 foreach (var kv in localVariants)
                 {
@@ -671,17 +679,16 @@ namespace QuantumSuperposition.Systems
                     int idx = (kv.Key.a << 1) | kv.Key.b;
                     vec[idx] = amp;
                 }
-                // Apply gate
                 Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
                 foreach (var kv in localVariants)
                 {
                     int idx = (kv.Key.a << 1) | kv.Key.b;
-                    if (newVec[idx] != Complex.Zero)
-                        newAmplitudes[kv.Value] = newVec[idx];
+                    if (newVec[idx] != Complex.Zero) newAmplitudes[kv.Value] = newVec[idx];
                 }
             }
             _amplitudes = newAmplitudes.Count>0? newAmplitudes : newAmplitudes;
             NormaliseAmplitudes();
+            GateExecuted?.Invoke("TwoQubitGate", new[]{qubitA, qubitB}, _amplitudes.Count);
         }
 
         /// <summary>

@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Tests updated: new tests cover enum and struct basis mapping, entanglement collapse propagation, partial observation edge cases (zero amplitude), and gate queue optimisation (cancelling inverse gates).
 - Benchmarks: Added BenchmarkDotNet project (`QuantumBenchmarks`) with microbenchmarks for `ApplyMultiQubitGate`, `SetFromTensorProduct`, and gate queue optimisation (`ProcessGateQueue`) at qubit counts 6–16 to track throughput and allocation regressions.
 - Robustness: Expanded diagnostic detail in zero-probability exceptions for `PartialObserve` and `ObserveGlobal` (includes measured indices / projection indices, basis state count, group counts, total probability). Gate validation errors now include gate name, target indices and actual dimensions.
+- API Cleanliness: Refactored `QuBit<T>` constructors to centralise validator initialisation (DRY) and added XML documentation summaries for `QuBit<T>` and `QuantumSystem` including collapse, entanglement and functional operation behaviour.
+- Diagnostics: Added `QuantumSystem.GateExecuted` and `QuantumSystem.GlobalCollapse` events for external tooling / benchmarks to subscribe and capture gate execution and collapse telemetry.
 
 ### Changed
 - Generalised entanglement collapse propagation in `QuantumSystem.ObserveGlobal` removing type-specific `QuBit<int|bool|Complex>` checks; now iterates all entanglement groups for any `IQuantumReference` enabling future custom qubit types without engine changes.
