@@ -31,6 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - Non observational arithmetic flag (`QuantumConfig.EnableNonObservationalArithmetic`) enabling scalar and pairwise arithmetic without forced collapse; includes commutative optimisation cache.
 - Tolerant equality: `QuantumRegister.AlmostEquals`, `Eigenstates<T>.AlmostEquals` probability mass based comparisons.
 - Entanglement graph diagnostics and versioning utilities; tagging, partial collapse staging, locking / freezing and multi party collapse agreement.
+- Performance: Multi-qubit gate application now uses structural grouping (pattern arrays with sentinel -1) instead of string.Join which previously allocated per state; avoids transient string objects and reduces GC pressure in large Hilbert spaces.
 
 ### Changed
 - README completely restructured for clarity: capability sections, documentation map, British English spelling, concise feature matrix.
@@ -48,6 +49,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 ### Performance
 - Commutative optimisation avoids duplicate evaluation of pure operations (e.g. caching results for `a + b` vs `b + a`).
 - Select / Where chains retain lazy non collapse semantics reducing unnecessary sampling.
+- Multi-qubit gate grouping no longer performs string concatenations; structural pattern hashing accelerates Grover / QFT circuits.
 
 ### Documentation
 - Added usage examples for prime detection, factors, minimum value extraction and multi qubit gate application.

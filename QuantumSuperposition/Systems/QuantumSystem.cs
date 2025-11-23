@@ -2,6 +2,7 @@
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Utilities;
 using System.Numerics;
+using System.Buffers;
 
 namespace QuantumSuperposition.Systems
 {
@@ -14,49 +15,139 @@ namespace QuantumSuperposition.Systems
         private Queue<GateOperation> _gateQueue = new();
 
         /// <summary>
+        /// Ensures the internal wavefunction basis length is at least requiredLength.
+        /// If empty: initialise |00...0> state.
+        /// If shorter: pad existing basis states with zeros.
+        /// </summary>
+        private void EnsureWavefunctionLength(int requiredLength)
+        {
+            if (requiredLength <= 0)
+            {
+                return;
+            }
+
+            if (_amplitudes.Count == 0)
+            {
+                int[] zeroState = new int[requiredLength];
+                _amplitudes[zeroState] = Complex.One;
+                return;
+            }
+
+            int currentLength = _amplitudes.Keys.First().Length;
+            if (currentLength == requiredLength)
+            {
+                return;
+            }
+
+            if (currentLength > requiredLength)
+            {
+                // Already larger; nothing to do.
+                return;
+            }
+
+            Dictionary<int[], Complex> expanded = new(new IntArrayComparer());
+            foreach (KeyValuePair<int[], Complex> kv in _amplitudes)
+            {
+                int[] old = kv.Key;
+                int[] newer = new int[requiredLength];
+                Array.Copy(old, newer, old.Length);
+                expanded[newer] = kv.Value;
+            }
+            _amplitudes = expanded;
+        }
+
+        /// <summary>
         /// Applies a unitary gate to a set of target qubits.
-        /// This implementation groups amplitudes that differ only on the target indices,
-        /// multiplies each group’s subvector with the provided gate,
-        /// and then updates the full state.
+        /// Optimised: structural grouping using sentinel -1 (no string allocations).
+        /// Handles duplicate target indices & auto-expands wavefunction length if needed.
         /// </summary>
         public void ApplyMultiQubitGate(int[] targetQubits, Complex[,] gate, string gateName)
         {
-            Dictionary<int[], Complex> currentAmps = new(_amplitudes, new IntArrayComparer());
-            int numTargets = targetQubits.Length;
-            int d = 1 << numTargets;
-            Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
-            _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, targetQubits, gate, gateName));
-            // Group by unaffected qubits pattern
-            var groups = currentAmps.Keys.GroupBy(state => string.Join(",", state.Select((v,i) => targetQubits.Contains(i)? "*" : v.ToString())));
-            foreach (var group in groups)
+            if (targetQubits == null || targetQubits.Length == 0)
             {
-                int[] exemplar = group.First();
-                // Build all 2^n variants
-                var variants = new Dictionary<int, int[]>();
-                for (int mask=0; mask<d; mask++)
+                throw new ArgumentException("At least one target qubit required.");
+            }
+
+            int[] distinctTargets = targetQubits.Distinct().OrderBy(i => i).ToArray();
+            int numTargets = distinctTargets.Length;
+
+            // Ensure wavefunction basis length can address highest target index.
+            int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, distinctTargets.Max() + 1);
+            EnsureWavefunctionLength(requiredLength);
+
+            int expectedDim = 1 << numTargets;
+            int gateRows = gate.GetLength(0);
+            int gateCols = gate.GetLength(1);
+            if (gateRows != gateCols || gateRows != expectedDim)
+            {
+                throw new ArgumentException($"Gate must be a {expectedDim}x{expectedDim} matrix for {numTargets} target qubits.");
+            }
+
+            _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, distinctTargets, gate, gateName));
+
+            // Build target lookup.
+            bool[] isTarget = new bool[requiredLength];
+            foreach (int tq in distinctTargets)
+            {
+                isTarget[tq] = true;
+            }
+
+            // Group states by unaffected indices using pattern arrays with -1 sentinel at target positions.
+            Dictionary<int[], List<int[]>> groups = new(new IntArrayComparer());
+            foreach (int[] state in _amplitudes.Keys)
+            {
+                int[] pattern = new int[requiredLength];
+                for (int i = 0; i < requiredLength; i++)
                 {
-                    int[] basis = (int[])exemplar.Clone();
-                    for (int bit=0; bit<numTargets; bit++)
+                    pattern[i] = isTarget[i] ? -1 : state[i];
+                }
+                if (!groups.TryGetValue(pattern, out List<int[]>? list))
+                {
+                    list = [];
+                    groups[pattern] = list;
+                }
+                list.Add(state);
+            }
+
+            Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
+            Complex[] localVector = new Complex[expectedDim];
+
+            foreach (KeyValuePair<int[], List<int[]>> group in groups)
+            {
+                int[] exemplar = group.Value[0];
+
+                // Fill localVector from current amplitudes.
+                for (int mask = 0; mask < expectedDim; mask++)
+                {
+                    int[] variant = (int[])exemplar.Clone();
+                    for (int bit = 0; bit < numTargets; bit++)
                     {
-                        int qIndex = targetQubits[bit];
-                        basis[qIndex] = (mask >> (numTargets-1-bit)) & 1; // MSB-first ordering
+                        int globalIndex = distinctTargets[bit];
+                        variant[globalIndex] = (mask >> (numTargets - 1 - bit)) & 1;
                     }
-                    variants[mask] = basis;
+                    _ = _amplitudes.TryGetValue(variant, out Complex amp);
+                    localVector[mask] = amp;
                 }
-                Complex[] vec = new Complex[d];
-                for (int i=0;i<d;i++)
+
+                // Apply gate.
+                Complex[] resultVector = QuantumMathUtility<Complex>.ApplyMatrix(localVector, gate);
+
+                // Write results.
+                for (int mask = 0; mask < expectedDim; mask++)
                 {
-                    _ = currentAmps.TryGetValue(variants[i], out Complex amp);
-                    vec[i] = amp;
-                }
-                Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-                for (int i=0;i<d;i++)
-                {
-                    if (newVec[i] != Complex.Zero)
-                        newAmps[variants[i]] = newVec[i];
+                    Complex res = resultVector[mask];
+                    if (res == Complex.Zero) continue;
+                    int[] variant = (int[])exemplar.Clone();
+                    for (int bit = 0; bit < numTargets; bit++)
+                    {
+                        int globalIndex = distinctTargets[bit];
+                        variant[globalIndex] = (mask >> (numTargets - 1 - bit)) & 1;
+                    }
+                    newAmps[variant] = res;
                 }
             }
-            _amplitudes = newAmps.Count>0? newAmps : newAmps;
+
+            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
             NormaliseAmplitudes();
         }
 
