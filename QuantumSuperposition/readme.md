@@ -1,9 +1,3 @@
-Here’s a proposed new README that keeps the humour but makes the “look how much this thing actually does” story a lot clearer.
-
-Feel free to copy–paste and tweak, but I’ve written it so you can more or less drop it in as-is.
-
----
-
 ## QuantumSuperposition (.NET Library) — v1.7.5
 
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
