@@ -38,36 +38,21 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         private void EnsureWavefunctionLength(int requiredLength)
         {
-            if (requiredLength <= 0)
-            {
-                return;
-            }
-
+            if (requiredLength <= 0) return;
             if (_amplitudes.Count == 0)
             {
                 int[] zeroState = new int[requiredLength];
                 _amplitudes[zeroState] = Complex.One;
                 return;
             }
-
             int currentLength = _amplitudes.Keys.First().Length;
-            if (currentLength == requiredLength)
-            {
-                return;
-            }
-
-            if (currentLength > requiredLength)
-            {
-                // Already larger; nothing to do.
-                return;
-            }
-
+            if (currentLength == requiredLength) return;
+            if (currentLength > requiredLength) return;
             Dictionary<int[], Complex> expanded = new(new IntArrayComparer());
-            foreach (KeyValuePair<int[], Complex> kv in _amplitudes)
+            foreach (var kv in _amplitudes)
             {
-                int[] old = kv.Key;
                 int[] newer = new int[requiredLength];
-                Array.Copy(old, newer, old.Length);
+                Array.Copy(kv.Key, newer, kv.Key.Length);
                 expanded[newer] = kv.Value;
             }
             _amplitudes = expanded;
@@ -80,74 +65,47 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         public void ApplyMultiQubitGate(int[] targetQubits, Complex[,] gate, string gateName)
         {
-            if (targetQubits == null || targetQubits.Length == 0)
-            {
-                throw new ArgumentException("At least one target qubit required.");
-            }
-
+            if (targetQubits == null || targetQubits.Length == 0) throw new ArgumentException("At least one target qubit required.");
             int[] distinctTargets = targetQubits.Distinct().OrderBy(i => i).ToArray();
             int numTargets = distinctTargets.Length;
             int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, distinctTargets.Max() + 1);
             EnsureWavefunctionLength(requiredLength);
-
             int expectedDim = 1 << numTargets;
-            int gateRows = gate.GetLength(0);
-            int gateCols = gate.GetLength(1);
-            if (gateRows != gateCols || gateRows != expectedDim)
-            {
-                throw new ArgumentException($"Invalid multi-qubit gate matrix. GateName={gateName}, Targets=[{string.Join(',', distinctTargets)}], TargetCount={numTargets}, ExpectedDim={expectedDim}x{expectedDim}, ActualDim={gateRows}x{gateCols}.");
-            }
-
+            if (gate.GetLength(0) != gate.GetLength(1) || gate.GetLength(0) != expectedDim)
+                throw new ArgumentException($"Invalid multi-qubit gate matrix. GateName={gateName}, Targets=[{string.Join(',', distinctTargets)}], TargetCount={numTargets}, ExpectedDim={expectedDim}x{expectedDim}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}.");
             _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, distinctTargets, gate, gateName));
-            bool[] isTarget = new bool[requiredLength];
-            foreach (int tq in distinctTargets) isTarget[tq] = true;
-
-            // PatternKey provides lightweight structural grouping without string allocations.
-            // We build patterns using a pooled array, copy to an owned array for the key, then return the pooled buffer.
+            bool[] isTarget = new bool[requiredLength]; foreach (int tq in distinctTargets) isTarget[tq] = true;
             Dictionary<PatternKey, List<int[]>> groups = new();
             foreach (int[] state in _amplitudes.Keys)
             {
                 int[] tmp = ArrayPool<int>.Shared.Rent(requiredLength);
                 for (int i = 0; i < requiredLength; i++) tmp[i] = isTarget[i] ? -1 : state[i];
-                int[] owned = new int[requiredLength];
-                Array.Copy(tmp, owned, requiredLength);
-                ArrayPool<int>.Shared.Return(tmp);
+                int[] owned = new int[requiredLength]; Array.Copy(tmp, owned, requiredLength); ArrayPool<int>.Shared.Return(tmp);
                 PatternKey key = new(owned);
-                if (!groups.TryGetValue(key, out List<int[]>? list)) { list = []; groups[key] = list; }
+                if (!groups.TryGetValue(key, out var list)) { list = []; groups[key] = list; }
                 list.Add(state);
             }
-
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
             Complex[] localVector = new Complex[expectedDim];
-            foreach (KeyValuePair<PatternKey, List<int[]>> group in groups)
+            foreach (var group in groups)
             {
                 int[] exemplar = group.Value[0];
                 for (int mask = 0; mask < expectedDim; mask++)
                 {
                     int[] variant = (int[])exemplar.Clone();
-                    for (int bit = 0; bit < numTargets; bit++)
-                    {
-                        int globalIndex = distinctTargets[bit];
-                        variant[globalIndex] = (mask >> (numTargets - 1 - bit)) & 1;
-                    }
-                    _ = _amplitudes.TryGetValue(variant, out Complex amp);
-                    localVector[mask] = amp;
+                    for (int bit = 0; bit < numTargets; bit++) variant[distinctTargets[bit]] = (mask >> (numTargets - 1 - bit)) & 1;
+                    _ = _amplitudes.TryGetValue(variant, out Complex amp); localVector[mask] = amp;
                 }
                 Complex[] resultVector = QuantumMathUtility<Complex>.ApplyMatrix(localVector, gate);
                 for (int mask = 0; mask < expectedDim; mask++)
                 {
-                    Complex res = resultVector[mask];
-                    if (res == Complex.Zero) continue;
+                    Complex res = resultVector[mask]; if (res == Complex.Zero) continue;
                     int[] variant = (int[])exemplar.Clone();
-                    for (int bit = 0; bit < numTargets; bit++)
-                    {
-                        int globalIndex = distinctTargets[bit];
-                        variant[globalIndex] = (mask >> (numTargets - 1 - bit)) & 1;
-                    }
+                    for (int bit = 0; bit < numTargets; bit++) variant[distinctTargets[bit]] = (mask >> (numTargets - 1 - bit)) & 1;
                     newAmps[variant] = res;
                 }
             }
-            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
+            _amplitudes = newAmps; // simplified
             NormaliseAmplitudes();
         }
 
@@ -165,69 +123,30 @@ namespace QuantumSuperposition.Systems
             public override bool Equals(object? obj) => obj is PatternKey pk && Equals(pk);
             public override int GetHashCode()
             {
-                unchecked
-                {
-                    int h = 17;
-                    for (int i = 0; i < Pattern.Length; i++) h = h * 31 + Pattern[i];
-                    return h;
-                }
+                unchecked { int h = 17; for (int i = 0; i < Pattern.Length; i++) h = h * 31 + Pattern[i]; return h; }
             }
         }
 
         // Helper: Converts the bits from a full basis state based on target indices.
         private static int[] ExtractSubstate(int[] fullState, int[] indices)
-        {
-            int[] sub = new int[indices.Length];
-            for (int i = 0; i < indices.Length; i++)
-            {
-                sub[i] = fullState[indices[i]];
-            }
-
-            return sub;
-        }
+        { int[] sub = new int[indices.Length]; for (int i = 0; i < indices.Length; i++) sub[i] = fullState[indices[i]]; return sub; }
 
         // Helper: Converts an array of bits to its integer representation.
-        private static int BitsToIndex(int[] bits)
-        {
-            int index = 0;
-            foreach (int bit in bits)
-            {
-                index = (index << 1) | bit;
-            }
-
-            return index;
-        }
+        private static int BitsToIndex(int[] bits) { int index = 0; foreach (int bit in bits) index = (index << 1) | bit; return index; }
 
         /// <summary>
         /// Optionally construct the system with explicit amplitudes.
         /// </summary>
         public QuantumSystem(Dictionary<int[], Complex>? initialAmps = null)
+        { if (initialAmps != null) { _amplitudes = initialAmps; NormaliseAmplitudes(); } }
 
-        {
-            if (initialAmps != null)
-            {
-
-                _amplitudes = initialAmps;
-                NormaliseAmplitudes();
-            }
-        }
         /// <summary>
         /// Will return a multiline string that you can print to the console visualising the gate schedule.
         /// </summary>
         /// <param name="totalQubits"></param>
         /// <returns></returns>
         public string VisualiseGateSchedule(int totalQubits)
-        {
-            //  return "no operations" if
-
-            if (_gateQueue.Count == 0)
-            {
-                return "no operations";
-            }
-
-            // Note: if _gateQueue is a Queue<GateOperation>, you may need to work on a copy.
-            return GateSchedulingVisualiser.Visualise(_gateQueue.ToArray(), totalQubits);
-        }
+        { return _gateQueue.Count == 0 ? "no operations" : GateSchedulingVisualiser.Visualise(_gateQueue.ToArray(), totalQubits); }
 
         /// <summary>
         /// I only want to know a little bit about you.
@@ -239,114 +158,52 @@ namespace QuantumSuperposition.Systems
         public int[] PartialObserve(int[] measuredIndices, Random? rng = null)
         {
             rng ??= Random.Shared;
-            if (measuredIndices == null || measuredIndices.Length == 0)
-            {
-                throw new ArgumentNullException(nameof(measuredIndices));
-            }
-
-            // Group by projected substate using structural int[] keys (avoids string allocations & parsing)
+            if (measuredIndices == null || measuredIndices.Length == 0) throw new ArgumentNullException(nameof(measuredIndices));
             Dictionary<int[], List<(int[] state, Complex amplitude)>> groups = new(new IntArrayComparer());
-            foreach (KeyValuePair<int[], Complex> kvp in _amplitudes)
+            foreach (var kvp in _amplitudes)
             {
-                int[] fullState = kvp.Key;
                 int[] projection = new int[measuredIndices.Length];
-                for (int i = 0; i < measuredIndices.Length; i++) projection[i] = fullState[measuredIndices[i]];
-                if (!groups.TryGetValue(projection, out List<(int[] state, Complex amplitude)>? list))
-                {
-                    list = new List<(int[] state, Complex amplitude)>();
-                    groups[projection] = list;
-                }
-                list.Add((fullState, kvp.Value));
+                for (int i = 0; i < measuredIndices.Length; i++) projection[i] = kvp.Key[measuredIndices[i]];
+                if (!groups.TryGetValue(projection, out var list)) { list = new List<(int[] state, Complex amplitude)>(); groups[projection] = list; }
+                list.Add((kvp.Key, kvp.Value));
             }
-
-            // Compute probabilities per projection
             Dictionary<int[], double> outcomeProbs = new(new IntArrayComparer());
             foreach (var g in groups)
             {
-                double p = 0.0;
-                foreach (var item in g.Value)
-                {
-                    double mag2 = item.amplitude.Magnitude * item.amplitude.Magnitude;
-                    p += mag2;
-                }
-                outcomeProbs[g.Key] = p;
+                double p = 0.0; foreach (var item in g.Value) p += item.amplitude.Magnitude * item.amplitude.Magnitude; outcomeProbs[g.Key] = p;
             }
             double totalProb = outcomeProbs.Values.Sum();
-            if (totalProb < 1e-15)
-            {
-                throw new InvalidOperationException($"Wavefunction is effectively zero. MeasuredIndices=[{string.Join(',', measuredIndices)}], BasisStates={_amplitudes.Count}, OutcomeGroups={groups.Count}, TotalProb={totalProb:E3}");
-            }
-
-            // Roulette wheel selection over structural keys
-            double roll = rng.NextDouble() * totalProb;
-            double cumulative = 0.0;
-            int[]? chosenProjection = null;
-            foreach (var kv in outcomeProbs)
-            {
-                cumulative += kv.Value;
-                if (roll <= cumulative)
-                {
-                    chosenProjection = kv.Key;
-                    break;
-                }
-            }
-            chosenProjection ??= outcomeProbs.Keys.Last();
-
-            // Notify partial collapse for relevant registered references (bool qubits only for now)
+            if (totalProb < 1e-15) throw new InvalidOperationException($"Wavefunction is effectively zero. MeasuredIndices=[{string.Join(',', measuredIndices)}], BasisStates={_amplitudes.Count}, OutcomeGroups={groups.Count}, TotalProb={totalProb:E3}");
+            var ordered = outcomeProbs.OrderBy(kv => BitsToIndex(kv.Key)).ToList(); // deterministic ordering
+            double roll = rng.NextDouble() * totalProb; double cumulative = 0.0; int[]? chosen = null;
+            foreach (var kv in ordered) { cumulative += kv.Value; if (roll <= cumulative) { chosen = kv.Key; break; } }
+            chosen ??= ordered[^1].Key;
             Guid collapseId = Guid.NewGuid();
             foreach (IQuantumReference refQ in _registered)
-            {
-                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any())
-                {
-                    (refQ as QuBit<bool>)?.PartialCollapse(chosenProjection);
-                }
-            }
-            return chosenProjection;
+                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) (refQ as QuBit<bool>)?.PartialCollapse(chosen);
+            return chosen;
         }
 
 
-        public enum GateType
-        {
-            SingleQubit,
-            TwoQubit,
-            MultiQubit
-        }
-
+        public enum GateType { SingleQubit, TwoQubit, MultiQubit }
         public class GateOperation
         {
             public GateType OperationType { get; }
             public int[] TargetQubits { get; }
             public Complex[,] GateMatrix { get; }
             public string GateName { get; }
-
             public GateOperation(GateType type, int[] targets, Complex[,] matrix, string gateName)
-            {
-                OperationType = type;
-                TargetQubits = targets;
-                GateMatrix = matrix;
-                GateName = gateName;
-            }
-
+            { OperationType = type; TargetQubits = targets; GateMatrix = matrix; GateName = gateName; }
         }
-
-
-
 
         /// <summary>
         /// Returns the complete collapsed state from the system
         /// </summary>
         /// <returns></returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public int[] GetCollapsedState()
-        {
-            return _amplitudes.Count != 1 ? throw new InvalidOperationException("System is not fully collapsed.") : _amplitudes.Keys.First();
-        }
+        public int[] GetCollapsedState() => _amplitudes.Count != 1 ? throw new InvalidOperationException("System is not fully collapsed.") : _amplitudes.Keys.First();
 
-
-        public void Register(IQuantumReference qubitRef)
-        {
-            _registered.Add(qubitRef);
-        }
+        public void Register(IQuantumReference qubitRef) { _registered.Add(qubitRef); }
 
         /// <summary>
         /// A simple "observe everything fully" method.
@@ -359,60 +216,37 @@ namespace QuantumSuperposition.Systems
         /// <exception cref="InvalidOperationException"></exception>
         public int[] ObserveGlobal(int[] qubitIndices, Random rng)
         {
-            if (qubitIndices == null || qubitIndices.Length == 0)
-            {
-                throw new ArgumentNullException(nameof(qubitIndices));
-            }
+            if (qubitIndices == null || qubitIndices.Length == 0) throw new ArgumentNullException(nameof(qubitIndices));
             Dictionary<int[], List<(int[] state, Complex amplitude)>> projectionGroups = new(new IntArrayComparer());
-            foreach (KeyValuePair<int[], Complex> kvp in _amplitudes)
+            foreach (var kvp in _amplitudes)
             {
-                int[] fullState = kvp.Key;
-                int[] projected = qubitIndices.Select(i => fullState[i]).ToArray();
-                if (!projectionGroups.ContainsKey(projected)) { projectionGroups[projected] = []; }
-                projectionGroups[projected].Add((fullState, kvp.Value));
+                int[] projected = qubitIndices.Select(i => kvp.Key[i]).ToArray();
+                if (!projectionGroups.ContainsKey(projected)) projectionGroups[projected] = [];
+                projectionGroups[projected].Add((kvp.Key, kvp.Value));
             }
-            Dictionary<int[], double> probSums = projectionGroups.ToDictionary(
-                g => g.Key,
-                g => g.Value.Sum(x => x.amplitude.Magnitude * x.amplitude.Magnitude),
-                new IntArrayComparer()
-            );
+            Dictionary<int[], double> probSums = projectionGroups.ToDictionary(g => g.Key, g => g.Value.Sum(x => x.amplitude.Magnitude * x.amplitude.Magnitude), new IntArrayComparer());
             double totalProb = probSums.Values.Sum();
-            if (totalProb <= 1e-15)
-            {
-                throw new InvalidOperationException($"Global observation failed: projected probability ~0. Indices=[{string.Join(',', qubitIndices)}], BasisStates={_amplitudes.Count}, ProjectionGroups={projectionGroups.Count}, TotalProb={totalProb:E3}");
-            }
-            double roll = rng.NextDouble() * totalProb;
-            double cumulative = 0.0;
-            int[] chosenProjection = Array.Empty<int>();
-            foreach ((int[] proj, double p) in probSums)
-            {
-                cumulative += p;
-                if (roll <= cumulative) { chosenProjection = proj; break; }
-            }
+            if (totalProb <= 1e-15) throw new InvalidOperationException($"Global observation failed: projected probability ~0. Indices=[{string.Join(',', qubitIndices)}], BasisStates={_amplitudes.Count}, ProjectionGroups={projectionGroups.Count}, TotalProb={totalProb:E3}");
+            double roll = rng.NextDouble() * totalProb; double cumulative = 0.0; int[] chosenProjection = Array.Empty<int>();
+            foreach (var kv in probSums) { cumulative += kv.Value; if (roll <= cumulative) { chosenProjection = kv.Key; break; } }
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
-            foreach ((int[] state, Complex amp) in projectionGroups[chosenProjection]) { newAmps[state] = amp; }
-            _amplitudes = newAmps;
-            NormaliseAmplitudes();
-            Guid collapseId = Guid.NewGuid();
+            foreach (var item in projectionGroups[chosenProjection]) newAmps[item.state] = item.amplitude;
+            _amplitudes = newAmps; NormaliseAmplitudes(); Guid collapseId = Guid.NewGuid();
             foreach (IQuantumReference refQ in _registered)
             {
                 if (refQ.GetQubitIndices().Intersect(qubitIndices).Any())
                 {
                     refQ.NotifyWavefunctionCollapsed(collapseId);
-                    foreach (Guid groupId in Entanglement.GetGroupsForReference(refQ)) { Entanglement.PropagateCollapse(groupId, collapseId); }
+                    foreach (Guid groupId in Entanglement.GetGroupsForReference(refQ)) Entanglement.PropagateCollapse(groupId, collapseId);
                 }
             }
-            SafeRaiseGlobalCollapse(qubitIndices, chosenProjection);
-            return chosenProjection;
+            SafeRaiseGlobalCollapse(qubitIndices, chosenProjection); return chosenProjection;
         }
 
         /// <summary>
         /// Convenience overload preserving the previous API shape. Uses the default basis mapper.
         /// </summary>
-        public void SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits)
-        {
-            SetFromTensorProduct(propagateCollapse, (Func<T, int>?)null, qubits);
-        }
+        public void SetFromTensorProduct<T>(bool propagateCollapse, params QuBit<T>[] qubits) => SetFromTensorProduct(propagateCollapse, (Func<T,int>?)null, qubits);
 
         /// <summary>
         /// Builds a full wavefunction from individual qubits.
@@ -428,90 +262,32 @@ namespace QuantumSuperposition.Systems
         /// <param name="qubits">Input qubits (local or system-managed).</param>
         public void SetFromTensorProduct<T>(bool propagateCollapse, Func<T, int>? mapToBasis = null, params QuBit<T>[] qubits)
         {
-            if (qubits == null || qubits.Length == 0)
-            {
-                throw new ArgumentException("At least one qubit must be provided.");
-            }
-
-            // Default mapper covers int, bool, and enums; users may supply custom mappers for other types.
-            mapToBasis ??= (v) =>
-            {
-                if (v is int iv) return iv;
-                if (v is bool bv) return bv ? 1 : 0;
-                if (typeof(T).IsEnum) return Convert.ToInt32(v);
-                throw new InvalidOperationException($"Unsupported type {typeof(T)} in tensor product state. Provide a mapToBasis function.");
-            };
-
-            int totalQubits = qubits.Length;
-            QuBit<T>[] systemManaged = new QuBit<T>[totalQubits];
-
+            if (qubits == null || qubits.Length == 0) throw new ArgumentException("At least one qubit must be provided.");
+            mapToBasis ??= v => v switch { int iv => iv, bool bv => bv ? 1 : 0, _ when typeof(T).IsEnum => Convert.ToInt32(v), _ => throw new InvalidOperationException($"Unsupported type {typeof(T)} in tensor product state. Provide a mapToBasis function.") };
+            int totalQubits = qubits.Length; QuBit<T>[] systemManaged = new QuBit<T>[totalQubits];
             for (int i = 0; i < totalQubits; i++)
             {
-                QuBit<T> original = qubits[i];
-
-                if (original.System == this)
-                {
-                    // Already system-managed: reuse
-                    systemManaged[i] = original;
-                    continue;
-                }
-
-                // Assign indices sequentially if original had none.
-                int[] indices = original.GetQubitIndices();
-                if (indices == null || indices.Length == 0)
-                {
-                    indices = new[] { i }; // simple sequential mapping
-                }
-
-                // Create a new system qubit using the system constructor so registration occurs.
-                QuBit<T> sysQ = new QuBit<T>(this, indices);
-
-                // Copy weighted states from the original.
-                Dictionary<T, Complex> weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight);
-                _ = sysQ.WithWeights(weights, autoNormalise: false);
-
-                systemManaged[i] = sysQ; // store for product build
+                var original = qubits[i];
+                if (original.System == this) { systemManaged[i] = original; continue; }
+                int[] indices = original.GetQubitIndices(); if (indices == null || indices.Length == 0) indices = new[] { i };
+                QuBit<T> sysQ = new QuBit<T>(this, indices); var weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight); _ = sysQ.WithWeights(weights, false); systemManaged[i] = sysQ;
             }
-
-            // Compute tensor product using system-managed qubits only.
             Dictionary<T[], Complex> product = QuantumMathUtility<T>.TensorProduct(systemManaged);
-
-            // Convert to a global int[] wavefunction using the mapper.
             Dictionary<int[], Complex> result = new(new IntArrayComparer());
-            foreach ((T[] state, Complex amplitude) in product)
-            {
-                int[] intState = state.Select(s => mapToBasis(s)).ToArray();
-                result[intState] = amplitude;
-            }
-
-            _amplitudes = result;
-            NormaliseAmplitudes();
-
-            // Propagate a synthetic collapse event to wire up entanglement and local observed values.
+            foreach (var kv in product) { int[] intState = kv.Key.Select(mapToBasis).ToArray(); result[intState] = kv.Value; }
+            _amplitudes = result; NormaliseAmplitudes();
             if (propagateCollapse)
             {
-                Guid collapseId = Guid.NewGuid();
-                foreach (IQuantumReference q in _registered)
-                {
-                    q.NotifyWavefunctionCollapsed(collapseId);
-                }
+                Guid collapseId = Guid.NewGuid(); foreach (IQuantumReference q in _registered) q.NotifyWavefunctionCollapsed(collapseId);
             }
         }
-
 
         /// <summary>
         /// Applies a two-qubit gate, because one qubit can't handle this much chaos alone.
         /// Perfect for entangling your problems in pairs.
         /// </summary>
         public void ApplyTwoQubitGate(int qubitA, int qubitB, Complex[,] gate, string gateName)
-        {
-            if (gate.GetLength(0) != 4 || gate.GetLength(1) != 4)
-            {
-                throw new ArgumentException($"Two-qubit gate must be 4x4. GateName={gateName}, Targets={qubitA},{qubitB}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}");
-            }
-            _gateQueue.Enqueue(new GateOperation(GateType.TwoQubit, new int[] { qubitA, qubitB }, gate, gateName));
-        }
-
+        { if (gate.GetLength(0) != 4 || gate.GetLength(1) != 4) throw new ArgumentException($"Two-qubit gate must be 4x4. GateName={gateName}, Targets={qubitA},{qubitB}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}"); _gateQueue.Enqueue(new GateOperation(GateType.TwoQubit, new[]{qubitA, qubitB}, gate, gateName)); }
         /// <summary>
         /// Applies a single-qubit gate, because sometimes you just need to get your life together.
         /// </summary>
@@ -519,43 +295,23 @@ namespace QuantumSuperposition.Systems
         /// <param name="gate"></param>
         /// <exception cref="ArgumentException"></exception>
         public void ApplySingleQubitGate(int qubit, Complex[,] gate, string gateName)
-        {
-            if (gate.GetLength(0) != 2 || gate.GetLength(1) != 2)
-            {
-                throw new ArgumentException($"Single-qubit gate must be 2x2. GateName={gateName}, QubitIndex={qubit}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}");
-            }
-            _gateQueue.Enqueue(new GateOperation(GateType.SingleQubit, new int[] { qubit }, gate, gateName));
-        }
+        { if (gate.GetLength(0) != 2 || gate.GetLength(1) != 2) throw new ArgumentException($"Single-qubit gate must be 2x2. GateName={gateName}, QubitIndex={qubit}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}"); _gateQueue.Enqueue(new GateOperation(GateType.SingleQubit, new[]{qubit}, gate, gateName)); }
 
         /// <summary>
         /// This is like a quantum assembly line, but with more uncertainty and fewer safety regulations.
         /// </summary>
         public void ProcessGateQueue()
         {
-            // First, optimize the current queue.
-            GateOperation[] optimizedOps = OptimizeGateQueue(_gateQueue.ToArray());
-
-            // Replace the internal queue with the optimized one.
-            _gateQueue = new Queue<GateOperation>(optimizedOps);
-
+            GateOperation[] optimizedOps = OptimizeGateQueue(_gateQueue.ToArray()); _gateQueue = new Queue<GateOperation>(optimizedOps);
             while (_gateQueue.Count > 0)
             {
                 GateOperation op = _gateQueue.Dequeue();
                 switch (op.OperationType)
                 {
-                    case GateType.SingleQubit:
-                        ProcessSingleQubitGate(op.TargetQubits[0], op.GateMatrix);
-                        break;
-                    case GateType.TwoQubit:
-                        ProcessTwoQubitGate(op.TargetQubits[0], op.TargetQubits[1], op.GateMatrix);
-                        break;
-                    case GateType.MultiQubit:
-                        // You may have already applied these immediately,
-                        // but if not, you could add a corresponding ProcessMultiQubitGate op.
-                        // For now, simply throw or ignore if they were already applied.
-                        throw new InvalidOperationException("MultiQubit operations should be processed immediately.");
-                    default:
-                        throw new InvalidOperationException("Unsupported gate operation.");
+                    case GateType.SingleQubit: ProcessSingleQubitGate(op.TargetQubits[0], op.GateMatrix); break;
+                    case GateType.TwoQubit: ProcessTwoQubitGate(op.TargetQubits[0], op.TargetQubits[1], op.GateMatrix); break;
+                    case GateType.MultiQubit: throw new InvalidOperationException("MultiQubit operations should be processed immediately.");
+                    default: throw new InvalidOperationException("Unsupported gate operation.");
                 }
             }
         }
@@ -564,24 +320,7 @@ namespace QuantumSuperposition.Systems
         /// A bit like cleaning up your closet, but with more qubits and fewer sweaters.
         /// </summary>
         private GateOperation[] OptimizeGateQueue(GateOperation[] operations)
-        {
-            Stack<GateOperation> stack = new();
-            foreach (GateOperation op in operations)
-            {
-                // If the stack is not empty, check if the current operation cancels with the previous one.
-                if (stack.Count > 0 && CanCancel(stack.Peek(), op))
-                {
-                    _ = stack.Pop();
-                }
-                else
-                {
-                    stack.Push(op);
-                }
-            }
-            // Return the stack in FIFO order.
-            return stack.Reverse().ToArray();
-        }
-
+        { Stack<GateOperation> stack = new(); foreach (var op in operations) { if (stack.Count > 0 && CanCancel(stack.Peek(), op)) _ = stack.Pop(); else stack.Push(op); } return stack.Reverse().ToArray(); }
         /// <summary>
         /// With a bit of time travel you were trying to cancel out your bad decisions in life.
         /// </summary>
@@ -590,94 +329,16 @@ namespace QuantumSuperposition.Systems
             if (op1.OperationType == op2.OperationType && op1.TargetQubits.SequenceEqual(op2.TargetQubits))
             {
                 int n = op1.GateMatrix.GetLength(0);
-                // Ensure both matrices are square and of the same dimension.
-                if (op2.GateMatrix.GetLength(0) != n ||
-                    op1.GateMatrix.GetLength(1) != n ||
-                    op2.GateMatrix.GetLength(1) != n)
-                {
-                    return false;
-                }
-
-                // Compute the net effect: op2 * op1.
-                Complex[,] product = MultiplyMatrices(op2.GateMatrix, op1.GateMatrix);
-                Complex[,] identity = CreateIdentityMatrix(n);
-                // Check if product and identity are equal within a tolerance.
-                return AreMatricesEqual(product, identity, 1e-9);
+                if (op2.GateMatrix.GetLength(0) != n || op1.GateMatrix.GetLength(1) != n || op2.GateMatrix.GetLength(1) != n) return false;
+                Complex[,] product = MultiplyMatrices(op2.GateMatrix, op1.GateMatrix); Complex[,] identity = CreateIdentityMatrix(n); return AreMatricesEqual(product, identity, 1e-9);
             }
             return false;
         }
-
-        /// <summary>
-        /// Come on everybody, listen to me, rapping is as easy as 1, 2, 3.
-        /// Don't be shy, it's easy if you try.
-        /// I'm gonna show you how to mmm mmm do matrix manipulation.
-        /// </summary>
         private Complex[,] MultiplyMatrices(Complex[,] A, Complex[,] B)
-        {
-            int n = A.GetLength(0);
-            int m = A.GetLength(1);
-            int p = B.GetLength(1);
-            if (B.GetLength(0) != m)
-            {
-                throw new ArgumentException("Matrix dimensions do not match for multiplication.");
-            }
-            Complex[,] result = new Complex[n, p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Complex sum = Complex.Zero;
-                    for (int k = 0; k < m; k++)
-                    {
-                        sum += A[i, k] * B[k, j];
-                    }
-                    result[i, j] = sum;
-                }
-            }
-            return result;
-        }
-
-        /// <summary>
-        /// This is like a quantum mirror, reflecting your true self.
-        /// Stargate SG-1 would be proud.
-        /// </summary>
-        private Complex[,] CreateIdentityMatrix(int n)
-        {
-            Complex[,] identity = new Complex[n, n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    identity[i, j] = (i == j) ? Complex.One : Complex.Zero;
-                }
-            }
-            return identity;
-        }
-
-        /// <summary>
-        /// Checking if your quantum state is the same as your neighbour's.
-        /// </summary>
+        { int n = A.GetLength(0); int m = A.GetLength(1); int p = B.GetLength(1); if (B.GetLength(0) != m) throw new ArgumentException("Matrix dimensions do not match for multiplication."); Complex[,] result = new Complex[n,p]; for (int i=0;i<n;i++) for (int j=0;j<p;j++){ Complex sum=Complex.Zero; for(int k=0;k<m;k++) sum+=A[i,k]*B[k,j]; result[i,j]=sum;} return result; }
+        private Complex[,] CreateIdentityMatrix(int n) { Complex[,] identity = new Complex[n,n]; for(int i=0;i<n;i++) for(int j=0;j<n;j++) identity[i,j]=(i==j)?Complex.One:Complex.Zero; return identity; }
         private bool AreMatricesEqual(Complex[,] A, Complex[,] B, double tolerance)
-        {
-            int rows = A.GetLength(0);
-            int cols = A.GetLength(1);
-            if (B.GetLength(0) != rows || B.GetLength(1) != cols)
-            {
-                return false;
-            }
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    if (Complex.Abs(A[i, j] - B[i, j]) > tolerance)
-                    {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
+        { int rows=A.GetLength(0), cols=A.GetLength(1); if (B.GetLength(0)!=rows||B.GetLength(1)!=cols) return false; for(int i=0;i<rows;i++) for(int j=0;j<cols;j++) if (Complex.Abs(A[i,j]-B[i,j])>tolerance) return false; return true; }
 
         /// <summary>
         /// A quantum spa day for your qubit.
@@ -698,9 +359,7 @@ namespace QuantumSuperposition.Systems
                 if (new0 != Complex.Zero) newAmps[basis0] = new0;
                 if (new1 != Complex.Zero) newAmps[basis1] = new1;
             }
-            _amplitudes = newAmps.Count > 0 ? newAmps : newAmps;
-            NormaliseAmplitudes();
-            SafeRaiseGateExecuted("SingleQubitGate", new[]{qubit});
+            _amplitudes = newAmps; NormaliseAmplitudes(); SafeRaiseGateExecuted("SingleQubitGate", new[]{qubit});
         }
 
         private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
@@ -717,48 +376,17 @@ namespace QuantumSuperposition.Systems
             {
                 int[] exemplar = group.Value.First();
                 var localVariants = new Dictionary<(int a,int b), int[]>();
-                for (int a=0;a<2;a++)
-                {
-                    for (int b=0;b<2;b++)
-                    {
-                        int[] basis = (int[])exemplar.Clone();
-                        basis[qubitA] = a; basis[qubitB] = b;
-                        localVariants[(a,b)] = basis;
-                    }
-                }
+                for (int a=0;a<2;a++) for (int b=0;b<2;b++) { int[] basis=(int[])exemplar.Clone(); basis[qubitA]=a; basis[qubitB]=b; localVariants[(a,b)] = basis; }
                 Complex[] vec = new Complex[4];
-                foreach (var kv in localVariants)
-                {
-                    _ = _amplitudes.TryGetValue(kv.Value, out Complex amp);
-                    int idx = (kv.Key.a << 1) | kv.Key.b;
-                    vec[idx] = amp;
-                }
+                foreach (var kv in localVariants) { _ = _amplitudes.TryGetValue(kv.Value, out Complex amp); int idx=(kv.Key.a<<1)|kv.Key.b; vec[idx]=amp; }
                 Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-                foreach (var kv in localVariants)
-                {
-                    int idx = (kv.Key.a << 1) | kv.Key.b;
-                    if (newVec[idx] != Complex.Zero) newAmplitudes[kv.Value] = newVec[idx];
-                }
+                foreach (var kv in localVariants) { int idx=(kv.Key.a<<1)|kv.Key.b; if (newVec[idx] != Complex.Zero) newAmplitudes[kv.Value] = newVec[idx]; }
             }
-            _amplitudes = newAmplitudes.Count>0? newAmplitudes : newAmplitudes;
-            NormaliseAmplitudes();
-            SafeRaiseGateExecuted("TwoQubitGate", new[]{qubitA, qubitB});
+            _amplitudes = newAmplitudes; NormaliseAmplitudes(); SafeRaiseGateExecuted("TwoQubitGate", new[]{qubitA, qubitB});
         }
 
-        private void SafeRaiseGateExecuted(string gateName, int[] targets)
-        {
-            var handler = GateExecuted;
-            if (handler != null)
-            {
-                handler(gateName, targets, _amplitudes.Count);
-            }
-        }
-
-        private void SafeRaiseGlobalCollapse(int[] observedIndices, int[] projection)
-        {
-            var handler = GlobalCollapse;
-            handler?.Invoke(observedIndices, projection);
-        }
+        private void SafeRaiseGateExecuted(string gateName, int[] targets) { var h = GateExecuted; if (h != null) h(gateName, targets, _amplitudes.Count); }
+        private void SafeRaiseGlobalCollapse(int[] observedIndices, int[] projection) { var h = GlobalCollapse; h?.Invoke(observedIndices, projection); }
 
         /// <summary>
         /// Sets the amplitudes of the quantum system.
@@ -769,33 +397,15 @@ namespace QuantumSuperposition.Systems
         /// <exception cref="ArgumentNullException"></exception>
         public void SetAmplitudes(Dictionary<int[], Complex> newAmps)
         {
-            if (newAmps == null)
-            {
-                throw new ArgumentNullException(nameof(newAmps));
-            }
-
-            // Replace the internal amplitude dictionary.
-            // We create a new dictionary using our custom IntArrayComparer to ensure that
-            // two arrays representing the same basis state are treated as equal.
+            if (newAmps == null) throw new ArgumentNullException(nameof(newAmps));
             _amplitudes = new Dictionary<int[], Complex>(newAmps, new IntArrayComparer());
-
-            // Notify all registered qubits of the new state.
             Guid collapseId = Guid.NewGuid();
             foreach (IQuantumReference refQ in _registered)
             {
                 refQ.NotifyWavefunctionCollapsed(collapseId);
-                if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1)
-                {
-                    Entanglement.PropagateCollapse(g1, collapseId);
-                }
-                else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2)
-                {
-                    Entanglement.PropagateCollapse(g2, collapseId);
-                }
-                else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3)
-                {
-                    Entanglement.PropagateCollapse(g3, collapseId);
-                }
+                if (refQ is QuBit<int> qi && qi.EntanglementGroupId is Guid g1) Entanglement.PropagateCollapse(g1, collapseId);
+                else if (refQ is QuBit<bool> qb && qb.EntanglementGroupId is Guid g2) Entanglement.PropagateCollapse(g2, collapseId);
+                else if (refQ is QuBit<Complex> qc && qc.EntanglementGroupId is Guid g3) Entanglement.PropagateCollapse(g3, collapseId);
             }
         }
 
@@ -805,17 +415,8 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         private void NormaliseAmplitudes()
         {
-            double total = _amplitudes.Values.Sum(a => a.Magnitude * a.Magnitude);
-            if (total < 1e-15)
-            {
-                // All zero => do nothing or reset
-                return;
-            }
-            double norm = Math.Sqrt(total);
-            foreach (int[]? k in _amplitudes.Keys.ToList())
-            {
-                _amplitudes[k] /= norm;
-            }
+            double total = _amplitudes.Values.Sum(a => a.Magnitude * a.Magnitude); if (total < 1e-15) return; double norm = Math.Sqrt(total);
+            foreach (int[] k in _amplitudes.Keys.ToList()) _amplitudes[k] /= norm;
         }
 
         /// <summary>
