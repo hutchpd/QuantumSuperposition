@@ -1,7 +1,8 @@
 ## QuantumSuperposition (.NET Library) — v1.7.5
 
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
-![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
+![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet) [![Docs](https://img.shields.io/badge/docs-quantumsuperposition.hashnode.space-blue)](https://quantumsuperposition.hashnode.space)
+
 
 > .NET's most confident way to say "maybe"
 
