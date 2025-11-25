@@ -1,62 +1,114 @@
 ﻿using PositronicVariables.Attributes;
 using PositronicVariables.Variables;
-using PositronicVariables.Runtime;
-using System;
-using System.Linq;
 
 internal static class Program
 {
-    // Deterministic seed for collapse selection
-    private const int CollapseSeed = 42;
+    // Target row length to stop iterating
+    private const int TargetRowLength = 10;
 
+    // Entry point into the timeline. Begins *after* knowing the result.
+    // Notice there is no explicit for loop here.
     [DontPanic]
     private static void Main()
     {
-        // Fixed future constraint: task finishes today at 16:00 local time.
-        DateTime targetFinish = DateTime.Today.AddHours(16);
+        // This line doesn't just create a variable. It creates a causality loop - one that stabilizes only when it finds a version of itself that matches the logical rules that come after it.
+        // "Hello, I'm row. I will become a version of Pascal's Triangle when I grow up. Here is my future self: [1, 3, 3, 1]. Please backfill everything I need to become that."
 
-        // Positronic variables (time-travelling schedule components)
-        var finishTime = PositronicVariable<DateTime>.GetOrCreate("FinishTime", targetFinish);
-        var durationHours = PositronicVariable<int>.GetOrCreate("DurationHours", 1); // bootstrap guess
-        var startTime = PositronicVariable<DateTime>.GetOrCreate("StartTime", targetFinish.AddHours(-1));
+        var row = PositronicVariable<ComparableList>.GetOrCreate("row", new ComparableList(1));
+        // Print the final result before we do the work.
+        Console.WriteLine("Final converged row: " + row);
 
-        // Print the final and correct result before we do any work because time travel.
-        Console.WriteLine("Schedule:");
-        Console.WriteLine($"  Duration (hours): {durationHours.ToValues().Single()}");
-        Console.WriteLine($"  Start: {startTime.ToValues().Single():HH:mm}");
-        Console.WriteLine($"  Finish: {finishTime.ToValues().Single():HH:mm}");
+        // “Give me the version of this variable that finally stopped fighting itself. I'll use that.”
+        // The value hasn't been computed yet - it's being repeatedly derived in time.
+        // Choose the longest known row so we always advance.
+        ComparableList currentRowWrapper = row.ToValues().OrderBy(v => v.Items.Count).Last();
+        List<int> currentRow = currentRowWrapper.Items;
 
-        // Step 1: Explore multiple possible durations (union of timelines).
-        // We simply assign both possibilities; engine unions them across reverse / forward cycles.
-        durationHours.Assign(1, 2);
-
-        // Step 2: Apply rule StartTime = FinishTime - DurationHours for ALL duration possibilities.
-        DateTime f = finishTime.ToValues().Last();
-        var possibleStarts = durationHours.ToValues()
-                                          .Select(d => f.AddHours(-d))
-                                          .Distinct()
-                                          .ToArray();
-        startTime.Assign(possibleStarts);
-
-        // Step 3: Deterministic collapse once we have both options present.
-        bool hasDurationBranching = durationHours.GetCurrentQBit().States.Count > 1;
-        bool hasStartBranching = startTime.GetCurrentQBit().States.Count > 1;
-        if (hasDurationBranching && hasStartBranching)
+        if (currentRow.Count < TargetRowLength)
         {
-            // Use seeded observation to select one consistent timeline.
-            var rng = new Random(CollapseSeed);
+            // We haven't reached the desired row length.
+            // Compute the next row of Pascal's Triangle.
+            List<int> nextRow = ComputeNextRow(currentRow);
+            var nextComparable = new ComparableList(nextRow.ToArray());
 
-            int chosenDuration = durationHours.GetCurrentQBit().Observe(rng);
-            DateTime chosenStart = f.AddHours(-chosenDuration);
-
-            // Collapse / commit chosen branch.
-            durationHours.Assign(chosenDuration);
-            startTime.Assign(chosenStart);
-
-            // Unify to single slice so future prints show the resolved schedule.
-            durationHours.UnifyAll();
-            startTime.UnifyAll();
-            finishTime.UnifyAll();
+            // Narrow (Required) instead of plain Assign so reverse half-cycles
+            // append slices and the union grows across iterations.
+            row.Required = PositronicVariable<ComparableList>.Project(row, _ => nextComparable);
+            // (No explicit printing or looping here-the simulation will re-invoke Main() automatically.)
         }
+        else
+        {
+            // A bit like in the 1960's movie "The Time Machine" when the time traveler pulls the lever when the world was ending.
+            row.UnifyAll();
+        }
+    }
+
+    /// <summary>
+    /// Computes the next row of Pascal's Triangle given the current row.
+    /// </summary>
+    /// <param name="current">The current row as a List of int.</param>
+    /// <returns>A new List of int representing the next row.</returns>
+    private static List<int> ComputeNextRow(List<int> current)
+    {
+        // The next row always starts with 1.
+        var next = new List<int> { 1 };
+
+        // Each interior element is the sum of two adjacent numbers in the current row.
+        for (int i = 0; i < current.Count - 1; i++)
+        {
+            next.Add(current[i] + current[i + 1]);
+        }
+
+        // The row always ends with 1.
+        next.Add(1);
+        return next;
+    }
+}
+
+/// <summary>
+/// We implement a custom IComparable<ComparableList>. Why? Because convergence requires comparison. If time  can't tell when a value has changed, it can't collapse reality into a stable state and you loop forever.
+/// </summary>
+public class ComparableList : IComparable<ComparableList>
+{
+    public List<int> Items { get; }
+
+    public ComparableList(params int[] values)
+    {
+        Items = new List<int>(values);
+    }
+
+    /// <summary>
+    /// This wrapper isn't just syntactic sugar. It's the contract that keeps reality from fracturing.
+    /// </summary>
+    /// <param name="other"></param>
+    /// <returns></returns>
+    public int CompareTo(ComparableList other)
+    {
+        if (other == null) return 1;
+        int countCompare = Items.Count.CompareTo(other.Items.Count);
+        if (countCompare != 0) return countCompare;
+
+        for (int i = 0; i < Items.Count; i++)
+        {
+            int cmp = Items[i].CompareTo(other.Items[i]);
+            if (cmp != 0) return cmp;
+        }
+        return 0;
+    }
+
+    public override bool Equals(object obj)
+    {
+        return obj is ComparableList cl && CompareTo(cl) == 0;
+    }
+
+    public override int GetHashCode()
+    {
+        return Items.Aggregate(17, (acc, val) => acc * 31 + val);
+    }
+
+    public override string ToString()
+    {
+        // Format like "1 4 6 4 1"
+        return string.Join(" ", Items);
     }
 }
