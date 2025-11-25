@@ -16,7 +16,7 @@
     <PackageTags>Quantum;Superposition;Quantum Computing;Parallel Processing;Concurrency;Mathematics;Logic;Quantum Mechanics;C#;DotNet;Library;Algorithms;Prime Numbers;Factors;Mathematical Operations;Logical Operations;Eigenstates;Generics;Quantum Programming</PackageTags>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <FileVersion>1.7.5.1</FileVersion>
-    <Version>1.7.5</Version>
+    <Version>1.7.5.1</Version>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
