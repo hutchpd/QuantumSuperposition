@@ -213,6 +213,25 @@ using QuantumSuperposition.Utilities;
 
 ---
 
+## Phase & interference: how the library models them
+
+The physics layer of this library is a linear-algebra quantum simulator: gates are complex-valued unitary matrices and states are complex state-vectors. Phase information is represented by the complex phase of amplitudes (e.g. `Complex.Exp(i · θ)`), and interference is produced when amplitudes are multiplied and summed during gate application.
+
+Concretely:
+
+- Gates such as `Phase(θ)`, `CPhase(θ)`, `T`, `RX(θ)` are matrices with complex entries (e.g. `Complex.Exp(i·θ)`), so they carry relative phase information. See `QuantumGates` for the canonical constructors used.
+
+- Applying a gate is a matrix×vector multiplication over complex numbers. The implementation uses `QuantumMathUtility.ApplyMatrix` (and related helpers) which performs the complex multiplies and complex additions that produce interference. `QuantumSystem` methods call these helpers to apply single and multi-qubit gates.
+
+- Measurement probabilities are derived in the textbook way: probability = |amplitude|². The system normalises amplitudes after gate batches so probabilities remain normalised.
+
+Global phase is not observable; relative phases are what cause interference. The implementation preserves relative phases through matrix operations; normalisation removes only global magnitude scaling, not relative phase differences.
+
+If you want an explicit demonstration of interference, see the "Hadamard–Phase–Hadamard" example in `docs/ComplexSupport.md`.
+
+
+---
+
 ## Documentation Map
 
 Trailer above. Full movie lives in the docs:
@@ -246,3 +265,4 @@ Unlicense: do what you like short of blaming us if you open a portal.
 ## Contact
 
 Questions, fan mail or a probability amplitude shaped like a duck: `support@findonsoftware.com`
+

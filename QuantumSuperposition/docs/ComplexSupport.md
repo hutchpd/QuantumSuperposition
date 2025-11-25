@@ -9,6 +9,7 @@ using System.Numerics;
 using QuantumSuperposition.Core;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Operators;
+using QuantumSuperposition.Utilities;
 ```
 
 QuantumSuperposition supports complex numbers for advanced quantum operations. This section guides you through using complex numbers in the library.
@@ -89,3 +90,42 @@ var phaseSuperposition = complexSuperposition.Select(c => c.Phase);
 
 Console.WriteLine($"Magnitude Superposition: {magnitudeSuperposition}");
 Console.WriteLine($"Phase Superposition: {phaseSuperposition}");
+
+```
+
+### Interference example: Hadamard ? Phase(?) ? Hadamard
+
+This short example demonstrates destructive and constructive interference implemented by complex phases and matrix multiplication.
+
+```csharp
+// Example: Hadamard -> Phase(pi) -> Hadamard gives deterministic |1> outcome
+using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Utilities;
+
+Complex[] initial = new Complex[] { Complex.One, Complex.Zero }; // |0>
+
+// Hadamard
+Complex[,] H = QuantumGates.Hadamard.Matrix;
+
+// After H: (|0> + |1>) / sqrt(2)
+Complex[] afterH = QuantumMathUtility<Complex>.ApplyMatrix(initial, H);
+
+// Apply a phase of pi to |1> (i.e. [1, -1] diagonal)
+Complex[,] phasePi = QuantumGates.Phase(Math.PI).Matrix;
+Complex[] afterPhase = QuantumMathUtility<Complex>.ApplyMatrix(afterH, phasePi);
+
+// Apply Hadamard again
+Complex[] final = QuantumMathUtility<Complex>.ApplyMatrix(afterPhase, H);
+
+// Inspect probabilities
+double p0 = final[0].Magnitude * final[0].Magnitude;
+double p1 = final[1].Magnitude * final[1].Magnitude;
+
+// Expect p0 ? 0, p1 ? 1 due to destructive interference on |0>.
+Console.WriteLine($"p0={p0:E3}, p1={p1:E3}");
+```
+
+Explanation: the phase `-1` on the `|1>` component flips the sign so the two amplitude paths interfere destructively at `|0>` and constructively at `|1>`.
+
+(Helpers used here: `QuantumGates` supplies `Hadamard` and `Phase`, and `QuantumMathUtility.ApplyMatrix` performs the complex matrix×vector multiplication.)
