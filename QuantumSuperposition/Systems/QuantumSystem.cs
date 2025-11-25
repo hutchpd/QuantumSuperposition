@@ -429,5 +429,24 @@ namespace QuantumSuperposition.Systems
         /// Exposes registered references (internal use for QuantumRegister).
         /// </summary>
         internal IEnumerable<IQuantumReference> GetRegisteredReferences() => _registered;
+
+        /// <summary>
+        /// Returns a human-friendly view of current amplitudes: basis index -> r·e^{iθ} with probability.
+        /// </summary>
+        public string GetAmplitudePhaseDebugView()
+        {
+            if (_amplitudes.Count == 0) return "<empty>";
+            List<string> lines = new();
+            foreach (var kv in _amplitudes)
+            {
+                int[] bits = kv.Key;
+                Complex a = kv.Value;
+                double r = a.Magnitude;
+                double theta = Math.Atan2(a.Imaginary, a.Real);
+                double p = r * r;
+                lines.Add($"[{string.Join("", bits)}] => {r:E3}·e^(i{theta:E3})  p={p:E3}");
+            }
+            return string.Join(Environment.NewLine, lines);
+        }
     }
 }

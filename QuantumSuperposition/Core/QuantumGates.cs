@@ -10,6 +10,44 @@ namespace QuantumSuperposition.Core
         public QuantumGate(Complex[,] matrix)
         {
             Matrix = matrix;
+            if (QuantumConfig.ValidateUnitarity)
+            {
+                ValidateUnitarity();
+            }
+        }
+
+        private void ValidateUnitarity()
+        {
+            int rows = Matrix.GetLength(0);
+            int cols = Matrix.GetLength(1);
+            if (rows != cols) throw new InvalidOperationException("Gate must be square to be unitary.");
+            Complex[,] conjT = QuantumGateTools.ConjugateTranspose(Matrix);
+            // Multiply Matrix * conjT and check approximately identity
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    Complex sum = Complex.Zero;
+                    for (int k = 0; k < cols; k++)
+                    {
+                        sum += Matrix[i, k] * conjT[k, j];
+                    }
+                    if (i == j)
+                    {
+                        if (Complex.Abs(sum - Complex.One) > QuantumConfig.UnitarityTolerance)
+                        {
+                            throw new InvalidOperationException($"Gate failed unitarity check at diagonal ({i},{j}). |sum-1|={Complex.Abs(sum-Complex.One)}");
+                        }
+                    }
+                    else
+                    {
+                        if (Complex.Abs(sum) > QuantumConfig.UnitarityTolerance)
+                        {
+                            throw new InvalidOperationException($"Gate failed unitarity check at off-diagonal ({i},{j}). |sum|={Complex.Abs(sum)}");
+                        }
+                    }
+                }
+            }
         }
 
         public QuantumGate Then(QuantumGate nextGate)
