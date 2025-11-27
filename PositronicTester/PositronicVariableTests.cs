@@ -1,4 +1,4 @@
-Ôªø#region Using directives
+#region Using directives
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PositronicVariables.Attributes;
@@ -55,7 +55,7 @@ namespace PositronicVariables.Tests
         /// </summary>
         public static void EmitOnceIfNeeded()
         {
-            // If the engine already flushed to the real console, don‚Äôt print again.
+            // If the engine already flushed to the real console, donít print again.
             if (AethericRedirectionGrid.SuppressEndOfUniverseReading)
                 return;
 
@@ -525,7 +525,7 @@ namespace PositronicVariables.Tests
             Console.WriteLine("hello");
             redirector.Restore();
 
-            // assert: our StringWriter got the ‚Äúhello‚Äù line
+            // assert: our StringWriter got the ìhelloî line
             var text = output.ToString();
             Assert.That(text, Does.Contain("hello"));
         }
@@ -776,7 +776,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_11()
         {
-            // Clean world so previous tests don‚Äôt leak state
+            // Clean world so previous tests donít leak state
             PositronicAmbient.PanicAndReset();
 
             // Program body mirroring the console example
@@ -796,10 +796,10 @@ namespace PositronicVariables.Tests
             {
                 Console.SetOut(sw);
 
-                // "Normal" run (outside the convergence loop) ‚Äî this mimics how the console app executes Main initially
+                // "Normal" run (outside the convergence loop) ó this mimics how the console app executes Main initially
                 ProgramBody();
 
-                // Engine run (inside the convergence loop) ‚Äî this mimics what the runtime does on ProcessExit
+                // Engine run (inside the convergence loop) ó this mimics what the runtime does on ProcessExit
                 PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
             }
             finally
@@ -820,7 +820,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_9()
         {
-            // Clean world so previous tests don‚Äôt leak state
+            // Clean world so previous tests donít leak state
             PositronicAmbient.PanicAndReset();
 
             // Program body mirroring the console example
@@ -840,10 +840,10 @@ namespace PositronicVariables.Tests
             {
                 Console.SetOut(sw);
 
-                // "Normal" run (outside the convergence loop) ‚Äî this mimics how the console app executes Main initially
+                // "Normal" run (outside the convergence loop) ó this mimics how the console app executes Main initially
                 ProgramBody();
 
-                // Engine run (inside the convergence loop) ‚Äî this mimics what the runtime does on ProcessExit
+                // Engine run (inside the convergence loop) ó this mimics what the runtime does on ProcessExit
                 PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
             }
             finally
@@ -864,7 +864,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_multiplication()
         {
-            // Clean world so previous tests don‚Äôt leak state
+            // Clean world so previous tests donít leak state
             PositronicAmbient.PanicAndReset();
 
             // Program body mirroring the console example
@@ -884,10 +884,10 @@ namespace PositronicVariables.Tests
             {
                 Console.SetOut(sw);
 
-                // "Normal" run (outside the convergence loop) ‚Äî this mimics how the console app executes Main initially
+                // "Normal" run (outside the convergence loop) ó this mimics how the console app executes Main initially
                 ProgramBody();
 
-                // Engine run (inside the convergence loop) ‚Äî this mimics what the runtime does on ProcessExit
+                // Engine run (inside the convergence loop) ó this mimics what the runtime does on ProcessExit
                 PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
             }
             finally
@@ -909,7 +909,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_Division()
         {
-            // Clean world so previous tests don‚Äôt leak state
+            // Clean world so previous tests donít leak state
             PositronicAmbient.PanicAndReset();
 
             // Program body mirroring the console example
@@ -929,10 +929,10 @@ namespace PositronicVariables.Tests
             {
                 Console.SetOut(sw);
 
-                // "Normal" run (outside the convergence loop) ‚Äî this mimics how the console app executes Main initially
+                // "Normal" run (outside the convergence loop) ó this mimics how the console app executes Main initially
                 ProgramBody();
 
-                // Engine run (inside the convergence loop) ‚Äî this mimics what the runtime does on ProcessExit
+                // Engine run (inside the convergence loop) ó this mimics what the runtime does on ProcessExit
                 PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
             }
             finally
@@ -953,7 +953,7 @@ namespace PositronicVariables.Tests
         [Test]
         public void ConsoleStyle_DoubleRun_PrintsSingleConvergedAntival_Mod()
         {
-            // Clean world so previous tests don‚Äôt leak state
+            // Clean world so previous tests donít leak state
             PositronicAmbient.PanicAndReset();
 
             // Program body mirroring the console example
@@ -973,10 +973,10 @@ namespace PositronicVariables.Tests
             {
                 Console.SetOut(sw);
 
-                // "Normal" run (outside the convergence loop) ‚Äî this mimics how the console app executes Main initially
+                // "Normal" run (outside the convergence loop) ó this mimics how the console app executes Main initially
                 ProgramBody();
 
-                // Engine run (inside the convergence loop) ‚Äî this mimics what the runtime does on ProcessExit
+                // Engine run (inside the convergence loop) ó this mimics what the runtime does on ProcessExit
                 PositronicVariable<int>.RunConvergenceLoop(PositronicAmbient.Current, ProgramBody);
             }
             finally
@@ -1027,7 +1027,7 @@ namespace PositronicVariables.Tests
             PositronicVariables.Variables.PositronicVariable<int>.RunConvergenceLoop(
                 rt, ProgramBody, runFinalIteration: true, unifyOnConvergence: true);
 
-            // Assert: Inspect ONLY the snapshot from the final iteration‚Äôs print site
+            // Assert: Inspect ONLY the snapshot from the final iterationís print site
             var lastPrePrint = prePrintSnapshots.Last();
 
             // This assertion tells us if reverse replay provided a single value at the print site.
@@ -1035,7 +1035,7 @@ namespace PositronicVariables.Tests
             Assert.That(lastPrePrint.Length, Is.EqualTo(1),
                 "Expected a single current-slice value at the print site in the final iteration.");
 
-            // If the model is the classic ‚Äúantival+1 then force=10‚Äù,
+            // If the model is the classic ìantival+1 then force=10î,
             // we expect the back-propagated start to be 11.
             Assert.That(lastPrePrint[0], Is.EqualTo(11),
                 "Expected the pre-print current-slice value to be 11 after convergence.");
@@ -1063,7 +1063,7 @@ namespace PositronicVariables.Tests
             // Arrange
             var v = PositronicVariable<int>.GetOrCreate("x", 0, _runtime);
 
-            // forward‚Äêonly pass: record +2, +3, then scalar assign 7
+            // forward?only pass: record +2, +3, then scalar assign 7
             PositronicVariable<int>.SetEntropy(_runtime, +1);
             v.Assign(v + 2);
             v.Assign(v + 3);
@@ -1079,7 +1079,7 @@ namespace PositronicVariables.Tests
 
             // Assert:  7 + 3 + 2  => 12
             Assert.That(result, Is.EqualTo(12),
-                "Backward‚Äêreplay should invert the +2 and +3 before the scalar assignment, giving 12");
+                "Backward?replay should invert the +2 and +3 before the scalar assignment, giving 12");
         }
 
         [Test]
@@ -1210,7 +1210,7 @@ namespace PositronicVariables.Tests
 
             int[] ParseStates(string line)
             {
-                // Accept either "any(‚Ä¶)" or a bare scalar "X"
+                // Accept either "any(Ö)" or a bare scalar "X"
                 int open = line.IndexOf('(');
                 int close = line.LastIndexOf(')');
                 if (open >= 0 && close > open)
@@ -1337,7 +1337,7 @@ namespace PositronicVariables.Tests
                     timelineLens.Add(afterLen);
                     lastTwoEqual.Add(a.Converged());
 
-                    // Stop after three half-cycles so we see reverse‚Üíforward‚Üíreverse
+                    // Stop after three half-cycles so we see reverse?forward?reverse
                     if (calls >= 3) rt.Converged = true;
                 },
                 runFinalIteration: false,
@@ -1347,11 +1347,11 @@ namespace PositronicVariables.Tests
             // Expected pattern:
             // 1) reverse: append 3 (len grows by +1)
             // 2) forward: replace 3 (len unchanged vs last)
-            // 3) reverse: append 3 again (len grows by +1) => last two equal ‚Üí Converged()==1
+            // 3) reverse: append 3 again (len grows by +1) => last two equal ? Converged()==1
             Assert.That(timelineLens.Count, Is.EqualTo(3), "Expected exactly three half-cycles.");
-            Assert.That(lastTwoEqual[0], Is.EqualTo(0), "First (reverse) won‚Äôt converge yet.");
+            Assert.That(lastTwoEqual[0], Is.EqualTo(0), "First (reverse) wonít converge yet.");
             Assert.That(lastTwoEqual[1], Is.EqualTo(0), "Second (forward) replaces, still not converged.");
-            Assert.That(lastTwoEqual[2], Is.GreaterThan(0), "Third (reverse) appends duplicate ‚Üí converged.");
+            Assert.That(lastTwoEqual[2], Is.GreaterThan(0), "Third (reverse) appends duplicate ? converged.");
         }
 
         [Test, Explicit("Diagnostics")]
@@ -1491,8 +1491,9 @@ namespace PositronicVariables.Tests
 
             var entries = stackObj.Cast<object>().ToArray();
             TestContext.WriteLine($"OpLog depth={entries.Length}");
-            foreach (var e in entries.Reverse())
+            for (int i = entries.Length - 1; i >= 0; i--)
             {
+                var e = entries[i];
                 TestContext.WriteLine($" - {e?.GetType().Name}");
             }
 
@@ -1657,14 +1658,14 @@ namespace PositronicVariables.Tests
                 // capture value at print site (forward)
                 var _ = a.ToString();
 
-                // Apply Required(self) ‚Äî should insert boundary now
+                // Apply Required(self) ó should insert boundary now
                 a.Required = c;
 
                 // On the next reverse tick, the engine clones and Assign(copy) runs.
                 // Before next forward flip, read both slices:
                 if (PositronicVariable<int>.GetEntropy(rt) < 0)
                 {
-                    // current == ‚Äúearlier‚Äù slice appended this reverse
+                    // current == ìearlierî slice appended this reverse
                     preReverseA = a.GetCurrentQBit().ToCollapsedValues().Single();
                 }
             }, runFinalIteration: false, unifyOnConvergence: false);
@@ -1737,7 +1738,7 @@ namespace PositronicVariables.Tests
         #endregion
     }
 
-#endregion
+    #endregion
 
     #region PositronicQuickPathBugTests
 
@@ -1823,7 +1824,7 @@ namespace PositronicVariables.Tests
             var final = v.ToValues().Single();
 
             Assert.That(final, Is.EqualTo(0),
-                "The final reverse pass did not undo the quick-path overwrite‚Äî" +
+                "The final reverse pass did not undo the quick-path overwriteó" +
                 "suggests the write was never recorded.");
         }
 
@@ -1930,7 +1931,7 @@ namespace PositronicVariables.Tests
 
         #endregion
 
-    #endregion
+        #endregion
 
         [Test, Explicit("Diagnostics")]
         public void Trace_Timelines_AndEpochs_SingleVariable_Multiply()

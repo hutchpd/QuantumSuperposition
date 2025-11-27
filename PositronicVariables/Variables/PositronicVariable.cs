@@ -127,7 +127,7 @@ namespace PositronicVariables.Variables
 
             _temporalRecords = timelineArchivist ?? new BureauOfTemporalRecords<T>();
             QuBit<T> qb = new([initialValue]);
-            
+
             _temporalRecords.OverwriteBootstrap(this, qb);
             _sliceEpochs.Clear();
             _sliceEpochs.Add(0);
@@ -207,7 +207,7 @@ namespace PositronicVariables.Variables
             }
 
             QuBit<T> qb = new(scalarValues);
-            
+
             ReplaceOrAppendOrUnify(qb, replace: !isValueType);
         }
 
@@ -570,7 +570,7 @@ namespace PositronicVariables.Variables
         public void Assign(PositronicVariable<T> other)
         {
             QuBit<T> qb = other.GetCurrentQBit();
-            
+
             // Treat this as a cross-variable assignment (source = other).
             ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: ReferenceEquals(this, other), crossSource: other);
         }
@@ -1575,7 +1575,7 @@ namespace PositronicVariables.Variables
                 return new QExpr(this, () =>
                 {
                     QuBit<T> qb = GetCurrentQBit();
-                    
+
                     return qb;
                 });
 
