@@ -6,10 +6,6 @@ using System.Threading.Tasks;
 
 namespace PositronicVariables.Transactions
 {
-    /// <summary>
-    /// Ambient, async-friendly transactional scope with flat nesting and buffered commit hooks.
-    /// Uses optimistic validation and per-variable deterministic locking at commit.
-    /// </summary>
     public sealed class TransactionScope : IDisposable
     {
         private sealed class TxData
@@ -122,8 +118,12 @@ namespace PositronicVariables.Transactions
                 }
                 catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
                 {
+                    STMTelemetry.RecordRetry();
                     if (attempt == _maxAttempts)
+                    {
+                        STMTelemetry.RecordAbort();
                         throw new TransactionAbortedException("Transaction aborted after maximum retries due to contention.", attempt);
+                    }
 
                     int delay = Math.Min(_maxDelayMs, (int)(Math.Pow(2, attempt - 1) * _baseDelayMs));
                     int jitter = s_rng.Value!.Next(0, 3);
@@ -135,13 +135,35 @@ namespace PositronicVariables.Transactions
         private void CommitOnce()
         {
             var data = s_current.Value ?? throw new InvalidOperationException("No ambient transaction.");
+
+            // Read-only fast path
+            if (data.WriteSet.Count == 0)
+            {
+                foreach (var (v, ver) in data.ReadSet)
+                {
+                    if (v.TxVersion != ver)
+                    {
+                        STMTelemetry.RecordValidationFailure(v.TxId);
+                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                    }
+                }
+                STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
+                return;
+            }
+
             var ordered = data.WriteSet.Values.OrderBy(x => x.var.TxId).ToArray();
+            System.Diagnostics.Stopwatch sw = null;
 
             try
             {
-                foreach (var (v, _) in ordered)
+                for (int i = 0; i < ordered.Length; i++)
                 {
+                    var (v, _) = ordered[i];
                     Monitor.Enter(v.TxLock);
+                    if (i == 0)
+                    {
+                        sw = System.Diagnostics.Stopwatch.StartNew();
+                    }
                 }
 
                 var writeIds = data.WriteSet.Keys.ToHashSet();
@@ -150,6 +172,7 @@ namespace PositronicVariables.Transactions
                     if (writeIds.Contains(v.TxId)) continue;
                     if (v.TxVersion != ver)
                     {
+                        STMTelemetry.RecordValidationFailure(v.TxId);
                         throw new InvalidOperationException("STM validation failed: read version changed.");
                     }
                 }
@@ -167,6 +190,9 @@ namespace PositronicVariables.Transactions
                     Monitor.Exit(ordered[i].var.TxLock);
                 }
             }
+
+            long ticks = sw?.ElapsedTicks ?? 0;
+            STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
 
             foreach (var hook in data.Hooks)
             {

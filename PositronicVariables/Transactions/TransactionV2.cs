@@ -39,9 +39,11 @@ namespace PositronicVariables.Transactions
                 }
                 catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
                 {
+                    STMTelemetry.RecordRetry();
                     // backoff
                     if (attempt == maxAttempts)
                     {
+                        STMTelemetry.RecordAbort();
                         throw new TransactionAbortedException("Transaction aborted after maximum retries due to contention.", attempt);
                     }
 
@@ -64,12 +66,35 @@ namespace PositronicVariables.Transactions
 
         private void CommitOnce()
         {
+            // Read-only fast path: validate read versions, no locks
+            if (_writeSet.Count == 0)
+            {
+                foreach (var (v, ver) in _readSet)
+                {
+                    if (v.TxVersion != ver)
+                    {
+                        STMTelemetry.RecordValidationFailure(v.TxId);
+                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                    }
+                }
+
+                STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
+                return;
+            }
+
             var ordered = _writeSet.Values.OrderBy(x => x.var.TxId).ToArray();
+            System.Diagnostics.Stopwatch sw = null;
+
             try
             {
-                foreach (var (v, _) in ordered)
+                for (int i = 0; i < ordered.Length; i++)
                 {
+                    var (v, _) = ordered[i];
                     Monitor.Enter(v.TxLock);
+                    if (i == 0)
+                    {
+                        sw = System.Diagnostics.Stopwatch.StartNew();
+                    }
                 }
 
                 var writeIds = _writeSet.Keys.ToHashSet();
@@ -78,6 +103,7 @@ namespace PositronicVariables.Transactions
                     if (writeIds.Contains(v.TxId)) continue;
                     if (v.TxVersion != ver)
                     {
+                        STMTelemetry.RecordValidationFailure(v.TxId);
                         throw new InvalidOperationException("STM validation failed: read version changed.");
                     }
                 }
@@ -95,6 +121,9 @@ namespace PositronicVariables.Transactions
                     Monitor.Exit(ordered[i].var.TxLock);
                 }
             }
+
+            long ticks = sw?.ElapsedTicks ?? 0;
+            STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
         }
     }
 }
