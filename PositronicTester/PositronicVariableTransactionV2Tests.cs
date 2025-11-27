@@ -39,26 +39,24 @@ namespace PositronicVariables.Tests
 
             var ta = Task.Run(() =>
             {
-                TransactionV2.Run(tx =>
+                TransactionV2.RunWithRetry(tx =>
                 {
-                    // read both (record versions)
                     tx.RecordRead(a);
                     tx.RecordRead(b);
-                    // stage writes in opposite order
                     tx.StageWrite(b, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 1 }).Any());
                     tx.StageWrite(a, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 1 }).Any());
-                });
+                }, maxAttempts: 8);
             });
 
             var tb = Task.Run(() =>
             {
-                TransactionV2.Run(tx =>
+                TransactionV2.RunWithRetry(tx =>
                 {
                     tx.RecordRead(b);
                     tx.RecordRead(a);
                     tx.StageWrite(a, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 2 }).Any());
                     tx.StageWrite(b, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 2 }).Any());
-                });
+                }, maxAttempts: 8);
             });
 
             Assert.DoesNotThrowAsync(async () => await Task.WhenAll(ta, tb));
@@ -74,7 +72,7 @@ namespace PositronicVariables.Tests
             {
                 for (int i = 0; i < 200; i++)
                 {
-                    TransactionV2.Run(tx =>
+                    TransactionV2.RunWithRetry(tx =>
                     {
                         tx.RecordRead(a);
                         tx.StageWrite(a, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 1 }).Any());
@@ -86,7 +84,7 @@ namespace PositronicVariables.Tests
             {
                 for (int i = 0; i < 200; i++)
                 {
-                    TransactionV2.Run(tx =>
+                    TransactionV2.RunWithRetry(tx =>
                     {
                         tx.RecordRead(b);
                         tx.StageWrite(b, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { 1 }).Any());

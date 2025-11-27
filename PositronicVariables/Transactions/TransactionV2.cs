@@ -11,7 +11,7 @@ namespace PositronicVariables.Transactions
     /// </summary>
     public sealed class TransactionV2
     {
-        private readonly Dictionary<ITransactionalVariable, object> _writeSet = new();
+        private readonly Dictionary<long, (ITransactionalVariable var, object qb)> _writeSet = new();
         private readonly List<(ITransactionalVariable var, long version)> _readSet = new();
 
         private static readonly ThreadLocal<Random> s_rng = new(() => new Random(unchecked(Environment.TickCount * 397) ^ Thread.CurrentThread.ManagedThreadId));
@@ -54,7 +54,7 @@ namespace PositronicVariables.Transactions
 
         public void StageWrite(ITransactionalVariable v, object qb)
         {
-            _writeSet[v] = qb;
+            _writeSet[v.TxId] = (v, qb);
         }
 
         public void RecordRead(ITransactionalVariable v)
@@ -64,26 +64,25 @@ namespace PositronicVariables.Transactions
 
         private void CommitOnce()
         {
-            var writeVars = _writeSet.Keys.OrderBy(v => v.TxId).ToArray();
+            var ordered = _writeSet.Values.OrderBy(x => x.var.TxId).ToArray();
             try
             {
-                foreach (var v in writeVars)
+                foreach (var (v, _) in ordered)
                 {
                     Monitor.Enter(v.TxLock);
                 }
 
-                // Validate read set (ignore any that are also in write set)
+                var writeIds = _writeSet.Keys.ToHashSet();
                 foreach (var (v, ver) in _readSet)
                 {
-                    if (_writeSet.ContainsKey(v)) continue;
+                    if (writeIds.Contains(v.TxId)) continue;
                     if (v.TxVersion != ver)
                     {
                         throw new InvalidOperationException("STM validation failed: read version changed.");
                     }
                 }
 
-                // Apply writes
-                foreach (var (v, qb) in _writeSet)
+                foreach (var (v, qb) in ordered)
                 {
                     v.TxApplyRequired(qb);
                     v.TxBumpVersion();
@@ -91,9 +90,9 @@ namespace PositronicVariables.Transactions
             }
             finally
             {
-                for (int i = writeVars.Length - 1; i >= 0; i--)
+                for (int i = ordered.Length - 1; i >= 0; i--)
                 {
-                    Monitor.Exit(writeVars[i].TxLock);
+                    Monitor.Exit(ordered[i].var.TxLock);
                 }
             }
         }
