@@ -59,6 +59,8 @@ namespace PositronicVariables.Transactions
 
         public static TransactionV2 Begin() => new TransactionV2();
 
+        internal void Commit() => CommitOnce();
+
         public void StageWrite(ITransactionalVariable v, object qb)
         {
             _writeSet[v.TxId] = (v, qb);

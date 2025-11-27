@@ -259,10 +259,11 @@ namespace PositronicVariables.Variables
 #if DEBUG
             if (mutator == null) throw new ArgumentNullException(nameof(mutator));
             bool hasLock = System.Threading.Monitor.IsEntered(_tvarLock);
-            bool safe = hasLock || InConvergenceLoop || PositronicVariables.Transactions.ConcurrencyGuard.ActiveTransactions == 0;
+            bool engine = PositronicVariables.Transactions.ConcurrencyGuard.IsEngineThread;
+            bool safe = hasLock || engine || InConvergenceLoop || PositronicVariables.Transactions.ConcurrencyGuard.ActiveTransactions == 0;
             if (!safe)
             {
-                throw new InvalidOperationException("Unsafe timeline mutation detected (Stage A guard). Use transactions or convergence coordinator.");
+                throw new InvalidOperationException("Unsafe timeline mutation detected (Stage B guard). Use transactions or convergence coordinator.");
             }
 #endif
             mutator(timeline);

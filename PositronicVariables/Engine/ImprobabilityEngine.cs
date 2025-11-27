@@ -7,6 +7,9 @@ using PositronicVariables.Variables;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Linq;
+using System.Collections.Generic;
+using PositronicVariables.Engine.Coordinator;
+using PositronicVariables.Transactions;
 
 namespace PositronicVariables.Engine
 {
@@ -16,16 +19,52 @@ namespace PositronicVariables.Engine
         IOperationLogHandler<T> ops,
         ISubEthaTransponder redirect,
         IPositronicRuntime runtime,
-        ITimelineArchivist<T> timelineArchivist) : IImprobabilityEngine<T>
+        ITimelineArchivist<T> timelineArchivist,
+        ConvergenceCoordinator coordinator = null) : IImprobabilityEngine<T>
         where T : IComparable<T>
     {
         private readonly int _maxIters = 1000;
+
+        private sealed class ConvergenceWorkItem : IConvergenceWorkItem
+        {
+            private readonly ImprobabilityEngine<T> _engine;
+            private readonly Action _code;
+            private readonly bool _runFinalIteration;
+            private readonly bool _unify;
+            private readonly bool _bail;
+            private readonly IImprobabilityEngine<T> _next;
+            public ConvergenceWorkItem(ImprobabilityEngine<T> engine, Action code, bool runFinal, bool unify, bool bail, IImprobabilityEngine<T> next)
+            {
+                _engine = engine; _code = code; _runFinalIteration = runFinal; _unify = unify; _bail = bail; _next = next;
+            }
+            public void BuildWrites(TransactionV2 tx)
+            {
+                // Convergence logic itself stages writes through PositronicVariable APIs which internally lock on commit.
+                _engine.RunInternal(_code, _runFinalIteration, _unify, _bail, _next);
+            }
+            public IEnumerable<Action> BuildCommitHooks() { yield break; }
+            public object? GetResultAfterCommit() => null;
+        }
 
         public void Run(Action code,
                         bool runFinalIteration = true,
                         bool unifyOnConvergence = true,
                         bool bailOnFirstReverseWhenIdle = false,
                         IImprobabilityEngine<T> next = null)
+        {
+            if (coordinator != null)
+            {
+                coordinator.EnqueueAsync(new ConvergenceWorkItem(this, code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle, next)).AsTask().GetAwaiter().GetResult();
+                return;
+            }
+            RunInternal(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle, next);
+        }
+
+        private void RunInternal(Action code,
+                        bool runFinalIteration,
+                        bool unifyOnConvergence,
+                        bool bailOnFirstReverseWhenIdle,
+                        IImprobabilityEngine<T> next)
         {
             if (next != null)
             {
