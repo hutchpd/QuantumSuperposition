@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using PositronicVariables.Transactions;
 
 namespace PositronicVariables.Variables
 {
@@ -1779,6 +1780,16 @@ namespace PositronicVariables.Variables
                 });
             }
             set => ConstrainEqual(value);
+        }
+
+        /// <summary>
+        /// Run an action under a coarse-grained global transaction.
+        /// Stage 1 API to help tests serialize multivariable mutations.
+        /// </summary>
+        public static void InTransaction(Action action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            Transaction.Run(_ => action());
         }
     }
 }
