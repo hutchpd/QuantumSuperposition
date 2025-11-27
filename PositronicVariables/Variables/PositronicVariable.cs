@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using PositronicVariables.Transactions;
+using System.Threading;
 
 namespace PositronicVariables.Variables
 {
@@ -23,11 +24,23 @@ namespace PositronicVariables.Variables
     /// If Schrödinger and Asimov had a baby, this would be its teething ring.
     /// </summary>
     /// <typeparam name="T">A type that implements IComparable.</typeparam>
-    public partial class PositronicVariable<T> : IPositronicVariable
+    public partial class PositronicVariable<T> : IPositronicVariable, ITransactionalVariable
         where T : IComparable<T>
     {
         [ThreadStatic]
         private static bool s_SuppressOperatorLogging;
+        // --- TVar fields (Stage 2) ---
+        private static long s_GlobalTVarId = 0;
+        private readonly object _tvarLock = new object();
+        private readonly long _tvarId;
+        private long _tvarVersion;
+
+        long ITransactionalVariable.TxId => _tvarId;
+        long ITransactionalVariable.TxVersion => Volatile.Read(ref _tvarVersion);
+        object ITransactionalVariable.TxLock => _tvarLock;
+        void ITransactionalVariable.TxApplyRequired(object qb) => ConstrainEqual((QuBit<T>)qb);
+        void ITransactionalVariable.TxBumpVersion() => Interlocked.Increment(ref _tvarVersion);
+
         private static int OutsideEpoch => -1;
 
         private static int s_LastEntropySeenForEpoch = int.MaxValue; // kick the epoch counter awake on first write
@@ -142,6 +155,10 @@ namespace PositronicVariables.Variables
 
             // When the timeline grows a new limb, let the world know.
             _temporalRecords.RegisterTimelineAppendedHook(() => OnTimelineAppended?.Invoke());
+
+            // TVar init
+            _tvarId = Interlocked.Increment(ref s_GlobalTVarId);
+            _tvarVersion = 0;
         }
 
         static PositronicVariable()
@@ -185,8 +202,13 @@ namespace PositronicVariables.Variables
         {
             ArgumentNullException.ThrowIfNull(qb);
 
-            ReplaceOrAppendOrUnify(qb, replace: true);
-            _sawStateReadThisForward = false;
+            // Non-transactional write: guard with per-variable lock and bump version after apply
+            lock (_tvarLock)
+            {
+                ReplaceOrAppendOrUnify(qb, replace: true);
+                _sawStateReadThisForward = false;
+                Interlocked.Increment(ref _tvarVersion);
+            }
         }
 
         /// <summary>
@@ -209,7 +231,11 @@ namespace PositronicVariables.Variables
 
             QuBit<T> qb = new(scalarValues);
 
-            ReplaceOrAppendOrUnify(qb, replace: !isValueType);
+            lock (_tvarLock)
+            {
+                ReplaceOrAppendOrUnify(qb, replace: !isValueType);
+                Interlocked.Increment(ref _tvarVersion);
+            }
         }
 
         // Simulation is enabled by default, like a toddler with a vivid imagination.
@@ -1509,54 +1535,54 @@ namespace PositronicVariables.Variables
         {
             ArgumentNullException.ThrowIfNull(qb);
 
-            if (InConvergenceLoop)
+            lock (_tvarLock)
             {
-                int e = _runtime.Entropy;
-                if (e != s_LastEntropySeenForEpoch)
+                if (InConvergenceLoop)
                 {
-                    BeginEpoch();
-                    s_LastEntropySeenForEpoch = e;
-                    ResetReverseReplayFlag();
+                    int e = _runtime.Entropy;
+                    if (e != s_LastEntropySeenForEpoch)
+                    {
+                        BeginEpoch();
+                        s_LastEntropySeenForEpoch = e;
+                        ResetReverseReplayFlag();
+                    }
                 }
-            }
 
-            if (_runtime.Entropy > 0)
-            {
-                // replace-or-append current slice with the narrowed state
-                if (timeline.Count <= 1)
+                if (_runtime.Entropy > 0)
                 {
-                    _temporalRecords.SnapshotAppend(this, qb);
-                    StampAppendCurrentEpoch();
+                    if (timeline.Count <= 1)
+                    {
+                        _temporalRecords.SnapshotAppend(this, qb);
+                        StampAppendCurrentEpoch();
+                    }
+                    else
+                    {
+                        _temporalRecords.ReplaceLastSlice(this, qb);
+                        StampReplaceCurrentEpoch();
+                    }
+
+                    _ops.SawForwardWrite = true;
+                    _hadRequiredThisForward = true;
+                }
+                else if (_runtime.Entropy < 0)
+                {
+                    AppendFromReverse(qb);
                 }
                 else
                 {
-                    _temporalRecords.ReplaceLastSlice(this, qb);
-                    StampReplaceCurrentEpoch();
+                    if (timeline.Count <= 1)
+                    {
+                        _temporalRecords.SnapshotAppend(this, qb);
+                        StampAppendCurrentEpoch();
+                    }
+                    else
+                    {
+                        _temporalRecords.ReplaceLastSlice(this, qb);
+                        StampReplaceCurrentEpoch();
+                    }
                 }
 
-                _ops.SawForwardWrite = true;
-
-                // flag: this var used Required in this forward half
-                _hadRequiredThisForward = true;
-                return;
-            }
-
-            if (_runtime.Entropy < 0)
-            {
-                AppendFromReverse(qb);
-                return;
-            }
-
-            // fallback outside-loop
-            if (timeline.Count <= 1)
-            {
-                _temporalRecords.SnapshotAppend(this, qb);
-                StampAppendCurrentEpoch();
-            }
-            else
-            {
-                _temporalRecords.ReplaceLastSlice(this, qb);
-                StampReplaceCurrentEpoch();
+                Interlocked.Increment(ref _tvarVersion);
             }
         }
 
