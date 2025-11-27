@@ -38,17 +38,15 @@ namespace PositronicVariables.Engine.Transponder
 
         private static void InitialiseDefaultRuntime()
         {
-            if (PositronicAmbient.Current != null)
+            // Do not touch PositronicAmbient.Current here; the getter throws when uninitialized.
+            if (PositronicAmbient.IsInitialized)
             {
                 return; // Someone already called InitialiseWith()
             }
 
-            IHost host = Host.CreateDefaultBuilder()
-                .ConfigureServices(services => services.AddPositronicRuntime())
-                .Build();
-
-            IPositronicRuntime runtime = host.Services.GetRequiredService<IPositronicRuntime>();
-            PositronicAmbient.Current = runtime;
+            IHostBuilder hb = Host.CreateDefaultBuilder()
+                .ConfigureServices(services => services.AddPositronicRuntime());
+            PositronicAmbient.InitialiseWith(hb);
         }
 
         static AethericRedirectionGrid()
