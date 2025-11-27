@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Threading;
 
 namespace PositronicVariables.Engine.Logging
 {
@@ -8,38 +9,55 @@ namespace PositronicVariables.Engine.Logging
     public static class QuantumLedgerOfRegret
     {
         private static readonly Stack<IOperation> _log = new();
+        private static readonly object _lock = new();
 
         public static void Record(IOperation op)
         {
-            _log.Push(op);
+            if (op == null) return;
+            lock (_lock)
+            {
+                _log.Push(op);
+            }
         }
 
         public static IOperation Peek()
         {
-            return _log.Count > 0 ? _log.Peek() : null;
+            lock (_lock)
+            {
+                return _log.Count > 0 ? _log.Peek() : null;
+            }
         }
 
         public static void ReverseLastOperations()
         {
-            while (_log.Count > 0)
+            lock (_lock)
             {
-                IOperation op = _log.Pop();
-                op.Undo();
+                while (_log.Count > 0)
+                {
+                    IOperation op = _log.Pop();
+                    op.Undo();
+                }
             }
         }
 
         // violently yeet the last recorded mistake into the entropy void
         public static void Pop()
         {
-            if (_log.Count > 0)
+            lock (_lock)
             {
-                _ = _log.Pop();
+                if (_log.Count > 0)
+                {
+                    _ = _log.Pop();
+                }
             }
         }
 
         public static void Clear()
         {
-            _log.Clear();
+            lock (_lock)
+            {
+                _log.Clear();
+            }
         }
     }
 }

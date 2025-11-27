@@ -35,47 +35,38 @@ namespace PositronicVariables.Engine.Timeline
         {
             lock (_syncRoot)
             {
-                // snapshot the current incarnation of the variable, before we accidentally turn it into a lizard or a toaster
-                List<QuBit<T>> copy = [.. variable.timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
+                List<QuBit<T>> copy = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
                 _snapshots.Push((variable, copy));
-
-                // append the new qubit
                 QuantumLedgerOfRegret.Record(new TimelineAppendOperation<T>(variable, copy, newSlice));
-
-                // tell the variable its bootstrap has definitely gone
                 variable.NotifyFirstAppend();
-
-                // fire the hook so the convergence engine knows "something changed"
-                variable.timeline.Add(newSlice);
-                // keep epoch tags aligned with the timeline 
-                variable.StampAppendCurrentEpoch();
-                _onAppend?.Invoke();
+                variable.AppendFromReverse(newSlice); // standardized append path (stamps epoch + event)
             }
         }
-
 
         public void RestoreLastSnapshot()
         {
             lock (_syncRoot)
             {
-                // summon the ghost of timelines past and cram it rudely back into existence
                 (PositronicVariable<T> variable, List<QuBit<T>> oldTimeline) = _snapshots.Pop();
-                variable.timeline.Clear();
-                variable.timeline.AddRange(oldTimeline);
+                // Replace forward history with bootstrap then append remaining slices
+                if (oldTimeline.Count > 0)
+                {
+                    variable.ReplaceForwardHistoryWith(oldTimeline[0]);
+                    for (int i = 1; i < oldTimeline.Count; i++)
+                    {
+                        variable.AppendFromReverse(oldTimeline[i]);
+                    }
+                }
             }
         }
-
 
         public void ReplaceLastSlice(PositronicVariable<T> variable, QuBit<T> mergedSlice)
         {
             lock (_syncRoot)
             {
-                List<QuBit<T>> backup = [.. variable.timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
+                List<QuBit<T>> backup = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
                 QuantumLedgerOfRegret.Record(new TimelineReplaceOperation<T>(variable, backup));
-
-                variable.timeline[^1] = mergedSlice;
-                variable.StampAppendCurrentEpoch();
-                _onAppend?.Invoke();
+                variable.ReplaceLastFromReverse(mergedSlice);
             }
         }
 
@@ -83,10 +74,8 @@ namespace PositronicVariables.Engine.Timeline
         {
             lock (_syncRoot)
             {
-                variable.timeline.Clear();
-                variable.timeline.Add(slice);
-                variable.StampBootstrap();
-                _onAppend?.Invoke();
+                // Clear and set bootstrap via ReplaceForwardHistoryWith which truncates to bootstrap then appends
+                variable.ReplaceForwardHistoryWith(slice);
             }
         }
     }

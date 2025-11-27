@@ -9,6 +9,7 @@ using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Initialisation;
 using PositronicVariables.Operations;
 using PositronicVariables.Runtime;
+using PositronicVariables.Runtime;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
@@ -252,6 +253,20 @@ namespace PositronicVariables.Variables
         /// The timeline of quantum slices, each a breadcrumb trail through the multiverse's tangled yarn.
         /// </summary>
         public readonly List<QuBit<T>> timeline = [];
+        public IReadOnlyList<QuBit<T>> Timeline => timeline; // expose read-only view
+        private void MutateTimeline(Action<List<QuBit<T>>> mutator)
+        {
+#if DEBUG
+            if (mutator == null) throw new ArgumentNullException(nameof(mutator));
+            bool hasLock = System.Threading.Monitor.IsEntered(_tvarLock);
+            bool safe = hasLock || InConvergenceLoop || PositronicVariables.Transactions.ConcurrencyGuard.ActiveTransactions == 0;
+            if (!safe)
+            {
+                throw new InvalidOperationException("Unsafe timeline mutation detected (Stage A guard). Use transactions or convergence coordinator.");
+            }
+#endif
+            mutator(timeline);
+        }
         private bool bootstrapSuperseded = false;
 
         // Epoch helpers
@@ -431,7 +446,7 @@ namespace PositronicVariables.Variables
 
             if (timeline.Count > 1)
             {
-                timeline.RemoveRange(1, timeline.Count - 1);
+                MutateTimeline(tl => tl.RemoveRange(1, tl.Count - 1));
             }
 
             TruncateToBootstrapOnly();
@@ -452,20 +467,22 @@ namespace PositronicVariables.Variables
         // Helpers used by reverse replay so epoch tags never drift out of sync
         internal void AppendFromReverse(QuBit<T> qb)
         {
-            timeline.Add(qb);
+            MutateTimeline(tl => tl.Add(qb));
             StampAppendCurrentEpoch();
             OnTimelineAppended?.Invoke();
         }
         internal void ReplaceLastFromReverse(QuBit<T> qb)
         {
-            timeline[^1] = qb;
+            MutateTimeline(tl => tl[^1] = qb);
             StampReplaceCurrentEpoch();
             OnTimelineAppended?.Invoke();
         }
         internal void ReplaceForwardHistoryWith(QuBit<T> qb)
         {
-            if (timeline.Count > 1) { timeline.RemoveRange(1, timeline.Count - 1); TruncateToBootstrapOnly(); }
-            timeline.Add(qb); StampAppendCurrentEpoch(); OnTimelineAppended?.Invoke();
+            MutateTimeline(tl => { if (tl.Count > 1) tl.RemoveRange(1, tl.Count - 1); tl.Add(qb); });
+            TruncateToBootstrapOnly();
+            StampAppendCurrentEpoch();
+            OnTimelineAppended?.Invoke();
         }
 
 
@@ -530,7 +547,7 @@ namespace PositronicVariables.Variables
             // Replace everything after the bootstrap with the unified slice.
             if (timeline.Count > 1)
             {
-                timeline.RemoveRange(1, timeline.Count - 1);
+                MutateTimeline(tl => tl.RemoveRange(1, tl.Count - 1));
             }
 
             // Keep epoch stamps in sync: drop stamps past bootstrap.
@@ -828,11 +845,11 @@ namespace PositronicVariables.Variables
                     // TARGET had a scalar close → compute baseline shift k = incoming − src, and apply to target’s forward baseline.
                     if (incomingVals.Length == 1 && srcVals.Length == 1)
                     {
-                        dynamic incoming = incomingVals[0];
-                        dynamic src = srcVals[0];
-                        dynamic k = incoming - src;
+                        T incoming = incomingVals[0];
+                        T src = srcVals[0];
+                        var k = NumericOps<T>.Subtract(incoming, src);
 
-                        dynamic baseVal;
+                        T baseVal;
                         if (_hasForwardScalarBaseline)
                         {
                             baseVal = _forwardScalarBaseline;
@@ -845,7 +862,7 @@ namespace PositronicVariables.Variables
 
                         try
                         {
-                            T shifted = (T)(baseVal + k);
+                            T shifted = NumericOps<T>.Add(baseVal, k);
                             rebuilt = new QuBit<T>(new[] { shifted });
                             rebuilt.Any();
                         }
@@ -951,14 +968,13 @@ namespace PositronicVariables.Variables
                     QuBit<T> rebuilt;
                     if (incomingVals.Length == 1 && srcVals.Length == 1 && lastTargetVals.Length == 1)
                     {
-                        dynamic incoming = incomingVals[0];
-                        dynamic src = srcVals[0];
-                        dynamic last = lastTargetVals[0];
-
-                        dynamic k = incoming - src;
+                        T incoming = incomingVals[0];
+                        T src = srcVals[0];
+                        T last = lastTargetVals[0];
+                        var k = NumericOps<T>.Subtract(incoming, src);
                         try
                         {
-                            T shifted = (T)(last + k);
+                            T shifted = NumericOps<T>.Add(last, k);
                             QuBit<T> q = new([shifted]); q.Any();
                             rebuilt = q;
                         }
@@ -1383,8 +1399,8 @@ namespace PositronicVariables.Variables
             T baseline = last.ToCollapsedValues().First();
             QuBit<T> collapsedQB = new([baseline]);
             collapsedQB.Any();
-            timeline.Clear();
-            timeline.Add(collapsedQB);
+            MutateTimeline(tl => tl.Clear());
+            MutateTimeline(tl => tl.Add(collapsedQB));
             OnCollapse?.Invoke();
         }
 
@@ -1694,7 +1710,6 @@ namespace PositronicVariables.Variables
 
         internal void AppendCloneOfCurrentForReverseTick()
         {
-            // Ensure the reverse half-cycle gets its own epoch stamp before we append.
             if (InConvergenceLoop)
             {
                 int e = _runtime.Entropy;
@@ -1705,12 +1720,10 @@ namespace PositronicVariables.Variables
                     ResetReverseReplayFlag();
                 }
             }
-
             QuBit<T> last = GetCurrentQBit();
             QuBit<T> copy = new(last.ToCollapsedValues().ToArray());
             copy.Any();
-
-            timeline.Add(copy);
+            MutateTimeline(tl => tl.Add(copy));
             StampAppendCurrentEpoch();
             OnTimelineAppended?.Invoke();
         }

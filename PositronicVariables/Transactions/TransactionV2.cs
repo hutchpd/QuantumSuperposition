@@ -9,17 +9,20 @@ namespace PositronicVariables.Transactions
     /// Stage 3 transaction: optimistic reads with validation; per-variable locks acquired only at commit.
     /// Includes bounded retries with exponential backoff + jitter.
     /// </summary>
-    public sealed class TransactionV2
+    public sealed class TransactionV2 : IDisposable
     {
         private readonly Dictionary<long, (ITransactionalVariable var, object qb)> _writeSet = new();
         private readonly List<(ITransactionalVariable var, long version)> _readSet = new();
+        private bool _disposed;
 
         private static readonly ThreadLocal<Random> s_rng = new(() => new Random(unchecked(Environment.TickCount * 397) ^ Thread.CurrentThread.ManagedThreadId));
+
+        private TransactionV2() { ConcurrencyGuard.TransactionStarted(); }
 
         public static void Run(Action<TransactionV2> body)
         {
             if (body == null) throw new ArgumentNullException(nameof(body));
-            var tx = new TransactionV2();
+            using var tx = Begin();
             body(tx);
             tx.CommitOnce();
         }
@@ -30,7 +33,7 @@ namespace PositronicVariables.Transactions
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var tx = new TransactionV2();
+                using var tx = Begin();
                 try
                 {
                     body(tx);
@@ -53,6 +56,8 @@ namespace PositronicVariables.Transactions
                 }
             }
         }
+
+        public static TransactionV2 Begin() => new TransactionV2();
 
         public void StageWrite(ITransactionalVariable v, object qb)
         {
@@ -124,6 +129,13 @@ namespace PositronicVariables.Transactions
 
             long ticks = sw?.ElapsedTicks ?? 0;
             STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            ConcurrencyGuard.TransactionEnded();
         }
     }
 }
