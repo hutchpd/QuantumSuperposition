@@ -39,6 +39,7 @@ namespace PositronicVariables.Transactions
             {
                 s_current.Value = new TxData();
                 s_depth.Value = 1;
+                ConcurrencyGuard.TransactionStarted();
                 return new TransactionScope(isRoot: true, maxAttempts, baseDelayMs, maxDelayMs);
             }
             else
@@ -99,6 +100,7 @@ namespace PositronicVariables.Transactions
                 {
                     s_current.Value = null;
                     s_depth.Value = 0;
+                    ConcurrencyGuard.TransactionEnded();
                 }
             }
             else

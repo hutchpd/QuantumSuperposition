@@ -15,7 +15,7 @@ namespace PositronicVariables.Operations.Interfaces
             QuBit<T> qb = new(new[] { Original });
             _ = qb.Any();
             // Magically swap out the latest cosmic crumb for something more fitting of this reality
-            Variable.timeline[^1] = qb;
+            Variable.ReplaceLastFromReverse(qb);
         }
     }
 }

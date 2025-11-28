@@ -66,7 +66,7 @@ namespace PositronicVariables.Operations
             // jam the original quantum sandwich back into the timeline like nothing ever happened
             QuBit<T> qb = new(new[] { Original });
             _ = qb.Any();
-            Variable.timeline[^1] = qb;
+            Variable.ReplaceLastFromReverse(qb);
 
             // Tell the convergence loop we're done
             _runtime.Converged = true;

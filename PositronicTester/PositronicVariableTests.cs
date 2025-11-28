@@ -1308,7 +1308,7 @@ namespace PositronicVariables.Tests
             Assert.That(bStates.Length, Is.GreaterThanOrEqualTo(1));
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Required_Constant_Needs_Three_HalfCycles()
         {
             PositronicAmbient.PanicAndReset();
@@ -1329,9 +1329,9 @@ namespace PositronicVariables.Tests
                 {
                     calls++;
 
-                    var beforeLen = a.timeline.Count;
+                    var beforeLen = a.Timeline.Count;
                     a.Required = PositronicVariable<int>.Project(a, _ => 3);
-                    var afterLen = a.timeline.Count;
+                    var afterLen = a.Timeline.Count;
 
                     // Snapshot growth and convergence
                     timelineLens.Add(afterLen);
@@ -1354,7 +1354,7 @@ namespace PositronicVariables.Tests
             Assert.That(lastTwoEqual[2], Is.GreaterThan(0), "Third (reverse) appends duplicate ? converged.");
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Required_Reverse_Appends_Forward_Replaces()
         {
             PositronicAmbient.PanicAndReset();
@@ -1371,11 +1371,11 @@ namespace PositronicVariables.Tests
                 () =>
                 {
                     int ent = PositronicVariable<int>.GetEntropy(rt);
-                    int before = a.timeline.Count;
+                    int before = a.Timeline.Count;
 
                     a.Required = PositronicVariable<int>.Project(a, _ => 3);
 
-                    int after = a.timeline.Count;
+                    int after = a.Timeline.Count;
                     lens.Add((ent, after - before));
 
                     // Drive exactly two halves (reverse then forward), then we stop.
@@ -1394,7 +1394,7 @@ namespace PositronicVariables.Tests
             Assert.That(lens[1].Item2, Is.EqualTo(0));
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Trace_Required_To_Constant_PerHalf()
         {
             PositronicAmbient.PanicAndReset();
@@ -1410,7 +1410,7 @@ namespace PositronicVariables.Tests
                 () =>
                 {
                     int ent = PositronicVariable<int>.GetEntropy(rt);
-                    sb.AppendLine($"ent={(ent < 0 ? "REV" : "FWD")}, len={a.timeline.Count}, last=[{string.Join(",", a.GetCurrentQBit().ToCollapsedValues())}], conv={a.Converged()}");
+                    sb.AppendLine($"ent={(ent < 0 ? "REV" : "FWD")}, len={a.Timeline.Count}, last=[{string.Join(",", a.GetCurrentQBit().ToCollapsedValues())}], conv={a.Converged()}");
                     a.Required = PositronicVariable<int>.Project(a, _ => 3);
                 },
                 runFinalIteration: false,
@@ -1419,7 +1419,7 @@ namespace PositronicVariables.Tests
             TestContext.WriteLine(sb.ToString());
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Required_SingleVariable_EqualsConstant_Converges_In_Two_HalfCycles()
         {
             // Relaxed: Required==constant converges on the next reverse (3rd half-cycle)
@@ -1461,7 +1461,7 @@ namespace PositronicVariables.Tests
                 "Required==constant should reach Converged()>0 by the third half-cycle.");
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void OperatorLogging_FinalForward_Print_Records_Addition()
         {
             // This diagnostic confirms that QExpr scalar operators log when evaluated in a forward pass,
@@ -1502,7 +1502,7 @@ namespace PositronicVariables.Tests
                 "Expected AdditionOperation to be recorded for `a.State + 1` in a forward pass.");
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Required_A_B_C_ArithmeticMode_Comparison_Shows_Collapse_Causing_NonConvergence()
         {
             static (int[] aStates, int[] bStates, int[] cStates) RunOnce(bool nonObservational)
@@ -1556,7 +1556,7 @@ namespace PositronicVariables.Tests
             Assert.That(cNonObs, Does.Contain(3), "With non-observational arithmetic, c must include 3.");
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Trace_Proposed_vs_Required_A_B_C_Timelines()
         {
             PositronicAmbient.PanicAndReset();
@@ -1575,7 +1575,7 @@ namespace PositronicVariables.Tests
                     .GetValue(null)!;
 
                 string FormatStates(PositronicVariables.Variables.PositronicVariable<int> v)
-                    => $"[{string.Join(", ", v.GetCurrentQBit().ToCollapsedValues())}] (len={v.timeline.Count})";
+                    => $"[{string.Join(", ", v.GetCurrentQBit().ToCollapsedValues())}] (len={v.Timeline.Count})";
 
                 sb.AppendLine($"[{label}] epoch={epoch}");
                 sb.AppendLine($"  a={FormatStates(a)}");
@@ -1635,7 +1635,7 @@ namespace PositronicVariables.Tests
             TestContext.WriteLine(sb.ToString());
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Trace_SelfSourcedRequired_Inserts_Boundary_And_Prevents_KShift()
         {
             PositronicAmbient.PanicAndReset();
@@ -1679,7 +1679,7 @@ namespace PositronicVariables.Tests
             Assert.That(postReverseA, Is.EqualTo(3), "Reverse reconstruction for self-Required must not k-shift (no +3 on a).");
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void ConsoleStyle_SelfSourcedRequired_Prints_3_Neg3_3()
         {
             PositronicAmbient.PanicAndReset();
@@ -1926,14 +1926,14 @@ namespace PositronicVariables.Tests
             greeting.Assign("Hey");
 
             // We expect the timeline to have at least two slices now.
-            Assert.That(greeting.timeline.Count, Is.GreaterThanOrEqualTo(2));
+            Assert.That(greeting.Timeline.Count, Is.GreaterThanOrEqualTo(2));
         }
 
         #endregion
 
         #endregion
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Trace_Timelines_AndEpochs_SingleVariable_Multiply()
         {
             var rt = PositronicAmbient.Current;
@@ -1984,7 +1984,7 @@ namespace PositronicVariables.Tests
             TestContext.WriteLine(sb.ToString());
 
             // keep variable referenced
-            Assert.That(a.timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(a.Timeline.Count, Is.GreaterThanOrEqualTo(1));
         }
 
         // -------- local helpers (single-var versions) --------

@@ -7,6 +7,7 @@ using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables.Factory;
 using System;
+using PositronicVariables.Engine.Coordinator;
 
 namespace PositronicVariables.DependencyInjection
 {
@@ -27,16 +28,21 @@ namespace PositronicVariables.DependencyInjection
             _ = services.AddScoped<IPositronicVariableRegistry>(sp => sp.GetRequiredService<ScopedPositronicVariableFactory>());
             _ = services.AddScoped<IPositronicRuntime, DefaultPositronicRuntime>();
 
+            // Coordinator used by engine and tests
+            _ = services.AddSingleton<ConvergenceCoordinator>();
+
             _ = services.AddScoped<IImprobabilityEngine<T>>(sp =>
             {
                 IPositronicRuntime runtime = sp.GetRequiredService<IPositronicRuntime>();
+                var coordinator = sp.GetRequiredService<ConvergenceCoordinator>();
 
                 ImprobabilityEngine<T> defaultEngine = new(
                     new DefaultEntropyController(runtime),
                     new RegretScribe<T>(),
                     new SubEthaOutputTransponder(runtime),
                     runtime,
-                    new BureauOfTemporalRecords<T>()
+                    new BureauOfTemporalRecords<T>(),
+                    coordinator
                 );
 
                 ConvergenceEngineBuilder<T> builder = new();

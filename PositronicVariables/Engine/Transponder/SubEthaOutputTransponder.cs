@@ -7,37 +7,36 @@ namespace PositronicVariables.Engine.Transponder
     public class SubEthaOutputTransponder(IPositronicRuntime runtime) : ISubEthaTransponder
     {
         private TextWriter _originalOut;
+        private bool _redirected;
 
         public void Redirect()
         {
-            // Like leaving a towel where you parked the time machine.
-            _originalOut = ReferenceEquals(Console.Out, AethericRedirectionGrid.ImprobabilityDrive)
-                ? AethericRedirectionGrid.ReferenceUniverse
-                : Console.Out;
-            // Hijack the console output like a space-time parasite.
+            // Capture caller's current writer (tests may set StringWriter). Always do this once per logical run.
+            _originalOut = Console.Out;
             Console.SetOut(AethericRedirectionGrid.ImprobabilityDrive);
             runtime.Babelfish = AethericRedirectionGrid.ImprobabilityDrive;
+            _redirected = true;
         }
         public void Restore()
         {
-
-            string bufferText = AethericRedirectionGrid.ImprobabilityDrive.ToString();
-            if (!AethericRedirectionGrid.AtTheRestaurant)
+            if (!_redirected)
             {
+                return; // nothing to restore
+            }
+            string bufferText = AethericRedirectionGrid.ImprobabilityDrive.ToString();
+            try
+            {
+                // Always write captured buffer to original test writer regardless of Restaurant flag;
+                // tests depend on deterministic emission. Restaurant flag only toggles suppress mode.
                 _originalOut.Write(bufferText);
                 _originalOut.Flush();
-
-                // Prevent temporal echoes when we exit the time stream
-                AethericRedirectionGrid.SuppressEndOfUniverseReading = true;
+                AethericRedirectionGrid.SuppressEndOfUniverseReading = !AethericRedirectionGrid.AtTheRestaurant;
             }
-            else
+            finally
             {
-                // Our breadrumb trail to the reference universe, else we'll end up like Quinn from Sliders.
-                AethericRedirectionGrid.SuppressEndOfUniverseReading = false;
+                Console.SetOut(_originalOut);
+                _redirected = false;
             }
-
-            Console.SetOut(_originalOut);
-
         }
     }
 }

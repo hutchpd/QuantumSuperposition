@@ -360,7 +360,7 @@ namespace QuantumSuperposition.QuantumSoup
                     }
                 }
 
-                return new QuBit<T>(newList, newWeights, a._ops);
+                return new QuBit<T>(newList, newWeights, a._ops ?? _defaultOps);
             }
             else
             {
@@ -429,7 +429,7 @@ namespace QuantumSuperposition.QuantumSoup
                 }
             }
 
-            return new QuBit<T>(newList, newWeights, _ops);
+            return new QuBit<T>(newList, newWeights, _ops ?? _defaultOps);
         }
 
         /// <summary>
@@ -491,7 +491,7 @@ namespace QuantumSuperposition.QuantumSoup
                 }
             }
 
-            return new QuBit<T>(newList, newWeights, _ops);
+            return new QuBit<T>(newList, newWeights, _ops ?? _defaultOps);
         }
 
         #endregion

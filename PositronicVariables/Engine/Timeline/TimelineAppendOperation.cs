@@ -32,8 +32,20 @@ namespace PositronicVariables.Engine.Timeline
 
         public void Undo()
         {
-            Variable.timeline.Clear();
-            Variable.timeline.AddRange(_backupTimeline);
+            if (_backupTimeline.Count == 0)
+            {
+                return;
+            }
+
+            // Replace the existing forward history with the first backup slice
+            Variable.ReplaceForwardHistoryWith(_backupTimeline[0]);
+
+            // Then append the remaining slices using the reverse/append helper
+            for (int i = 1; i < _backupTimeline.Count; i++)
+            {
+                Variable.AppendFromReverse(_backupTimeline[i]);
+            }
         }
+
     }
 }

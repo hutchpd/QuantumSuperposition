@@ -143,7 +143,7 @@ namespace PositronicVariables.Engine
             bool includeForward = poppedReversibles.Count == 0 || !scalarWriteDetected;
 
             IEnumerable<T> seeds;
-            IEnumerable<T> bootstrap = variable.timeline[0].ToCollapsedValues();
+            IEnumerable<T> bootstrap = variable.Timeline[0].ToCollapsedValues();
 
             if (!scalarWriteDetected)
             {
@@ -231,7 +231,7 @@ namespace PositronicVariables.Engine
 
             if (scalarWriteDetected)
             {
-                if (variable.timeline.Count > 1)
+                if (variable.Timeline.Count > 1)
                 {
                     variable.ReplaceForwardHistoryWith(rebuilt);
                 }
@@ -242,7 +242,7 @@ namespace PositronicVariables.Engine
             }
             else
             {
-                if (!anyAppendsForThisVar && variable.timeline.Count > 0)
+                if (!anyAppendsForThisVar && variable.Timeline.Count > 0)
                 {
                     variable.ReplaceLastFromReverse(rebuilt);
                 }

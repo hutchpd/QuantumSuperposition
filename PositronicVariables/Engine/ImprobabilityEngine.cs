@@ -222,7 +222,7 @@ namespace PositronicVariables.Engine
             {
                 v.ResetDomainToCurrent();
 
-                if (unifyOnConvergence && v.timeline.Count > 1)
+                if (unifyOnConvergence && v.Timeline.Count > 1)
                 {
                     v.UnifyAll();   // Every alternate reality now agrees to disagree quietly.
                 }

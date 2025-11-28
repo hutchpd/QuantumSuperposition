@@ -259,7 +259,7 @@ namespace PositronicVariables.Tests
             }, runFinalIteration: false, unifyOnConvergence: false);
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void Trace_Timelines_AndEpochs_TwoVariables_Dump()
         {
             var rt = PositronicAmbient.Current;
@@ -292,7 +292,7 @@ namespace PositronicVariables.Tests
                 Dump("pre-print");
                 var _ = $"The antivals are {a} {b}";
 
-                a.State = a.State + 1; // +1 then force 10 => print-site 11
+                a.State = a.State + 1; // +1 then force 10 => print-site should be 11
                 a.Scalar = 10;
 
                 // Cross-variable (important for this diagnostic)
@@ -307,8 +307,8 @@ namespace PositronicVariables.Tests
 
             TestContext.WriteLine(sb.ToString());
 
-            Assert.That(a.timeline.Count, Is.GreaterThanOrEqualTo(1));
-            Assert.That(b.timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(a.Timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(b.Timeline.Count, Is.GreaterThanOrEqualTo(1));
         }
 
         private static string FormatTimeline(IReadOnlyList<int[]> slices)
@@ -372,6 +372,47 @@ namespace PositronicVariables.Tests
             return null;
         }
 
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
+        public void Trace_CrossVariable_Reconstruction_Inputs()
+        {
+            var rt = PositronicAmbient.Current;
+            var a = PositronicVariable<int>.GetOrCreate("antival", 0, rt);
+            var b = PositronicVariable<int>.GetOrCreate("antival2", 0, rt);
+
+            QuantumLedgerOfRegret.Clear();
+
+            PositronicVariable<int>.SetEntropy(rt, +1);
+            a.Assign(10);
+            b.Assign(20);
+
+            // capture forward baseline and k
+            var expr = a.State + 2;
+            // materialize the expr for visibility
+            var qbExpr = (QuantumSuperposition.QuantumSoup.QuBit<int>)expr;
+            var srcFirst = a.GetCurrentQBit().ToCollapsedValues().First();
+            var tgtFirst = qbExpr.ToCollapsedValues().First();
+            Console.WriteLine($"FWD: srcFirst={srcFirst}, exprFirst={tgtFirst}");
+
+            PositronicVariable<int>.SetEntropy(rt, -1);
+            // before reconstruction
+            var lastTarget = b.GetCurrentQBit().ToCollapsedValues().First();
+            Console.WriteLine($"REV(pre): b.lastTarget={lastTarget}");
+
+            // assign cross-var in reverse
+            b.Assign(expr);
+
+            var rebuilt = b.GetCurrentQBit().ToCollapsedValues().ToArray();
+            Console.WriteLine($"REV(post): b.states=[{string.Join(", ", rebuilt)}]");
+
+            // also dump timelines and epochs
+            var aStates = GetTimelineStates(a);
+            var bStates = GetTimelineStates(b);
+            var aEpochs = GetEpochs(a);
+            var bEpochs = GetEpochs(b);
+            Console.WriteLine($"antival.timeline={FormatTimeline(aStates)} epochs=[{string.Join(", ", aEpochs)}]");
+            Console.WriteLine($"antival2.timeline={FormatTimeline(bStates)} epochs=[{string.Join(", ", bEpochs)}]");
+        }
+
         [Test]
         public void CrossVariable_AddConst_OverLastScalar_ShiftsTarget()
         {
@@ -390,7 +431,7 @@ namespace PositronicVariables.Tests
             Assert.That(vals, Is.EquivalentTo(new[] { 22 }));
         }
 
-        [Test, Explicit("Diagnostics")]
+        [Test, Explicit("Diagnostics"), Category("Diagnostics")]
         public void SelfFeedback_Forward_WithFollowingScalar_DoesNotAppend()
         {
             var rt = PositronicAmbient.Current;
@@ -414,7 +455,7 @@ namespace PositronicVariables.Tests
         }
 
         // Add inside the CrossVariableReplayTests class
-        [Test, Explicit("Deep diagnostics")]
+        [Test, Explicit("Deep diagnostics"), Category("Diagnostics")]
         public void DeepTrace_Epochs_Baselines_And_OpLog()
         {
             var rt = PositronicAmbient.Current;
@@ -477,8 +518,8 @@ namespace PositronicVariables.Tests
             TestContext.WriteLine(sb.ToString());
 
             // sanity: keep variables alive
-            Assert.That(a.timeline.Count, Is.GreaterThanOrEqualTo(1));
-            Assert.That(b.timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(a.Timeline.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(b.Timeline.Count, Is.GreaterThanOrEqualTo(1));
         }
 
         // ------- helpers (re-use your existing ones; add these locally) -------
@@ -544,6 +585,36 @@ namespace PositronicVariables.Tests
 
                 sb.AppendLine($"    {i,2}: {type}{target}{extra}");
             }
+
+
         }
+        [Test]
+        public void ConsoleStyle_PrePrintSlices_Are_11_and_22()
+        {
+            var rt = PositronicAmbient.Current;
+            var antival = PositronicVariable<int>.GetOrCreate("antival", 0, rt);
+            var antival2 = PositronicVariable<int>.GetOrCreate("antival2", 0, rt);
+
+            int[] lastA = null, lastB = null;
+
+            void ProgramBody()
+            {
+                lastA = antival.GetCurrentQBit().ToCollapsedValues().ToArray();
+                lastB = antival2.GetCurrentQBit().ToCollapsedValues().ToArray();
+
+                var _ = $"The antivals are {antival} {antival2}";
+                antival.Assign(antival.State + 1);
+                antival.Scalar = 10;
+                antival2.Assign(antival.State + 2);
+                antival2.Scalar = 20;
+            }
+
+            ProgramBody(); // outside loop
+            PositronicVariable<int>.RunConvergenceLoop(rt, ProgramBody, runFinalIteration: true, unifyOnConvergence: true);
+
+            Assert.That(lastA.Single(), Is.EqualTo(11));
+            Assert.That(lastB.Single(), Is.EqualTo(22));
+        }
+
     }
 }
