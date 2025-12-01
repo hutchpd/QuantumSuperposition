@@ -4,6 +4,7 @@ using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PositronicVariables.Transactions;
 
 namespace PositronicVariables.Engine.Timeline
 {
@@ -17,22 +18,17 @@ namespace PositronicVariables.Engine.Timeline
         /// <summary>
         /// Obliterates the multiverse history like a particularly careless time janitor.
         /// </summary>
-        public void ClearSnapshots()
-        {
-            _snapshots.Clear();
-        }
-
-        public void RegisterTimelineAppendedHook(Action hook)
-        {
-            _onAppend = hook;
-            lock (_syncRoot)
-            {
-                _onAppend = hook;
-            }
-        }
+        public void ClearSnapshots() => _snapshots.Clear();
+        public void RegisterTimelineAppendedHook(Action hook) { _onAppend = hook; lock (_syncRoot) { _onAppend = hook; } }
 
         public void SnapshotAppend(PositronicVariable<T> variable, QuBit<T> newSlice)
         {
+            var tx = TransactionV2.Current;
+            if (tx != null && !tx.IsApplying && !PositronicVariable<T>.InConvergenceLoop)
+            {
+                tx.StageWrite(variable, newSlice, TxMutationKind.Append);
+                return;
+            }
             lock (_syncRoot)
             {
                 List<QuBit<T>> copy = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
@@ -53,15 +49,19 @@ namespace PositronicVariables.Engine.Timeline
                 {
                     variable.ReplaceForwardHistoryWith(oldTimeline[0]);
                     for (int i = 1; i < oldTimeline.Count; i++)
-                    {
                         variable.AppendFromReverse(oldTimeline[i]);
-                    }
                 }
             }
         }
 
         public void ReplaceLastSlice(PositronicVariable<T> variable, QuBit<T> mergedSlice)
         {
+            var tx = TransactionV2.Current;
+            if (tx != null && !tx.IsApplying && !PositronicVariable<T>.InConvergenceLoop)
+            {
+                tx.StageWrite(variable, mergedSlice, TxMutationKind.ReplaceLast);
+                return;
+            }
             lock (_syncRoot)
             {
                 List<QuBit<T>> backup = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
@@ -72,6 +72,12 @@ namespace PositronicVariables.Engine.Timeline
 
         public void OverwriteBootstrap(PositronicVariable<T> variable, QuBit<T> slice)
         {
+            var tx = TransactionV2.Current;
+            if (tx != null && !tx.IsApplying && !PositronicVariable<T>.InConvergenceLoop)
+            {
+                tx.StageWrite(variable, slice, TxMutationKind.OverwriteBootstrap);
+                return;
+            }
             lock (_syncRoot)
             {
                 // Clear and set bootstrap via ReplaceForwardHistoryWith which truncates to bootstrap then appends

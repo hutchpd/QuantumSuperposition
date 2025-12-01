@@ -1,11 +1,17 @@
 namespace PositronicVariables.Transactions
 {
+    public enum TxMutationKind
+    {
+        Append,
+        ReplaceLast,
+        OverwriteBootstrap
+    }
     public interface ITransactionalVariable
     {
         long TxId { get; }
         long TxVersion { get; }
         object TxLock { get; }
-        void TxApplyRequired(object qb);
+        void TxApply(object qb, TxMutationKind kind);
         void TxBumpVersion();
     }
 }

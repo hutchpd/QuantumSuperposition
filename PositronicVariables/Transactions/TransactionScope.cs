@@ -10,7 +10,7 @@ namespace PositronicVariables.Transactions
     {
         private sealed class TxData
         {
-            public readonly Dictionary<long, (ITransactionalVariable var, object qb)> WriteSet = new();
+            public readonly Dictionary<long, (ITransactionalVariable var, object qb, TxMutationKind kind)> WriteSet = new();
             public readonly List<(ITransactionalVariable var, long version)> ReadSet = new();
             public readonly List<Action> Hooks = new();
         }
@@ -55,10 +55,10 @@ namespace PositronicVariables.Transactions
             data.ReadSet.Add((v, v.TxVersion));
         }
 
-        public static void StageWrite(ITransactionalVariable v, object qb)
+        public static void StageWrite(ITransactionalVariable v, object qb, TxMutationKind kind = TxMutationKind.ReplaceLast)
         {
             var data = s_current.Value ?? throw new InvalidOperationException("No ambient transaction. Use TransactionScope.Begin().");
-            data.WriteSet[v.TxId] = (v, qb);
+            data.WriteSet[v.TxId] = (v, qb, kind);
         }
 
         public static void AddCommitHook(Action hook)
@@ -160,7 +160,7 @@ namespace PositronicVariables.Transactions
             {
                 for (int i = 0; i < ordered.Length; i++)
                 {
-                    var (v, _) = ordered[i];
+                    var (v, _, _) = ordered[i];
                     Monitor.Enter(v.TxLock);
                     if (i == 0)
                     {
@@ -179,9 +179,9 @@ namespace PositronicVariables.Transactions
                     }
                 }
 
-                foreach (var (v, qb) in ordered)
+                foreach (var (v, qb, kind) in ordered)
                 {
-                    v.TxApplyRequired(qb);
+                    v.TxApply(qb, kind);
                     v.TxBumpVersion();
                 }
             }

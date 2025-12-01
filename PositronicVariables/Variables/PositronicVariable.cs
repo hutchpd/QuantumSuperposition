@@ -45,7 +45,29 @@ namespace PositronicVariables.Variables
         long ITransactionalVariable.TxId => _tvarId;
         long ITransactionalVariable.TxVersion => Volatile.Read(ref _tvarVersion);
         object ITransactionalVariable.TxLock => _tvarLock;
-        void ITransactionalVariable.TxApplyRequired(object qb) => ConstrainEqual((QuBit<T>)qb);
+        void ITransactionalVariable.TxApply(object qb, TxMutationKind kind)
+        {
+            QuBit<T> slice = (QuBit<T>)qb;
+            switch (kind)
+            {
+                case TxMutationKind.Append:
+                    AppendFromReverse(slice); // standardized path stamps epoch
+                    break;
+                case TxMutationKind.ReplaceLast:
+                    if (timeline.Count == 0)
+                    {
+                        AppendFromReverse(slice);
+                    }
+                    else
+                    {
+                        ReplaceLastFromReverse(slice);
+                    }
+                    break;
+                case TxMutationKind.OverwriteBootstrap:
+                    ReplaceForwardHistoryWith(slice);
+                    break;
+            }
+        }
         void ITransactionalVariable.TxBumpVersion() => Interlocked.Increment(ref _tvarVersion);
 
         private static int OutsideEpoch => -1;
@@ -268,13 +290,7 @@ namespace PositronicVariables.Variables
         {
 #if DEBUG
             if (mutator == null) throw new ArgumentNullException(nameof(mutator));
-            bool hasLock = System.Threading.Monitor.IsEntered(_tvarLock);
-            bool engine = PositronicVariables.Transactions.ConcurrencyGuard.IsEngineThread;
-            bool safe = hasLock || engine || InConvergenceLoop || PositronicVariables.Transactions.ConcurrencyGuard.ActiveTransactions == 0;
-            if (!safe)
-            {
-                throw new InvalidOperationException("Unsafe timeline mutation detected (Stage B guard). Use transactions or convergence coordinator.");
-            }
+            PositronicVariables.Transactions.ConcurrencyGuard.AssertTimelineMutationContext(this);
 #endif
             mutator(timeline);
         }
@@ -499,7 +515,6 @@ namespace PositronicVariables.Variables
                 }
                 tl.Add(qb);
             });
-            // Do not truncate again; we intentionally keep bootstrap + rebuilt slice
             StampAppendCurrentEpoch();
             OnTimelineAppended?.Invoke();
         }
@@ -729,9 +744,7 @@ namespace PositronicVariables.Variables
                 // During forward ticks, ignore cross-variable TARGET writes but capture k if additive
                 if (!isFeedbackFromSelf && crossSource is not null)
                 {
-                    // remember cross-source for reverse pre-print reconstruction
                     _pendingCrossSource = crossSource;
-                    // capture additive constant k using whole superposition sets
                     T[] srcSet = crossSource.GetCurrentQBit().ToCollapsedValues().ToArray();
                     T[] tgtSet = qb.ToCollapsedValues().ToArray();
                     if (srcSet.Length > 0 && tgtSet.Length > 0)
@@ -744,16 +757,16 @@ namespace PositronicVariables.Variables
                             T tgtMaxT = tgtSet.Max();
                             T k1 = NumericOps<T>.Subtract(tgtMinT, srcMinT);
                             T k2 = NumericOps<T>.Subtract(tgtMaxT, srcMaxT);
-                            T chosenK = EqualityComparer<T>.Default.Equals(k1, k2)
-                                ? k1
-                                : NumericOps<T>.Subtract(tgtSet[0], srcSet[0]);
+                            T chosenK = EqualityComparer<T>.Default.Equals(k1, k2) ? k1 : NumericOps<T>.Subtract(tgtSet[0], srcSet[0]);
                             _crossVarAddK = chosenK;
                             _hasCrossVarAddK = IsPlausibleSmallDelta(chosenK);
                         }
                         catch { _hasCrossVarAddK = false; }
                     }
-                    return; // ignore target mutation in forward phase
+                    return;
                 }
+
+                // Removed transactional staging here; convergence must mutate immediately
 
                 // Non-transactional self-feedback: either REPLACE (same scalar) or APPEND (new value).
                 if (replace && isFeedbackFromSelf && timeline.Count > 0 && !_ops.SawForwardWrite)
@@ -1849,6 +1862,7 @@ namespace PositronicVariables.Variables
             QuBit<T> last = GetCurrentQBit();
             QuBit<T> copy = new(last.ToCollapsedValues().ToArray());
             copy.Any();
+
             MutateTimeline(tl => tl.Add(copy));
             StampAppendCurrentEpoch();
             OnTimelineAppended?.Invoke();

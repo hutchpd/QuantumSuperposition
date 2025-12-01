@@ -25,6 +25,9 @@ namespace PositronicVariables.Engine
     {
         private readonly int _maxIters = 1000;
 
+        // Expose runtime for nested work item
+        internal IPositronicRuntime Runtime => runtime;
+
         private sealed class ConvergenceWorkItem : IConvergenceWorkItem
         {
             private readonly ImprobabilityEngine<T> _engine;
@@ -39,8 +42,11 @@ namespace PositronicVariables.Engine
             }
             public void BuildWrites(TransactionV2 tx)
             {
-                // Convergence logic itself stages writes through PositronicVariable APIs which internally lock on commit.
+                // Run convergence logic which will call into ITimelineArchivist.
+                // Archivist detects active tx and stages writes into 'tx' via TransactionV2.Current.
                 _engine.RunInternal(_code, _runFinalIteration, _unify, _bail, _next);
+
+                // No direct staging here; archivist handles StageWrite per mutation site.
             }
             public IEnumerable<Action> BuildCommitHooks() { yield break; }
             public object? GetResultAfterCommit() => null;
@@ -82,28 +88,15 @@ namespace PositronicVariables.Engine
 
             int hardLimit = unifyOnConvergence ? _maxIters : 2;
 
-            while (!runtime.Converged && iteration < hardLimit)
+            while (!Runtime.Converged && iteration < hardLimit)
             {
-                // Reset at the *start* of every half-cycle, not just forward ones,
-                // so the engine doesn't confuse what has happened, what will happen,
-                // and what it merely *thinks* has happened (which hasn't happened yet, probably).
-                ops.SawForwardWrite = false; // Why? Guarantees HadForwardAppend is in a known state; without this the engine occasionally thought "nothing happened" and broke the snapshot-clearing logic.
+                ops.SawForwardWrite = false;
 
-                // skip the *very* first forward cycle if requested
-                // this is useful for scenarios where you want to
-                // immediately start in reverse time, e.g. for
-                // probing variable domains without any initial
-                // assignments having been made
-                // After all, it hasn't technically happened yet, and possibly never will, depending on who's asking
                 if (!(bailOnFirstReverseWhenIdle
                     && entropy.Entropy > 0
                     && hadForwardCycle
                     && !skippedFirstForward))
                 {
-                    // mark the start of this forward half-cycle so reverse replay
-                    // can peel exactly one cycle's worth worth of operations
-                    // peel-back is painfully precise; it must not overshoot or undershoot.
-                    // just ask a slugblaster.
                     if (entropy.Entropy > 0)
                     {
                         QuantumLedgerOfRegret.Record(new MerlinFroMarker());
@@ -125,37 +118,30 @@ namespace PositronicVariables.Engine
                     && entropy.Entropy < 0
                     && !ops.SawForwardWrite)
                 {
-                    runtime.Converged = false;
+                    Runtime.Converged = false;
                     break;
                 }
 
-                if (hadForwardCycle && PositronicVariable<T>.AllConverged(runtime) && entropy.Entropy < 0)
+                if (hadForwardCycle && PositronicVariable<T>.AllConverged(Runtime) && entropy.Entropy < 0)
                 {
                     timelineArchivist.ClearSnapshots();
 
                     if (unifyOnConvergence)
                     {
-                        foreach (IPositronicVariable pv in PositronicVariable<T>.GetAllVariables(runtime))
+                        foreach (IPositronicVariable pv in PositronicVariable<T>.GetAllVariables(Runtime))
                         {
                             pv.UnifyAll();
                         }
                     }
 
-                    runtime.Converged = true;
+                    Runtime.Converged = true;
                     break;
                 }
 
                 entropy.Flip();
-                // Reality is extremly fragile, each PositronicVariable<T> has a timeline
-                // a list of QuBit<T> slices representing its different states across forward and reverse iterations.
-                // When the convergence engine flips entropy, it effectively rewinds or fast-forwards time.
-                // Now if we don't clone the last slice as we do here, both the current timeline entry and the incoming value
-                // would reference the same QuBit<T> object causing a catastrophic collapse of the multiverse.
-                // When journeying backwards through time, one should never share quantum state with oneself.
-                // It's like borrowing your toothbrush from a parallel universe—things get weird very fast.
                 if (entropy.Entropy < 0)
                 {
-                    foreach (IPositronicVariable v in PositronicVariable<T>.GetAllVariables(runtime))
+                    foreach (IPositronicVariable v in PositronicVariable<T>.GetAllVariables(Runtime))
                     {
                         PositronicVariable<T> pv = (PositronicVariable<T>)v;
                         QuBit<T> last = pv.GetCurrentQBit();
@@ -168,67 +154,54 @@ namespace PositronicVariables.Engine
                 iteration++;
             }
 
-            if (runFinalIteration && runtime.Converged)
+            if (runFinalIteration && Runtime.Converged)
             {
-                // We give the universe one last chance to tidy itself up before the auditors arrive.
                 if (unifyOnConvergence)
                 {
                     timelineArchivist.ClearSnapshots();
-                    foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(runtime).OfType<PositronicVariable<T>>())
+                    foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(Runtime).OfType<PositronicVariable<T>>())
                     {
                         v.UnifyAll();
                     }
                 }
-                // This is the quantum equivalent of nodding politely after the universe finishes talking.
-                runtime.Entropy = 1;
-                runtime.Converged = false;
-
-                // undo any reversible ops from that final pass
-                // the cosmic broom sweeps up the paradoxes before they stain the carpet.
+                Runtime.Entropy = 1;
+                Runtime.Converged = false;
                 ops.UndoLastForwardCycle();
-
-                // Trim the timelines, purge any stray Loki variants.
                 _ = AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
-
                 code();
-
-                runtime.Converged = true;
+                Runtime.Converged = true;
             }
-            else if (runFinalIteration && !runtime.Converged && unifyOnConvergence)
+            else if (runFinalIteration && !Runtime.Converged && unifyOnConvergence)
             {
-                // Fallback: we didn't hit the "converged on reverse" condition,
-                // but we still want console-style programs to print the unified result.
                 timelineArchivist.ClearSnapshots();
-                foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(runtime)
+                foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(Runtime)
                                                        .OfType<PositronicVariable<T>>())
                 {
                     v.UnifyAll();
                 }
 
-                runtime.Entropy = 1;
-                runtime.Converged = false;
+                Runtime.Entropy = 1;
+                Runtime.Converged = false;
                 ops.UndoLastForwardCycle();
                 _ = AethericRedirectionGrid.ImprobabilityDrive.GetStringBuilder().Clear();
-                code();                     // one last forward pass purely to emit output
-                runtime.Converged = true;
+                code();
+                Runtime.Converged = true;
             }
 
             ops.Clear();
 
             timelineArchivist.ClearSnapshots();
-            // re-align each universe's timeline so the current state is the only state
-            foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(runtime)
+            foreach (PositronicVariable<T> v in PositronicVariable<T>.GetAllVariables(Runtime)
                                                    .OfType<PositronicVariable<T>>())
             {
                 v.ResetDomainToCurrent();
 
                 if (unifyOnConvergence && v.Timeline.Count > 1)
                 {
-                    v.UnifyAll();   // Every alternate reality now agrees to disagree quietly.
+                    v.UnifyAll();
                 }
             }
 
-            // This is the portal home back to our reference universe.
             redirect.Restore();
         }
     }

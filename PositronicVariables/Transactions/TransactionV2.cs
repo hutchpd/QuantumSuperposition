@@ -11,13 +11,18 @@ namespace PositronicVariables.Transactions
     /// </summary>
     public sealed class TransactionV2 : IDisposable
     {
-        private readonly Dictionary<long, (ITransactionalVariable var, object qb)> _writeSet = new();
+        private readonly Dictionary<long, (ITransactionalVariable var, object qb, TxMutationKind kind)> _writeSet = new();
         private readonly List<(ITransactionalVariable var, long version)> _readSet = new();
         private bool _disposed;
 
         private static readonly ThreadLocal<Random> s_rng = new(() => new Random(unchecked(Environment.TickCount * 397) ^ Thread.CurrentThread.ManagedThreadId));
 
-        private TransactionV2() { ConcurrencyGuard.TransactionStarted(); }
+        // Ambient transaction reference for guards/diagnostics
+        private static readonly AsyncLocal<TransactionV2> s_current = new();
+        internal static TransactionV2? Current => s_current.Value;
+        internal bool IsApplying { get; private set; }
+
+        private TransactionV2() { ConcurrencyGuard.TransactionStarted(); s_current.Value = this; }
 
         public static void Run(Action<TransactionV2> body)
         {
@@ -27,48 +32,22 @@ namespace PositronicVariables.Transactions
             tx.CommitOnce();
         }
 
-        public static void RunWithRetry(Action<TransactionV2> body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)
-        {
-            if (body == null) throw new ArgumentNullException(nameof(body));
-
-            for (int attempt = 1; attempt <= maxAttempts; attempt++)
-            {
-                using var tx = Begin();
-                try
-                {
-                    body(tx);
-                    tx.CommitOnce();
-                    return; // success
-                }
-                catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
-                {
-                    STMTelemetry.RecordRetry();
-                    // backoff
-                    if (attempt == maxAttempts)
-                    {
-                        STMTelemetry.RecordAbort();
-                        throw new TransactionAbortedException("Transaction aborted after maximum retries due to contention.", attempt);
-                    }
-
-                    int delay = Math.Min(maxDelayMs, (int)(Math.Pow(2, attempt - 1) * baseDelayMs));
-                    int jitter = s_rng.Value!.Next(0, 3);
-                    Thread.Sleep(delay + jitter);
-                }
-            }
-        }
-
         public static TransactionV2 Begin() => new TransactionV2();
 
-        internal void Commit() => CommitOnce();
-
-        public void StageWrite(ITransactionalVariable v, object qb)
+        public void StageWrite(ITransactionalVariable v, object qb, TxMutationKind kind = TxMutationKind.Append)
         {
-            _writeSet[v.TxId] = (v, qb);
+            _writeSet[v.TxId] = (v, qb, kind);
         }
 
         public void RecordRead(ITransactionalVariable v)
         {
             _readSet.Add((v, v.TxVersion));
+        }
+
+        // Debug/guard helper: check if a TVar is in the write set of this transaction
+        internal bool Contains(ITransactionalVariable v)
+        {
+            return _writeSet.ContainsKey(v.TxId);
         }
 
         private void CommitOnce()
@@ -96,11 +75,12 @@ namespace PositronicVariables.Transactions
             {
                 for (int i = 0; i < ordered.Length; i++)
                 {
-                    var (v, _) = ordered[i];
+                    var (v, _, _) = ordered[i];
                     Monitor.Enter(v.TxLock);
                     if (i == 0)
                     {
                         sw = System.Diagnostics.Stopwatch.StartNew();
+                        IsApplying = true; // mark apply phase for guards
                     }
                 }
 
@@ -115,14 +95,15 @@ namespace PositronicVariables.Transactions
                     }
                 }
 
-                foreach (var (v, qb) in ordered)
+                foreach (var (v, qb, kind) in ordered)
                 {
-                    v.TxApplyRequired(qb);
+                    v.TxApply(qb, kind);
                     v.TxBumpVersion();
                 }
             }
             finally
             {
+                IsApplying = false;
                 for (int i = ordered.Length - 1; i >= 0; i--)
                 {
                     Monitor.Exit(ordered[i].var.TxLock);
@@ -133,10 +114,38 @@ namespace PositronicVariables.Transactions
             STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
         }
 
+        public static void RunWithRetry(Action<TransactionV2> body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)
+        {
+            if (body == null) throw new ArgumentNullException(nameof(body));
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                using var tx = Begin();
+                try
+                {
+                    body(tx);
+                    tx.CommitOnce();
+                    return;
+                }
+                catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
+                {
+                    STMTelemetry.RecordRetry();
+                    if (attempt == maxAttempts)
+                    {
+                        STMTelemetry.RecordAbort();
+                        throw new TransactionAbortedException("Transaction aborted after maximum retries due to contention.", attempt);
+                    }
+                    int delay = Math.Min(maxDelayMs, (int)(Math.Pow(2, attempt - 1) * baseDelayMs));
+                    int jitter = s_rng.Value!.Next(0, 3);
+                    Thread.Sleep(delay + jitter);
+                }
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+            if (ReferenceEquals(s_current.Value, this)) s_current.Value = null;
             ConcurrencyGuard.TransactionEnded();
         }
     }

@@ -30,7 +30,6 @@ namespace PositronicVariables.Engine.Coordinator
                 SingleWriter = false
             };
             _channel = Channel.CreateBounded<IConvergenceWorkItem>(options);
-            ConcurrencyGuard.RegisterCoordinatorThread();
             _worker = Task.Run(WorkerLoop);
         }
 
@@ -45,7 +44,6 @@ namespace PositronicVariables.Engine.Coordinator
 
         private async Task WorkerLoop()
         {
-            ConcurrencyGuard.RegisterEngineThread();
             while (await _channel.Reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
             {
                 while (_channel.Reader.TryRead(out var item))
@@ -62,14 +60,29 @@ namespace PositronicVariables.Engine.Coordinator
 
         private static void ProcessItem(IConvergenceWorkItem item)
         {
-            using var tx = TransactionV2.Begin();
-            item.BuildWrites(tx);
-            tx.Commit();
-            foreach (var hook in item.BuildCommitHooks())
+            try
             {
-                try { hook(); } catch { }
+                // Mark this worker as the coordinator/engine thread for guard allowances
+                ConcurrencyGuard.RegisterCoordinatorThread();
+                ConcurrencyGuard.RegisterEngineThread();
+
+                TransactionV2.Run(tx =>
+                {
+                    item.BuildWrites(tx);
+                });
+
+                foreach (var hook in item.BuildCommitHooks())
+                {
+                    try { hook(); } catch (Exception exHook) { Console.Error.WriteLine($"[ConvergenceCoordinator] Commit hook error: {exHook.Message}"); }
+                }
+                _ = item.GetResultAfterCommit(); // ignore result unless test uses it
             }
-            _ = item.GetResultAfterCommit(); // ignore result unless test uses it
+            catch (Exception ex)
+            {
+                // Surface exception immediately so tests fail fast instead of hanging in FlushAsync
+                Console.Error.WriteLine($"[ConvergenceCoordinator] Work item failed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                // No rethrow: allow loop to continue; tests observing output will report failure state
+            }
         }
 
         private void UpdateMaxDepth(long newDepth)
@@ -107,6 +120,9 @@ namespace PositronicVariables.Engine.Coordinator
 
         public void Dispose()
         {
+            // optional unregister; multiple worker items may run on same thread
+            ConcurrencyGuard.UnregisterCoordinatorThread();
+            ConcurrencyGuard.UnregisterEngineThread();
             _cts.Cancel();
             try { _worker.Wait(250); } catch { }
             _cts.Dispose();
