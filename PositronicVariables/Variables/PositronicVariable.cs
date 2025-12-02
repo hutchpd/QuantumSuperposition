@@ -431,7 +431,7 @@ namespace PositronicVariables.Variables
                 v.ResetTimelineIfOutsideWrites();
             }
 
-            QuantumLedgerOfRegret.Clear();
+            Ledger.Sink.Clear();
             BeginEpoch();
             s_LastEntropySeenForEpoch = int.MaxValue;
 
@@ -450,7 +450,7 @@ namespace PositronicVariables.Variables
                     {
                         v.ResetDomainToCurrent();
                     }
-                    QuantumLedgerOfRegret.Clear();
+                    Ledger.Sink.Clear();
                 }
             }
         }
@@ -773,7 +773,7 @@ namespace PositronicVariables.Variables
                 {
                     // If the last operation was a modulus op, we treat this as a pure progression cycle
                     // and do NOT union the bootstrap value (e.g. seed -1 should not appear in {0,1,2}).
-                    var top = QuantumLedgerOfRegret.Peek();
+                    var top = Ledger.Sink.Peek();
                     bool skipBootstrapUnion = top != null && top.GetType().Name.Contains("ReversibleModulusOp");
                     if (skipBootstrapUnion && timeline.Count == 1)
                     {
@@ -965,7 +965,7 @@ namespace PositronicVariables.Variables
                     qb = new QuBit<T>(qb.ToCollapsedValues().ToArray());
                 }
 
-                IOperation top = QuantumLedgerOfRegret.Peek();
+                IOperation top = Ledger.Sink.Peek();
                 if (top is null or MerlinFroMarker)
                 {
                     return;
@@ -1099,7 +1099,7 @@ namespace PositronicVariables.Variables
                     return;
                 }
 
-                IOperation top = QuantumLedgerOfRegret.Peek();
+                IOperation top = Ledger.Sink.Peek();
                 if (top is null or MerlinFroMarker)
                 {
                     return;
@@ -1197,7 +1197,7 @@ namespace PositronicVariables.Variables
             }
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, right, left._runtime));
+                left._ops.Record(new AdditionOperation<T>(left, right, left._runtime));
             }
             return new QExpr(left, lazy);
         }
@@ -1208,7 +1208,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right, left, right._runtime));
+                right._ops.Record(new AdditionOperation<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
         }
@@ -1220,7 +1220,7 @@ namespace PositronicVariables.Variables
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left, operand, left._runtime));
+                left._ops.Record(new AdditionOperation<T>(left, operand, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1249,7 +1249,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, right, left._runtime));
+                left._ops.Record(new SubtractionOperation<T>(left, right, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1260,7 +1260,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
+                right._ops.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
         }
@@ -1272,7 +1272,7 @@ namespace PositronicVariables.Variables
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left, operand, left._runtime));
+                left._ops.Record(new SubtractionOperation<T>(left, operand, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1302,7 +1302,7 @@ namespace PositronicVariables.Variables
 
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(
+                left._ops.Record(
                     IsMinus1(right)
                         ? new NegationOperation<T>(left)
                         : new MultiplicationOperation<T>(left, right));
@@ -1326,7 +1326,7 @@ namespace PositronicVariables.Variables
 
             if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(
+                right._ops.Record(
                     IsMinus1(left)
                         ? new NegationOperation<T>(right)
                         : new MultiplicationOperation<T>(right, left));
@@ -1341,7 +1341,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, right, left._runtime));
+                left._ops.Record(new DivisionOperation<T>(left, right, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1352,7 +1352,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
+                right._ops.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
         }
@@ -1364,7 +1364,7 @@ namespace PositronicVariables.Variables
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
-                QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left, operand, left._runtime));
+                left._ops.Record(new DivisionOperation<T>(left, operand, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1376,7 +1376,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
+                left._ops.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1387,7 +1387,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
+                right._ops.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
             }
             return new QExpr(right, resultQB);
         }
@@ -1399,7 +1399,7 @@ namespace PositronicVariables.Variables
             MarkAnyIfSuperposition(resultQB);
             if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
             {
-                QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
+                left._ops.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
             }
             return new QExpr(left, resultQB);
         }
@@ -1464,16 +1464,6 @@ namespace PositronicVariables.Variables
             return !(left == right);
         }
         #endregion
-
-        public override bool Equals(object obj)
-        {
-            return obj is PositronicVariable<T> other && this == other;
-        }
-
-        public override int GetHashCode()
-        {
-            return GetCurrentQBit().ToCollapsedValues().Aggregate(0, (acc, x) => acc ^ (x?.GetHashCode() ?? 0));
-        }
 
         /// <summary>
         /// Retrieves a specific slice from the timeline, like flipping to a particular episode in your life's never-ending sitcom.
@@ -1634,7 +1624,7 @@ namespace PositronicVariables.Variables
 
                 if (InConvergenceLoop && _runtime.Entropy > 0)
                 {
-                    QuantumLedgerOfRegret.Record(new MerlinFroMarker());
+                    _ops.Record(new MerlinFroMarker());
                 }
 
                 // Apply the equality constraint against self via regular path

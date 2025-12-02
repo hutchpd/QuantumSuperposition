@@ -68,7 +68,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new AdditionOperation<T>(left.Source, right, left.Source._runtime));
+                    left.Source._ops.Record(new AdditionOperation<T>(left.Source, right, left.Source._runtime));
                 }
                 return new QExpr(left.Source, Lazy);
             }
@@ -84,7 +84,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new AdditionOperation<T>(right.Source, left, right.Source._runtime));
+                    right.Source._ops.Record(new AdditionOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
             }
@@ -100,7 +100,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new SubtractionOperation<T>(left.Source, right, left.Source._runtime));
+                    left.Source._ops.Record(new SubtractionOperation<T>(left.Source, right, left.Source._runtime));
                 }
                 return new QExpr(left.Source, Lazy);
             }
@@ -116,7 +116,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new SubtractionReversedOperation<T>(right.Source, left, right.Source._runtime));
+                    right.Source._ops.Record(new SubtractionReversedOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
             }
@@ -132,7 +132,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(
+                    left.Source._ops.Record(
                         IsMinus1(right)
                             ? new NegationOperation<T>(left.Source)
                             : new MultiplicationOperation<T>(left.Source, right));
@@ -151,7 +151,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(
+                    right.Source._ops.Record(
                         IsMinus1(left)
                             ? new NegationOperation<T>(right.Source)
                             : new MultiplicationOperation<T>(right.Source, left));
@@ -170,7 +170,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new DivisionOperation<T>(left.Source, right, left.Source._runtime));
+                    left.Source._ops.Record(new DivisionOperation<T>(left.Source, right, left.Source._runtime));
                 }
                 return new QExpr(left.Source, Lazy);
             }
@@ -186,7 +186,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new DivisionReversedOperation<T>(right.Source, left, right.Source._runtime));
+                    right.Source._ops.Record(new DivisionReversedOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
             }
@@ -202,7 +202,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
+                    left.Source._ops.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
                 }
                 return new QExpr(left.Source, Lazy);
             }
@@ -218,7 +218,7 @@ namespace PositronicVariables.Variables
 
                 if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
                 {
-                    QuantumLedgerOfRegret.Record(new ReversibleModulusOp<T>(right.Source, left, right.Source._runtime));
+                    right.Source._ops.Record(new ReversibleModulusOp<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
             }

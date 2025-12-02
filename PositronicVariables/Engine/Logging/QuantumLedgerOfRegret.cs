@@ -1,21 +1,38 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace PositronicVariables.Engine.Logging
 {
     /// <summary>
     /// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn't.
+    /// Now provides idempotent, commit-identified append semantics for transactional usage.
     /// </summary>
     public static class QuantumLedgerOfRegret
     {
         private static readonly Stack<IOperation> _log = new();
         private static readonly object _lock = new();
+        private static readonly HashSet<Guid> _seenCommitIds = new();
 
+        /// <summary>
+        /// Legacy direct record. Prefer buffering via TransactionV2 and appending via Append(op, commitId).
+        /// </summary>
         public static void Record(IOperation op)
+        {
+            if (op == null) return;
+            Append(op, Guid.NewGuid());
+        }
+
+        /// <summary>
+        /// Idempotent append guarded by commit id. If the commit id was already seen, the entry is ignored.
+        /// </summary>
+        public static void Append(IOperation op, Guid commitId)
         {
             if (op == null) return;
             lock (_lock)
             {
+                if (_seenCommitIds.Contains(commitId)) return;
+                _seenCommitIds.Add(commitId);
                 _log.Push(op);
             }
         }
@@ -57,6 +74,7 @@ namespace PositronicVariables.Engine.Logging
             lock (_lock)
             {
                 _log.Clear();
+                _seenCommitIds.Clear();
             }
         }
     }

@@ -99,7 +99,7 @@ namespace PositronicVariables.Engine
                 {
                     if (entropy.Entropy > 0)
                     {
-                        QuantumLedgerOfRegret.Record(new MerlinFroMarker());
+                        ops.Record(new MerlinFroMarker());
                     }
 
                     code();

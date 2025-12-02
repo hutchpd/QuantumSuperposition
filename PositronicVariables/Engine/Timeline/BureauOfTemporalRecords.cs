@@ -33,7 +33,7 @@ namespace PositronicVariables.Engine.Timeline
             {
                 List<QuBit<T>> copy = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
                 _snapshots.Push((variable, copy));
-                QuantumLedgerOfRegret.Record(new TimelineAppendOperation<T>(variable, copy, newSlice));
+                RegretScribe<T>.Sink.Append(new TimelineAppendOperation<T>(variable, copy, newSlice), Guid.NewGuid());
                 variable.NotifyFirstAppend();
                 variable.AppendFromReverse(newSlice); // standardized append path (stamps epoch + event)
             }
@@ -65,7 +65,7 @@ namespace PositronicVariables.Engine.Timeline
             lock (_syncRoot)
             {
                 List<QuBit<T>> backup = [.. variable.Timeline.Select(q => new QuBit<T>(q.ToCollapsedValues().ToArray()))];
-                QuantumLedgerOfRegret.Record(new TimelineReplaceOperation<T>(variable, backup));
+                RegretScribe<T>.Sink.Append(new TimelineReplaceOperation<T>(variable, backup), Guid.NewGuid());
                 variable.ReplaceLastFromReverse(mergedSlice);
             }
         }

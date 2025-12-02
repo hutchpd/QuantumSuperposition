@@ -1,11 +1,38 @@
-﻿namespace PositronicVariables.Engine.Logging
+﻿using System;
+using PositronicVariables.Transactions;
+using PositronicVariables.Variables;
+
+namespace PositronicVariables.Engine.Logging
 {
-    public class RegretScribe<T> : IOperationLogHandler<T>
+    public class RegretScribe<T> : IOperationLogHandler<T> where T : IComparable<T>
     {
+        private static ILedgerSink s_sink = new LedgerSink();
+        public static ILedgerSink Sink
+        {
+            get => s_sink;
+            set => s_sink = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
         public bool SawForwardWrite { get; set; }
         public void Record(IOperation op)
         {
-            QuantumLedgerOfRegret.Record(op);
+            // During the convergence loop, preserve immediate ledger ordering
+            if (PositronicVariable<T>.InConvergenceLoop)
+            {
+                s_sink.Append(op, Guid.NewGuid());
+                return;
+            }
+
+            var tx = TransactionV2.Current;
+            if (tx != null)
+            {
+                tx.BufferLedgerEntry(op);
+            }
+            else
+            {
+                // outside tx: append immediately with unique id
+                s_sink.Append(op, Guid.NewGuid());
+            }
         }
 
         /// <summary>
@@ -13,7 +40,7 @@
         /// </summary>
         public void UndoLastForwardCycle()
         {
-            QuantumLedgerOfRegret.ReverseLastOperations();
+            s_sink.ReverseLastOperations();
         }
 
         /// <summary>
@@ -21,7 +48,7 @@
         /// </summary>
         public void Clear()
         {
-            QuantumLedgerOfRegret.Clear();
+            s_sink.Clear();
         }
     }
 }

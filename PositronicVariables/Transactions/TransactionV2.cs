@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using PositronicVariables.Engine.Logging;
 
 namespace PositronicVariables.Transactions
 {
@@ -13,6 +14,7 @@ namespace PositronicVariables.Transactions
     {
         private readonly Dictionary<long, (ITransactionalVariable var, object qb, TxMutationKind kind)> _writeSet = new();
         private readonly List<(ITransactionalVariable var, long version)> _readSet = new();
+        private readonly List<BufferedLedgerEntry> _ledgerBuffer = new();
         private bool _disposed;
 
         private static readonly ThreadLocal<Random> s_rng = new(() => new Random(unchecked(Environment.TickCount * 397) ^ Thread.CurrentThread.ManagedThreadId));
@@ -44,6 +46,12 @@ namespace PositronicVariables.Transactions
             _readSet.Add((v, v.TxVersion));
         }
 
+        public void BufferLedgerEntry(IOperation op)
+        {
+            if (op == null) return;
+            _ledgerBuffer.Add(new BufferedLedgerEntry(op, Guid.NewGuid()));
+        }
+
         // Debug/guard helper: check if a TVar is in the write set of this transaction
         internal bool Contains(ITransactionalVariable v)
         {
@@ -63,6 +71,9 @@ namespace PositronicVariables.Transactions
                         throw new InvalidOperationException("STM validation failed: read version changed.");
                     }
                 }
+
+                // Append any buffered ledger entries (rare in read-only, but allow)
+                AppendBufferedLedgerEntries();
 
                 STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
                 return;
@@ -112,6 +123,19 @@ namespace PositronicVariables.Transactions
 
             long ticks = sw?.ElapsedTicks ?? 0;
             STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
+
+            // After variable locks released, append ledger entries idempotently under ledger lock
+            AppendBufferedLedgerEntries();
+        }
+
+        private void AppendBufferedLedgerEntries()
+        {
+            if (_ledgerBuffer.Count == 0) return;
+            foreach (var be in _ledgerBuffer)
+            {
+                Ledger.Sink.Append(be.Entry, be.CommitId);
+            }
+            _ledgerBuffer.Clear();
         }
 
         public static void RunWithRetry(Action<TransactionV2> body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)
