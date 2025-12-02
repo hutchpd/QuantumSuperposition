@@ -1,0 +1,1017 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>QuantumSuperposition for .NET – Strongly Typed Multiverse Engine</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description"
+          content="QuantumSuperposition: strongly typed superpositions and quantum-style simulation for .NET. QuBit<T>, Eigenstates<T>, QuantumSystem, gates, algorithms, and more." />
+
+    <!-- Bulma CSS (lightweight layout) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
+
+    <!-- Highlight.js for C# code highlighting -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/csharp.min.js"></script>
+
+    <style>
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #ffffff;
+            color: #111827;
+            transition: background-color .2s ease, color .2s ease;
+        }
+
+        .qs-layout {
+            min-height: 100vh;
+        }
+
+        .qs-sidebar {
+            border-right: 1px solid #e5e5e5;
+            background: #fafafa;
+            padding: 1.25rem 1rem;
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        .qs-main {
+            padding: 2rem 2.5rem;
+        }
+
+        .qs-logo {
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: 0.02em;
+        }
+
+        .qs-tagline {
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .qs-menu ul {
+            list-style: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+
+        .qs-menu li {
+            margin: 0.15rem 0;
+        }
+
+        .qs-menu a {
+            display: block;
+            padding: 0.15rem 0.25rem;
+            font-size: 0.9rem;
+            color: #333;
+            text-decoration: none;
+            border-radius: 3px;
+            transition: background-color .15s ease, color .15s ease;
+        }
+
+            .qs-menu a:hover {
+                background-color: #e8f1ff;
+            }
+
+        .qs-menu .qs-menu-group > a {
+            font-weight: 600;
+            margin-top: 0.2rem;
+        }
+
+        .qs-menu .qs-submenu {
+            padding-left: 0.75rem;
+            margin-top: 0.1rem;
+        }
+
+        .qs-menu a.is-active {
+            background-color: #3273dc;
+            color: #fff;
+            border-radius: 3px;
+        }
+
+        .qs-hero-title {
+            font-size: 2.1rem;
+        }
+
+        .qs-pill {
+            display: inline-block;
+            padding: 0.05rem 0.45rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            background: #f0f0ff;
+            color: #4a4a8f;
+        }
+
+        .qs-section + .qs-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+        }
+
+        pre {
+            padding: 0.75rem 1rem !important;
+            border-radius: 4px;
+            background: #f7f7f7;
+            font-size: 0.85rem;
+            transition: background-color .2s ease, color .2s ease;
+        }
+
+        code {
+            font-family: "Fira Code", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .qs-badge-row img {
+            margin-right: 0.4rem;
+        }
+
+        .qs-top-mobile-bar {
+            display: none;
+        }
+
+        .qs-top-mobile-bar,
+        .qs-mobile-sidebar {
+            display: none;
+        }
+
+        /* Dark mode overrides */
+        body.dark {
+            background: #0f172a; /* slate-900 */
+            color: #e5e7eb; /* gray-200 */
+        }
+        body.dark .qs-sidebar {
+            background: #0b1220; /* near slate-950 */
+            border-color: #1f2a44; /* darker border */
+        }
+        body.dark .qs-tagline { color: #a3adc2; }
+        body.dark .qs-menu a { color: #d1d5db; }
+        body.dark .qs-menu a:hover { background-color: #1f2a44; }
+        body.dark .qs-menu a.is-active { background-color: #2563eb; color: #ffffff; }
+        body.dark pre { background: #111827; color: #e5e7eb; }
+        body.dark .hljs { background: #111827; color: #e5e7eb; }
+        body.dark a { color: #93c5fd; }
+        body.dark .button.is-light { background: #0b1220; color: #e5e7eb; border: 1px solid #1f2a44; }
+
+        @media (max-width: 1023px) {
+            .qs-layout {
+                flex-direction: column;
+            }
+
+            .qs-sidebar {
+                display: none;
+            }
+
+            .qs-main {
+                padding: 1.5rem 1rem;
+            }
+
+            .qs-top-mobile-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid #e5e5e5;
+                background: #fafafa;
+                position: sticky;
+                top: 0;
+                z-index: 20;
+            }
+
+            body.dark .qs-top-mobile-bar {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+            .qs-mobile-menu-toggle {
+                border: none;
+                background: transparent;
+                font-size: 1.4rem;
+                padding: 0.25rem 0.5rem;
+                color: inherit;
+            }
+
+            .qs-mobile-sidebar {
+                display: none;
+                border-bottom: 1px solid #e5e5e5;
+                background: #fafafa;
+                padding: 0.75rem 1rem;
+            }
+
+            body.dark .qs-mobile-sidebar {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+                .qs-mobile-sidebar.is-open {
+                    display: block;
+                    max-height: 60vh;
+                    overflow-y: auto;
+                }
+
+            .qs-top-mobile-bar {
+                display: flex !important;
+            }
+
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile top bar -->
+    <div class="qs-top-mobile-bar">
+        <div>
+            <div class="qs-logo">QuantumSuperposition</div>
+            <div class="qs-tagline">Strongly typed multiverse for .NET</div>
+        </div>
+        <div>
+            <button class="qs-mobile-menu-toggle" aria-label="Toggle dark mode" id="qs-theme-toggle-mobile" title="Toggle dark mode">🌓</button>
+            <button class="qs-mobile-menu-toggle" aria-label="Toggle navigation" id="qs-mobile-toggle" title="Toggle navigation">☰</button>
+        </div>
+    </div>
+    <div class="qs-mobile-sidebar" id="qs-mobile-sidebar">
+        <!-- mobile nav gets cloned in JS -->
+    </div>
+
+    <div class="columns is-gapless qs-layout">
+        <!-- Sidebar / TOC -->
+        <aside class="column is-3-tablet is-3-desktop qs-sidebar">
+            <header style="margin-bottom: 0.75rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+                <div>
+                    <div class="qs-logo">QuantumSuperposition</div>
+                    <div class="qs-tagline">.NET superpositions &amp; quantum simulation</div>
+                </div>
+                <button class="button is-small is-light" id="qs-theme-toggle" title="Toggle dark mode">🌓</button>
+            </header>
+
+            <div class="qs-badge-row" style="margin-bottom: 0.75rem; display:flex; align-items:center; flex-wrap:wrap;">
+                <a href="https://www.nuget.org/packages/QuantumSuperposition" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/nuget/v/QuantumSuperposition.svg" alt="NuGet QuantumSuperposition" />
+                </a>
+                <a href="https://quantumsuperposition.hashnode.space" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/badge/docs-quantumsuperposition.hashnode.space-blue" alt="Docs" />
+                </a>
+            </div>
+
+            <nav class="qs-menu" id="qs-side-nav">
+                <ul>
+                    <li class="qs-menu-group"><a href="#welcome">Welcome</a></li>
+
+                    <li class="qs-menu-group">
+                        <a href="#getting-started">Getting Started</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#install">Installation</a></li>
+                            <li><a href="#namespaces">Namespaces &amp; packages</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group">
+                        <a href="#superpositions">Generic Superpositions</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#qubit-eigenstates">QuBit&lt;T&gt; &amp; Eigenstates&lt;T&gt;</a></li>
+                            <li><a href="#functional">Functional &amp; LINQ operations</a></li>
+                            <li><a href="#complex">Complex numbers</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group">
+                        <a href="#quantum-system">Quantum System &amp; Gates</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#quantum-system">QuantumSystem &amp; state</a></li>
+                            <li><a href="#entanglement">Entanglement &amp; collapse</a></li>
+                            <li><a href="#gates">Gate model &amp; circuits</a></li>
+                            <li><a href="#algorithms">Quantum algorithms</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group">
+                        <a href="#quantumregister">Registers &amp; Canonical States</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#quantumregister">QuantumRegister</a></li>
+                            <li><a href="#canonical-states">Canonical states (EPR, GHZ, W)</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group"><a href="#examples">Example Gallery</a></li>
+
+                    <li class="qs-menu-group">
+                        <a href="#positronic">PositronicVariables &amp; Ecosystem</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#positronic">Temporal convergence</a></li>
+                            <li><a href="#positronic">STM &amp; telemetry</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group">
+                        <a href="#docs">Docs &amp; API Reference</a>
+                        <ul class="qs-submenu">
+                            <li><a href="#docs">Documentation map</a></li>
+                            <li><a href="#docs">External docs site</a></li>
+                        </ul>
+                    </li>
+
+                    <li class="qs-menu-group"><a href="#contributing">Contributing</a></li>
+                    <li class="qs-menu-group"><a href="#license">License</a></li>
+                    <li class="qs-menu-group"><a href="#contact">Contact</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main content -->
+        <main class="column qs-main">
+            <!-- Welcome / Hero -->
+            <section id="welcome" class="qs-section">
+                <p class="qs-pill">QuantumSuperposition (.NET library)</p>
+                <h1 class="title qs-hero-title" style="margin-top: 0.5rem;">
+                    Strongly typed multiverse engine for .NET
+                </h1>
+                <p class="subtitle" style="max-width: 48rem;">
+                    QuantumSuperposition lets your variables live in several states at once, then collapse them when you finally make up your mind.
+                    Think Schrödinger’s cat, but with fewer ethical questions and more LINQ.
+                </p>
+
+                <div class="buttons">
+                    <a class="button is-primary"
+                       href="https://www.nuget.org/packages/QuantumSuperposition"
+                       target="_blank" rel="noopener">
+                        Install via NuGet
+                    </a>
+                    <a class="button is-light"
+                       href="https://github.com/hutchpd/QuantumSuperposition"
+                       target="_blank" rel="noopener">
+                        View source on GitHub
+                    </a>
+                    <a class="button is-link is-light"
+                       href="https://quantumsuperposition.hashnode.space"
+                       target="_blank" rel="noopener">
+                        Read the docs
+                    </a>
+                </div>
+
+                <div class="content" style="margin-top: 1.5rem;">
+                    <h3>Two main personalities</h3>
+                    <ul>
+                        <li>
+                            <strong>Generic superposition engine</strong> – <code>QuBit&lt;T&gt;</code> and
+                            <code>Eigenstates&lt;T&gt;</code> with complex amplitudes, arithmetic, comparisons, LINQ-style operations,
+                            entanglement, sampling and non-observational operations.
+                        </li>
+                        <li>
+                            <strong>Physics-flavoured quantum system</strong> – <code>QuantumSystem</code>,
+                            <code>QuantumGate</code>, <code>QuantumAlgorithms</code> for gate-based circuits,
+                            QFT, Grover search, gate queues and ASCII visualisation.
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Getting Started -->
+            <section id="getting-started" class="qs-section">
+                <h2 class="title is-4">Getting Started</h2>
+
+                <div id="install" class="content">
+                    <h3>Installation</h3>
+                    <p>
+                        QuantumSuperposition is distributed via NuGet and targets modern .NET (8+). Add it to your project:
+                    </p>
+<pre><code class="language-bash">dotnet add package QuantumSuperposition</code></pre>
+                </div>
+
+                <div id="namespaces" class="content" style="margin-top: 1.5rem;">
+                    <h3>Namespaces &amp; packages</h3>
+                    <p>For the generic superposition layer:</p>
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.Operators;</code></pre>
+
+                    <p>For the physics-style quantum system and gates:</p>
+<pre><code class="language-csharp">using System.Numerics;
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;</code></pre>
+                    <p>These map directly to the subsystems described below.</p>
+                </div>
+            </section>
+
+            <!-- Generic Superpositions -->
+            <section id="superpositions" class="qs-section">
+                <h2 class="title is-4">Generic Superpositions</h2>
+
+                <div id="qubit-eigenstates" class="content">
+                    <h3>QuBit&lt;T&gt; &amp; Eigenstates&lt;T&gt;</h3>
+                    <p>
+                        At the heart of the library are strongly-typed superpositions of arbitrary <code>T</code>.
+                        A <code>QuBit&lt;T&gt;</code> is a weighted set of possible values; an
+                        <code>Eigenstates&lt;T&gt;</code> represents a spectrum of outcomes you can query and manipulate.
+                    </p>
+                    <ul>
+                        <li>Complex amplitude weights with normalisation and probability derived from |amp|².</li>
+                        <li>Non-destructive transforms: arithmetic, comparisons and projections across all states.</li>
+                        <li>Sampling helpers like <code>SampleWeighted()</code> and <code>MostProbable()</code>.</li>
+                        <li>Collapse replay and seeded randomness for deterministic tests.</li>
+                    </ul>
+
+                    <h4>Basic example</h4>
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+
+var qubit = new QuBit&lt;int&gt;(new[] { 1, 2, 3 });
+var doubled = qubit.Select(x =&gt; x * 2);
+
+Console.WriteLine($"Sample: {doubled.SampleWeighted()}");</code></pre>
+                </div>
+
+                <div id="functional" class="content" style="margin-top: 1.5rem;">
+                    <h3>Functional &amp; LINQ operations</h3>
+                    <p>
+                        The superposition types are designed to feel like LINQ-friendly collections that just happen to
+                        be quantum. You can project, filter and flatten possibilities without forcing collapse.
+                    </p>
+                    <ul>
+                        <li><code>Select</code>, <code>Where</code>, <code>SelectMany</code> with lazy evaluation.</li>
+                        <li><code>p_op</code> for conditional logic without collapse.</li>
+                        <li><code>p_func</code> for functional transforms that keep amplitudes intact.</li>
+                        <li>Commutative-optimised caching for pure operations to avoid recomputing symmetric cases. </li>
+                    </ul>
+
+                    <h4>Quantum-flavoured prime testing sketch</h4>
+<pre><code class="language-csharp">public static void PrintPrimesUpTo(int max)
+{
+    for (int i = 1; i &lt;= max; i++)
+    {
+        var divisors = new QuBit&lt;int&gt;(Enumerable.Range(2, i &gt; 2 ? i - 2 : 1));
+        if ((i % divisors).EvaluateAll())
+        {
+            Console.WriteLine($"{i} is prime!");
+        }
+    }
+}</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        (Sketch derived from the prime example in the docs – a normal loop over i, but each
+                        iteration uses a superposition of divisors rather than an inner loop.)
+                    </p>
+                </div>
+
+                <div id="complex" class="content" style="margin-top: 1.5rem;">
+                    <h3>Complex numbers &amp; interference</h3>
+                    <p>
+                        The library supports complex amplitudes and models interference via matrix multiplication in the
+                        physics layer. Relative phase lives in <code>Complex</code> values and shows up when gates are applied.
+                    </p>
+
+                    <h4>Complex superpositions</h4>
+<pre><code class="language-csharp">using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.QuantumSoup;
+
+var q1 = new QuBit&lt;Complex&gt;(new Complex(1, 2));
+var q2 = new QuBit&lt;Complex&gt;(new Complex(3, 4));
+
+var sum = q1 + q2;
+var product = q1 * q2;
+
+Console.WriteLine($"Sum sample: {sum.SampleWeighted()}");
+Console.WriteLine($"Product sample: {product.SampleWeighted()}");</code></pre>
+
+                    <h4>PhysicsQubit helpers</h4>
+                    <p>
+                        For plain “physics” qubits in the computational basis {0,1}, use <code>PhysicsQubit</code>,
+                        which adds Bloch-sphere constructors and handy <code>Zero</code>/<code>One</code> shortcuts.
+                    </p>
+<pre><code class="language-csharp">using QuantumSuperposition.QuantumSoup;
+using System.Numerics;
+
+var z = PhysicsQubit.Zero;
+var o = PhysicsQubit.One;
+
+// |ψ⟩ = (|0⟩ + |1⟩)/√2
+var balanced = new PhysicsQubit(theta: Math.PI / 2, phi: 0);</code></pre>
+                </div>
+            </section>
+
+            <!-- Quantum System & Gates -->
+            <section id="quantum-system" class="qs-section">
+                <h2 class="title is-4">Quantum System &amp; Gates</h2>
+
+                <div class="content">
+                    <h3>QuantumSystem &amp; multi-qubit state</h3>
+                    <p>
+                        <code>QuantumSystem</code> represents a global multi-qubit state, built from one or more
+                        <code>QuBit&lt;int&gt;</code> (or <code>PhysicsQubit</code>) instances via true tensor
+                        products. It manages amplitudes, partial observation, entanglement information and gate queues.
+                    </p>
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.Systems;
+
+var system = new QuantumSystem();
+
+// build joint state from three 1-qubit basis states
+system.SetFromTensorProduct(
+    propagateCollapse: true,
+    new QuBit&lt;int&gt;(system, new[] { 0 }),
+    new QuBit&lt;int&gt;(system, new[] { 1 }),
+    new QuBit&lt;int&gt;(system, new[] { 2 })
+);
+
+// peek at a subset of qubits
+int[] observed = system.PartialObserve(new[] { 0, 2 });</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        Basis mapping can be customised for non-int domains by passing a <code>Func&lt;T,int&gt;</code>
+                        into <code>SetFromTensorProduct</code>, with built-in defaults for <code>int</code>,
+                        <code>bool</code> and <code>enum</code>.
+                    </p>
+                </div>
+
+                <div id="entanglement" class="content" style="margin-top: 1.5rem;">
+                    <h3>Entanglement &amp; collapse propagation</h3>
+                    <p>
+                        Entangled qubits share fate: observing one propagates collapse to the rest of the group. A dedicated
+                        entanglement manager tracks groups, labels and graph diagnostics.
+                    </p>
+<pre><code class="language-csharp">using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Systems;
+
+var system = new QuantumSystem();
+var qA = new QuBit&lt;int&gt;(system, new[] { 0 });
+var qB = new QuBit&lt;int&gt;(system, new[] { 1 });
+
+qA.WithWeights(new Dictionary&lt;int, Complex&gt; { {0, 1.0}, {1, 1.0} }, autoNormalise: true);
+qB.WithWeights(new Dictionary&lt;int, Complex&gt; { {0, 1.0}, {1, 1.0} }, autoNormalise: true);
+
+system.Entangle("BellPair_A", qA, qB);
+system.SetFromTensorProduct(true, qA, qB);
+
+// observe A; B collapses in solidarity
+int valueA = qA.Observe();
+bool isCollapsedB = qB.IsCollapsed;</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        The entanglement subsystem supports group versioning, tagging, diagnostics, locking/freezing and
+                        guardrails such as preventing cross-system links.
+                    </p>
+                </div>
+
+                <div id="gates" class="content" style="margin-top: 1.5rem;">
+                    <h3>Gate model &amp; circuit scheduling</h3>
+                    <p>
+                        <code>QuantumGate</code> wraps unitary matrices; <code>QuantumGates</code> provides a catalogue
+                        of common gates (Hadamard, Pauli X/Y/Z, Root NOT, T / T†, Swap, controlled variants, QFT factory and more).
+                    </p>
+
+                    <h4>Composing and inverting gates</h4>
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.Utilities;
+using System.Numerics;
+
+// composition
+var rootNot = new QuantumGate(QuantumGates.RootNot);
+var composed = rootNot.Then(rootNot); // RootNot ∘ RootNot ≈ X
+
+// inversion
+var tGate = new QuantumGate(QuantumGates.T);
+Complex[,] tInv = QuantumGateTools.InvertGate(tGate.Matrix);</code></pre>
+
+                    <h4>Circuit queue &amp; visualisation</h4>
+<pre><code class="language-csharp">using QuantumSuperposition.Systems;
+
+var system = new QuantumSystem();
+
+system.ApplySingleQubitGate(0, QuantumGates.Hadamard, "H");
+system.ApplyTwoQubitGate(0, 1, QuantumGates.CNOT.Matrix, "CNOT");
+
+string before = system.VisualizeGateSchedule(totalQubits: 2);
+Console.WriteLine(before);
+
+system.ProcessGateQueue();</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        The gate queue supports both queued 1–2 qubit gates and immediate application of larger unitaries.
+                        A gate catalogue extension adds QFT gates, Toffoli/Fredkin, parametric rotations and generic controlled gates.
+                    </p>
+                </div>
+
+                <div id="algorithms" class="content" style="margin-top: 1.5rem;">
+                    <h3>Quantum algorithms</h3>
+                    <p>
+                        The <code>QuantumAlgorithms</code> helper exposes higher-level algorithms assembled from the same
+                        gate primitives: Quantum Fourier Transform and Grover search are included.
+                    </p>
+
+                    <h4>Quantum Fourier Transform (QFT)</h4>
+<pre><code class="language-csharp">using QuantumSuperposition.Systems;
+using QuantumSuperposition.Core;
+
+var system = new QuantumSystem();
+int[] qubits = { 0, 1, 2 };
+
+QuantumAlgorithms.QuantumFourierTransform(system, qubits);</code></pre>
+
+                    <h4>Grover search</h4>
+<pre><code class="language-csharp">var system = new QuantumSystem();
+int[] searchQubits = { 0, 1 };
+
+// mark |10⟩ with qubit 0 as MSB
+Func&lt;int[], bool&gt; oracle = bits =&gt; bits[0] == 1 &amp;&amp; bits[1] == 0;
+
+QuantumAlgorithms.GroverSearch(system, searchQubits, oracle);</code></pre>
+                </div>
+            </section>
+
+            <!-- QuantumRegister & canonical states -->
+            <section id="quantumregister" class="qs-section">
+                <h2 class="title is-4">QuantumRegister &amp; Canonical States</h2>
+
+                <div class="content">
+                    <h3>QuantumRegister</h3>
+                    <p>
+                        <code>QuantumRegister</code> is a light value abstraction over a slice of a
+                        <code>QuantumSystem</code>, letting you treat a subset of qubit indices as a register you can
+                        construct, partially observe and decode into ints.
+                    </p>
+
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.Systems;
+
+var system = new QuantumSystem();
+var q0 = new QuBit&lt;int&gt;(system, new[] { 0 });
+var q1 = new QuBit&lt;int&gt;(system, new[] { 1 });
+
+var reg = new QuantumRegister(q0, q1);
+
+// from plain integer value (basis state)
+var encoded = QuantumRegister.FromInt(value: 3, bits: 2, system);
+
+// collapse just this register
+int[] bits = reg.Collapse();
+int fullValue = reg.GetValue();</code></pre>
+
+                    <h4>Gate * register sugar</h4>
+                    <p>
+                        For physics-style use, gates can be applied directly to registers via the <code>*</code> operator:
+                    </p>
+<pre><code class="language-csharp">var ghz = QuantumRegister.GHZState(system, length: 3);
+ghz = QuantumGates.Hadamard * ghz; // arity-checked application</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        Gate arity is inferred from the matrix size; 1–2 qubit gates are queued, higher arities applied
+                        directly.
+                    </p>
+                </div>
+
+                <div id="canonical-states" class="content" style="margin-top: 1.5rem;">
+                    <h3>Canonical multi-qubit states</h3>
+                    <p>
+                        Helpers on <code>QuantumRegister</code> construct common entangled states (Bell/EPR, W, GHZ) directly on a
+                        system, tagging entanglement groups along the way.
+                    </p>
+<pre><code class="language-csharp">var system = new QuantumSystem();
+
+var bell = QuantumRegister.EPRPair(system);      // (|00⟩ + |11⟩)/√2
+var w3   = QuantumRegister.WState(system, 3);    // 3-qubit W state
+var ghz4 = QuantumRegister.GHZState(system, 4);  // 4-qubit GHZ</code></pre>
+                </div>
+            </section>
+
+            <!-- Example Gallery -->
+            <section id="examples" class="qs-section">
+                <h2 class="title is-4">Example Gallery</h2>
+                <div class="content">
+                    <p>
+                        A few miniature examples to get a feel for the library. See the docs site and GitHub repository
+                        for more involved samples and tests mirroring real circuits and logic flows.
+                    </p>
+
+                    <h3>Logic gates &amp; matrix manipulation</h3>
+<pre><code class="language-csharp">using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Utilities;
+
+// Root NOT then Root NOT equals X
+var rootNot = new QuantumGate(QuantumGates.RootNot);
+var xGate   = new QuantumGate(QuantumGates.PauliX);
+
+var composed = rootNot.Then(rootNot);
+bool same = QuantumGateTools.AreMatricesEqual(composed.Matrix, xGate.Matrix);</code></pre>
+
+                    <h3>RX parametric gate</h3>
+<pre><code class="language-csharp">double theta = Math.PI / 4;
+var rx = QuantumGates.RX(theta);
+
+// build the expected matrix if you feel like checking the maths
+Complex[,] expected =
+{
+    { Math.Cos(theta/2), -Complex.ImaginaryOne * Math.Sin(theta/2) },
+    { -Complex.ImaginaryOne * Math.Sin(theta/2), Math.Cos(theta/2) }
+};</code></pre>
+
+                    <h3>Entangled partial collapse</h3>
+<pre><code class="language-csharp">var system = new QuantumSystem();
+
+// two entangled bool-valued qubits
+var qa = new QuBit&lt;bool&gt;(system, new[] { 0 });
+var qb = new QuBit&lt;bool&gt;(system, new[] { 1 });
+
+system.Entangle("Pair", qa, qb);
+system.SetFromTensorProduct(true, qa, qb);
+
+// peek just qubit 0 (index 0)
+var outcome = system.PartialObserve(new[] { 0 });
+bool observedA = outcome[0] != 0;
+
+bool aCollapsed = qa.IsCollapsed;
+bool bCollapsed = qb.IsCollapsed;</code></pre>
+                    <p class="is-size-7 has-text-grey">
+                        In the docs you’ll also find examples for visualising gate queues, comparing registers via
+                        <code>AlmostEquals</code>, and mapping non-primitive basis types into integer indices.
+                    </p>
+
+                    <h3 style="margin-top:1.5rem;">Worked Examples (Quantum Shenanigans)</h3>
+            <div class="content">
+                <p class="is-size-7 has-text-grey">
+                    A few miniature multiversal stunts adapted from the repo docs. They are intentionally short so you can copy, run, and then pretend you always understood them. Longer walkthroughs will arrive once the Improbability Field is recharged.
+                </p>
+                <h4>Prime Detection Without Loops (Mostly)</h4>
+<pre><code class="language-csharp">// For each i we build a superposition of potential divisors (2..i-1) and
+// ask the universe if any branch divides i with zero remainder.
+for (int i = 1; i &lt;= 50; i++)
+{
+    var divisors = new QuBit&lt;int&gt;(Enumerable.Range(2, i &gt; 2 ? i - 2 : 1));
+    bool looksPrime = (i % divisors).EvaluateAll(); // all remainders non‑zero?
+    if (looksPrime) Console.WriteLine($"{i} is prime (the universe shrugged)");
+}</code></pre>
+                <h4>Extracting Factors via Eigenstates Filtering</h4>
+<pre><code class="language-csharp">Eigenstates&lt;int&gt; Factors(int n)
+{
+    // Map candidates to their remainder; equality constraint selects zeros
+    var candidates = new Eigenstates&lt;int&gt;(Enumerable.Range(1, n), x =&gt; n % x);
+    return candidates == 0; // states whose mapped value collapsed to 0
+}
+Console.WriteLine("Factors of 28: " + string.Join(", ", Factors(28).ToValues()));</code></pre>
+                <h4>Minimum Value by Existential Diplomacy</h4>
+<pre><code class="language-csharp">int MinValue(IEnumerable&lt;int&gt; xs)
+{
+    var e = new Eigenstates&lt;int&gt;(xs);
+    // Keep any states &lt;= all states, then pick the first survivor
+    var filtered = e.Any() &lt;= e.All();
+    return filtered.ToValues().First();
+}
+Console.WriteLine(MinValue(new[]{42,7,19,13})); // 7 (smallest negotiator)</code></pre>
+                <h4>Canonical Entangled States</h4>
+<pre><code class="language-csharp">var system = new QuantumSystem();
+var bell = QuantumRegister.EPRPair(system);   // (|00⟩ + |11⟩)/√2
+var w3   = QuantumRegister.WState(system, 3); // W state (one excitation roaming politely)
+var ghz4 = QuantumRegister.GHZState(system, 4); // (|0000⟩ + |1111⟩)/√2
+</code></pre>
+                <h4>Grover Sketch (Two Qubits, One Target)</h4>
+<pre><code class="language-csharp">var system = new QuantumSystem();
+int[] searchQubits = {0,1};
+Func&lt;int[], bool&gt; oracle = bits =&gt; bits[0] == 1 &amp;&amp; bits[1] == 0; // mark |10⟩
+QuantumAlgorithms.GroverSearch(system, searchQubits, oracle);
+// Observe after iterations; |10⟩ should be smugly probable.
+</code></pre>
+                <p class="is-size-7 has-text-grey">Want more? See <code>QuantumSuperposition/docs/UsageExamples.md</code>, <code>FunctionalOps.md</code>, and friends. Or open an issue requesting something delightfully impractical.</p>
+            </div>
+            </section>
+
+            <!-- Positronic / ecosystem -->
+            <section id="positronic" class="qs-section">
+                <h2 class="title is-4">PositronicVariables &amp; Ecosystem</h2>
+                <div class="content">
+                    <p>
+                        QuantumSuperposition plays nicely with the companion library
+                        <strong>PositronicVariables</strong>, which builds temporal convergence and STM-backed updates on
+                        top of <code>QuBit&lt;T&gt;</code>.
+                    </p>
+
+                    <h3>What PositronicVariables adds</h3>
+                    <ul>
+                        <li>
+                            <strong>PositronicVariable&lt;T&gt;</strong>: time-looping variables whose values are defined
+                            by iterative timelines and convergence until a fixed point (or stable superposition) is reached.
+                        </li>
+                        <li>
+                            <strong>NeuralNodule&lt;T&gt;</strong>: quantum-flavoured nodes wiring PositronicVariables into
+                            recursive or cyclic networks.
+                        </li>
+                        <li>
+                            <strong>STM-backed transactions</strong>: <code>TransactionScope</code> and
+                            <code>TransactionV2</code> for multi-variable atomic updates, with telemetry covering commits,
+                            retries, aborts and contention.
+                        </li>
+                        <li>
+                            <strong>ConvergenceCoordinator</strong> and <em>QuantumLedgerOfRegret</em> for serialised,
+                            debuggable convergence loops.
+                        </li>
+                    </ul>
+
+                    <h4>Small paradox example</h4>
+<pre><code class="language-csharp">using PositronicVariables;
+
+var antival = PositronicVariable&lt;int&gt;.GetOrCreate("antival", -1);
+Console.WriteLine($"antival = {antival}");
+
+var val = -1 * antival;
+Console.WriteLine($"val = {val}");
+
+antival.State = val;
+
+// after convergence: antival ≈ any(-1, 1)</code></pre>
+
+                    <p class="is-size-7 has-text-grey">
+                        PositronicVariables builds on QuantumSuperposition’s <code>QuBit&lt;T&gt;</code> types, while
+                        QuantumSuperposition happily lives on its own. Same semantics, fewer mental gear changes.
+                    </p>
+
+                    <p>
+
+                        NuGet:
+                        <a href="https://www.nuget.org/packages/PositronicVariables" target="_blank" rel="noopener">
+                            PositronicVariables <img src="https://img.shields.io/nuget/v/PositronicVariables.svg" alt="NuGet PositronicVariables" />
+                        </a>
+                    </p>
+                </div>
+            </section>
+
+            <!-- Docs / API Reference -->
+            <section id="docs" class="qs-section">
+                <h2 class="title is-4">Documentation &amp; API Reference</h2>
+                <div class="content">
+                    <p>
+                        The single-page overview here is the trailer. The full movie lives in the docs and source
+                        repository, with focused pages per subsystem.
+                    </p>
+
+                    <h3>Docs map (from the repo)</h3>
+                    <ul>
+                        <li>Functional operations – <code>docs/FunctionalOps.md</code></li>
+                        <li>Entanglement &amp; collapse – <code>docs/Entanglement.md</code></li>
+                        <li>Complex number support – <code>docs/ComplexSupport.md</code></li>
+                        <li>Logic gates and QuantumSystem – <code>docs/LogicGates.md</code></li>
+                        <li>Quantum algorithms – <code>docs/QuantumAlgorithms.md</code></li>
+                        <li>PhysicsQubit – <code>docs/PhysicsQubit.md</code></li>
+                        <li>QuantumRegister – <code>docs/QuantumRegister.md</code></li>
+                        <li>Canonical quantum states – <code>docs/CanonicalStates.md</code></li>
+                        <li>Gate ↔ register sugar – <code>docs/GateRegisterSugar.md</code></li>
+                        <li>Gate catalogue extensions – <code>docs/GateCatalogue.md</code></li>
+                        <li>Equality and AlmostEquals – <code>docs/Equality.md</code></li>
+                    </ul>
+
+                    <h3>External docs site</h3>
+                    <p>
+                        Hosted documentation and additional examples:
+                        <a href="https://quantumsuperposition.hashnode.space" target="_blank" rel="noopener">
+                            quantumsuperposition.hashnode.space
+                        </a>
+                    </p>
+
+                    <h3>API Reference &amp; Generated Docs</h3>
+            <p>
+                A formal API reference (the sort with every public method lovingly catalogued) is not yet embedded. If you wish to summon one locally:
+            </p>
+<pre><code class="language-bash"># Option A: DocFX (when added)
+docfx init -q
+docfx build
+# Option B: XML docs → publish with your generator of choice
+# Ensure each project has:
+# <PropertyGroup>
+#   <GenerateDocumentationFile>true</GenerateDocumentationFile>
+# </PropertyGroup></code></pre>
+            <p class="is-size-7 has-text-grey">Upcoming: a lightweight <code>/api/</code> section rendering XML docs + a search box that pretends to understand quantum metaphors. Until then, explore the source.</p>
+            </div>
+            </section>
+
+            <!-- License -->
+            <section id="license" class="qs-section">
+                <h2 class="title is-4">License</h2>
+                <div class="content">
+                    <p>
+                        QuantumSuperposition and PositronicVariables are released under the <strong>Unlicense</strong>: public domain. You may copy, modify, fork into a sentient branch, or accidentally teach it sarcasm.
+                    </p>
+<pre><code class="language-text">
+    This is free and unencumbered software released into the public domain.
+
+    Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+    software, either in source code form or as a compiled binary, for any purpose,
+    commercial or non-commercial, and by any means.
+
+    Full text: https://github.com/hutchpd/QuantumSuperposition/blob/master/LICENSE.txt
+</code></pre>
+                    <p class="is-size-7 has-text-grey">If your compiler attains consciousness, offer tea, then file an issue.</p>
+                </div>
+            </section>
+
+            <!-- Contact -->
+            <section id="contact" class="qs-section">
+                <h2 class="title is-4">Contact</h2>
+                <div class="content">
+                    <p>
+                        Questions, bug reports, paradoxes or probability amplitudes that look suspiciously like a duck: open an issue or send an email. Extra points if the duck collapses differently when observed.
+                    </p>
+                    <ul>
+                        <li>
+                            GitHub:
+                            <a href="https://github.com/hutchpd/QuantumSuperposition"
+                               target="_blank" rel="noopener">
+                                hutchpd / QuantumSuperposition
+                            </a>
+                        </li>
+                        <li>
+                            Email:
+                            <a href="mailto:support@findonsoftware.com">support@findonsoftware.com</a>
+                        </li>
+                    </ul>
+                    <p class="is-size-7 has-text-grey">Polite feature requests welcome. Chronologically paradoxical ones even more so.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // highlight.js
+        hljs.highlightAll();
+
+        // Theme persistence
+        (function () {
+            const root = document.body;
+            const stored = localStorage.getItem('qs-theme');
+            if (stored === 'dark') {
+                root.classList.add('dark');
+            }
+            function toggleTheme() {
+                root.classList.toggle('dark');
+                localStorage.setItem('qs-theme', root.classList.contains('dark') ? 'dark' : 'light');
+            }
+            const btnDesktop = document.getElementById('qs-theme-toggle');
+            const btnMobile = document.getElementById('qs-theme-toggle-mobile');
+            if (btnDesktop) btnDesktop.addEventListener('click', toggleTheme);
+            if (btnMobile) btnMobile.addEventListener('click', toggleTheme);
+        })();
+
+        // Scroll-spy to highlight active section in nav
+        (function () {
+            const nav = document.getElementById("qs-side-nav");
+            if (!nav) return;
+
+            const links = Array.from(nav.querySelectorAll("a[href^='#']"));
+            const sections = links
+                .map(link => {
+                    const id = link.getAttribute("href").substring(1);
+                    const el = document.getElementById(id);
+                    return el ? { id, el, link } : null;
+                })
+                .filter(Boolean);
+
+            function onScroll() {
+                const scrollPos = window.scrollY || window.pageYOffset;
+                const offset = 140; // account for top padding / mobile bar
+
+                let current = null;
+                for (const item of sections) {
+                    const rect = item.el.getBoundingClientRect();
+                    const top = rect.top + window.scrollY - offset;
+                    if (scrollPos >= top) {
+                        current = item;
+                    }
+                }
+
+                links.forEach(l => l.classList.remove("is-active"));
+                if (current) {
+                    current.link.classList.add("is-active");
+                }
+            }
+
+            window.addEventListener("scroll", onScroll, { passive: true });
+            onScroll();
+        })();
+
+        // Mobile: clone sidebar nav into mobile container
+        (function () {
+            const sideNav = document.getElementById("qs-side-nav");
+            const mobileSidebar = document.getElementById("qs-mobile-sidebar");
+            const toggle = document.getElementById("qs-mobile-toggle");
+
+            if (!sideNav || !mobileSidebar || !toggle) return;
+
+            mobileSidebar.innerHTML = sideNav.outerHTML;
+
+            toggle.addEventListener("click", function () {
+                mobileSidebar.classList.toggle("is-open");
+            });
+
+            // close menu after clicking a link
+            mobileSidebar.addEventListener("click", function (e) {
+                const target = e.target;
+                if (target.tagName === "A" && target.getAttribute("href").startsWith("#")) {
+                    mobileSidebar.classList.remove("is-open");
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

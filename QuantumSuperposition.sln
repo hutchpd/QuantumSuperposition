@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.10.35013.160
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11222.15 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantumSuperposition", "QuantumSuperposition\QuantumSuperposition.csproj", "{A167AA44-8F27-4C8F-96B3-A3DA15EB56AE}"
 EndProject
@@ -14,6 +14,16 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PositronicTester", "PositronicTester\PositronicTester.csproj", "{43F2E1F1-D8D7-4022-BCB1-EB6C281E0B8C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuantumSoupTester", "QuantumSoupTester\QuantumSoupTester.csproj", "{CEE14D4C-3F77-6DB9-8EBF-4C8DE1221B88}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D2C06F24-AD90-4E42-9A27-AE7D9A7D4581}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Website", "Website", "{8CCD780B-4131-42F4-AAB0-2FD0186B55DD}"
+	ProjectSection(SolutionItems) = preProject
+		index.html = index.html
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -48,6 +58,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{8CCD780B-4131-42F4-AAB0-2FD0186B55DD} = {D2C06F24-AD90-4E42-9A27-AE7D9A7D4581}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {3918EDA2-AB91-4017-AAEB-E64B55E8AB9C}
