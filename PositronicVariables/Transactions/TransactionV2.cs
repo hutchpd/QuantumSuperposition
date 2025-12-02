@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Timeline;
 
 namespace PositronicVariables.Transactions
 {
@@ -15,6 +16,7 @@ namespace PositronicVariables.Transactions
         private readonly Dictionary<long, (ITransactionalVariable var, object qb, TxMutationKind kind)> _writeSet = new();
         private readonly List<(ITransactionalVariable var, long version)> _readSet = new();
         private readonly List<BufferedLedgerEntry> _ledgerBuffer = new();
+        private readonly List<Action> _commitHooks = new();
         private bool _disposed;
 
         private static readonly ThreadLocal<Random> s_rng = new(() => new Random(unchecked(Environment.TickCount * 397) ^ Thread.CurrentThread.ManagedThreadId));
@@ -52,6 +54,12 @@ namespace PositronicVariables.Transactions
             _ledgerBuffer.Add(new BufferedLedgerEntry(op, Guid.NewGuid()));
         }
 
+        public void AddCommitHook(Action hook)
+        {
+            if (hook == null) return;
+            _commitHooks.Add(hook);
+        }
+
         // Debug/guard helper: check if a TVar is in the write set of this transaction
         internal bool Contains(ITransactionalVariable v)
         {
@@ -74,6 +82,9 @@ namespace PositronicVariables.Transactions
 
                 // Append any buffered ledger entries (rare in read-only, but allow)
                 AppendBufferedLedgerEntries();
+
+                // Run commit hooks even for read-only (e.g., diagnostics)
+                RunCommitHooks();
 
                 STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
                 return;
@@ -126,6 +137,9 @@ namespace PositronicVariables.Transactions
 
             // After variable locks released, append ledger entries idempotently under ledger lock
             AppendBufferedLedgerEntries();
+
+            // After ledger settled, run commit hooks (e.g., snapshot archival)
+            RunCommitHooks();
         }
 
         private void AppendBufferedLedgerEntries()
@@ -136,6 +150,16 @@ namespace PositronicVariables.Transactions
                 Ledger.Sink.Append(be.Entry, be.CommitId);
             }
             _ledgerBuffer.Clear();
+        }
+
+        private void RunCommitHooks()
+        {
+            if (_commitHooks.Count == 0) return;
+            foreach (var hook in _commitHooks)
+            {
+                try { hook(); } catch { }
+            }
+            _commitHooks.Clear();
         }
 
         public static void RunWithRetry(Action<TransactionV2> body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)

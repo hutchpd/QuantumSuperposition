@@ -1,6 +1,7 @@
 ﻿using PositronicVariables.Variables;
 using QuantumSuperposition.QuantumSoup;
 using System;
+using System.Collections.Generic;
 
 namespace PositronicVariables.Engine.Timeline
 {
@@ -39,5 +40,14 @@ namespace PositronicVariables.Engine.Timeline
         /// </summary>
         void ClearSnapshots();
 
+        /// <summary>
+        /// Publish an immutable snapshot to archival storage.
+        /// </summary>
+        void PublishSnapshot(ImmutableTimelineSnapshot<T> snapshot);
+
+        /// <summary>
+        /// Get archived snapshots for a variable id.
+        /// </summary>
+        IReadOnlyList<ImmutableTimelineSnapshot<T>> GetSnapshots(long variableId);
     }
 }
