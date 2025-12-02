@@ -290,7 +290,10 @@ namespace PositronicVariables.Variables
             if (mutator == null) throw new ArgumentNullException(nameof(mutator));
             PositronicVariables.Transactions.ConcurrencyGuard.AssertTimelineMutationContext(this);
 #endif
-            mutator(timeline);
+            lock (_tvarLock)
+            {
+                mutator(timeline);
+            }
         }
         private bool bootstrapSuperseded = false;
         private bool _suppressBootstrapUnionThisEpoch = false; // prevent bootstrap union after cross-variable reverse rebuild within same epoch
@@ -307,17 +310,23 @@ namespace PositronicVariables.Variables
         internal void StampBootstrap() { _sliceEpochs.Clear(); _sliceEpochs.Add(0); }
         internal void StampAppendCurrentEpoch()
         {
-            _sliceEpochs.Add(InConvergenceLoop ? CurrentEpoch : OutsideEpoch);
+            lock (_tvarLock)
+            {
+                _sliceEpochs.Add(InConvergenceLoop ? CurrentEpoch : OutsideEpoch);
+            }
         }
 
         internal void StampReplaceCurrentEpoch()
         {
-            if (_sliceEpochs.Count == 0)
+            lock (_tvarLock)
             {
-                _sliceEpochs.Add(0);
-            }
+                if (_sliceEpochs.Count == 0)
+                {
+                    _sliceEpochs.Add(0);
+                }
 
-            _sliceEpochs[^1] = InConvergenceLoop ? CurrentEpoch : OutsideEpoch;
+                _sliceEpochs[^1] = InConvergenceLoop ? CurrentEpoch : OutsideEpoch;
+            }
         }
         internal void TruncateToBootstrapOnly()
         {
@@ -435,13 +444,13 @@ namespace PositronicVariables.Variables
 
             try
             {
-                s_LoopDepth++;
+                Interlocked.Increment(ref s_LoopDepth);
                 engine.Run(code, runFinalIteration, unifyOnConvergence, bailOnFirstReverseWhenIdle);
                 coordinator.FlushAsync().GetAwaiter().GetResult();
             }
             finally
             {
-                s_LoopDepth--;
+                Interlocked.Decrement(ref s_LoopDepth);
                 if (runtime.Converged)
                 {
                     foreach (PositronicVariable<T> v in GetAllVariables(runtime).OfType<PositronicVariable<T>>())
@@ -1774,35 +1783,42 @@ namespace PositronicVariables.Variables
             // If we're in reverse and this variable was cross-sourced in forward, reconstruct pre-print now
             if (_runtime.Entropy < 0 && _pendingCrossSource is not null && _reverseRebuiltEpoch != CurrentEpoch)
             {
-                // Establish a stable baseline for the prior value
-                T baseVal = _hasForwardScalarBaseline
-                    ? _forwardScalarBaseline
-                    : (timeline.Count > 0 ? timeline[^1].ToCollapsedValues().First() : default);
+                // Only guard the mutating rebuild portion with the instance lock.
+                lock (_tvarLock)
+                {
+                    if (_pendingCrossSource is not null && _reverseRebuiltEpoch != CurrentEpoch)
+                    {
+                        // Establish a stable baseline for the prior value
+                        T baseVal = _hasForwardScalarBaseline
+                            ? _forwardScalarBaseline
+                            : (timeline.Count > 0 ? timeline[^1].ToCollapsedValues().First() : default);
 
-                // Use captured k from forward if plausible; else default small step for ints
-                T kUse;
-                if (_hasCrossVarAddK && IsPlausibleSmallDelta(_crossVarAddK))
-                {
-                    kUse = _crossVarAddK;
-                }
-                else
-                {
-                    kUse = typeof(T) == typeof(int) ? (T)(object)2 : default;
-                }
+                        // Use captured k from forward if plausible; else default small step for ints
+                        T kUse;
+                        if (_hasCrossVarAddK && IsPlausibleSmallDelta(_crossVarAddK))
+                        {
+                            kUse = _crossVarAddK;
+                        }
+                        else
+                        {
+                            kUse = typeof(T) == typeof(int) ? (T)(object)2 : default;
+                        }
 
-                try
-                {
-                    T prior = NumericOps<T>.Add(baseVal, kUse);
-                    QuBit<T> rebuilt = new([prior]);
-                    rebuilt.Any();
-                    ReplaceForwardHistoryWith(rebuilt);
-                    _reverseRebuiltEpoch = CurrentEpoch;
-                    _suppressBootstrapUnionThisEpoch = true;
-                    _skipReverseScalarThisEpoch = true;
-                }
-                finally
-                {
-                    _pendingCrossSource = null;
+                        try
+                        {
+                            T prior = NumericOps<T>.Add(baseVal, kUse);
+                            QuBit<T> rebuilt = new([prior]);
+                            rebuilt.Any();
+                            ReplaceForwardHistoryWith(rebuilt);
+                            _reverseRebuiltEpoch = CurrentEpoch;
+                            _suppressBootstrapUnionThisEpoch = true;
+                            _skipReverseScalarThisEpoch = true;
+                        }
+                        finally
+                        {
+                            _pendingCrossSource = null;
+                        }
+                    }
                 }
             }
 
