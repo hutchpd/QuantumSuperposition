@@ -23,10 +23,11 @@ namespace PositronicVariables.Transactions
 
         // Ambient transaction reference for guards/diagnostics
         private static readonly AsyncLocal<TransactionV2> s_current = new();
+        private static readonly AsyncLocal<int> s_depth = new();
         internal static TransactionV2? Current => s_current.Value;
         internal bool IsApplying { get; private set; }
 
-        private TransactionV2() { ConcurrencyGuard.TransactionStarted(); s_current.Value = this; }
+        private TransactionV2() { ConcurrencyGuard.TransactionStarted(); }
 
         public static void Run(Action<TransactionV2> body)
         {
@@ -36,7 +37,19 @@ namespace PositronicVariables.Transactions
             tx.CommitOnce();
         }
 
-        public static TransactionV2 Begin() => new TransactionV2();
+        public static TransactionV2 Begin()
+        {
+            if (s_current.Value != null)
+            {
+                // Flat nested semantics: reuse existing ambient
+                s_depth.Value = s_depth.Value + 1;
+                return s_current.Value;
+            }
+            var tx = new TransactionV2();
+            s_current.Value = tx;
+            s_depth.Value = 1;
+            return tx;
+        }
 
         public void StageWrite(ITransactionalVariable v, object qb, TxMutationKind kind = TxMutationKind.Append)
         {
@@ -45,6 +58,8 @@ namespace PositronicVariables.Transactions
 
         public void RecordRead(ITransactionalVariable v)
         {
+            // Record once per variable id to avoid duplicates in validation
+            if (_readSet.Any(r => r.var.TxId == v.TxId)) return;
             _readSet.Add((v, v.TxVersion));
         }
 
@@ -57,6 +72,9 @@ namespace PositronicVariables.Transactions
         public void AddCommitHook(Action hook)
         {
             if (hook == null) return;
+#if DEBUG
+            // Hooks must operate on immutable data; ensure no direct list refs captured via common patterns is beyond our scope here.
+#endif
             _commitHooks.Add(hook);
         }
 
@@ -80,12 +98,8 @@ namespace PositronicVariables.Transactions
                     }
                 }
 
-                // Append any buffered ledger entries (rare in read-only, but allow)
                 AppendBufferedLedgerEntries();
-
-                // Run commit hooks even for read-only (e.g., diagnostics)
                 RunCommitHooks();
-
                 STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
                 return;
             }
@@ -141,10 +155,7 @@ namespace PositronicVariables.Transactions
                 STMTelemetry.RecordWriteApplied(v.TxId, perVarTicks);
             }
 
-            // After variable locks released, append ledger entries idempotently under ledger lock
             AppendBufferedLedgerEntries();
-
-            // After ledger settled, run commit hooks (e.g., snapshot archival)
             RunCommitHooks();
         }
 
@@ -199,6 +210,14 @@ namespace PositronicVariables.Transactions
         {
             if (_disposed) return;
             _disposed = true;
+            int d = s_depth.Value;
+            if (d > 1)
+            {
+                s_depth.Value = d - 1;
+                return;
+            }
+            // root scope end
+            s_depth.Value = 0;
             if (ReferenceEquals(s_current.Value, this)) s_current.Value = null;
             ConcurrencyGuard.TransactionEnded();
         }

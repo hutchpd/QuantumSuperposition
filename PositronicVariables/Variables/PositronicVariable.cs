@@ -31,11 +31,9 @@ namespace PositronicVariables.Variables
     {
         /// <summary>
         /// Suppresses operator logging when building expressions from the same variable to avoid
-        /// recording arithmetic ops that are only used to materialize a constraint. Thread-scoped.
-        /// Note: This is <see cref="ThreadStaticAttribute"/> and may be converted to AsyncLocal in a later stage.
+        /// recording arithmetic ops that are only used to materialize a constraint. Ambient transaction-scoped.
         /// </summary>
-        [ThreadStatic]
-        private static bool s_SuppressOperatorLogging;
+        private static readonly AsyncLocal<bool> s_SuppressOperatorLogging = new();
         // --- TVar fields (Stage 2) ---
         private static long s_GlobalTVarId = 0;
         private readonly object _tvarLock = new object();
@@ -1195,7 +1193,7 @@ namespace PositronicVariables.Variables
                 MarkAnyIfSuperposition(resultQB);
                 return resultQB;
             }
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(new AdditionOperation<T>(left, right, left._runtime));
             }
@@ -1206,7 +1204,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = right.GetCurrentQBit() + left;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && right._runtime.Entropy >= 0)
             {
                 right._ops.Record(new AdditionOperation<T>(right, left, right._runtime));
             }
@@ -1217,7 +1215,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() + right.GetCurrentQBit();
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 left._ops.Record(new AdditionOperation<T>(left, operand, left._runtime));
@@ -1247,7 +1245,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() - right;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(new SubtractionOperation<T>(left, right, left._runtime));
             }
@@ -1258,7 +1256,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = right.GetCurrentQBit() - left;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && right._runtime.Entropy >= 0)
             {
                 right._ops.Record(new SubtractionReversedOperation<T>(right, left, right._runtime));
             }
@@ -1269,7 +1267,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() - right.GetCurrentQBit();
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 left._ops.Record(new SubtractionOperation<T>(left, operand, left._runtime));
@@ -1300,7 +1298,7 @@ namespace PositronicVariables.Variables
                 return resultQB;
             }
 
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(
                     IsMinus1(right)
@@ -1324,7 +1322,7 @@ namespace PositronicVariables.Variables
                 return resultQB;
             }
 
-            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && right._runtime.Entropy >= 0)
             {
                 right._ops.Record(
                     IsMinus1(left)
@@ -1339,7 +1337,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() / right;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(new DivisionOperation<T>(left, right, left._runtime));
             }
@@ -1350,7 +1348,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = right.GetCurrentQBit() / left;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && right._runtime.Entropy >= 0)
             {
                 right._ops.Record(new DivisionReversedOperation<T>(right, left, right._runtime));
             }
@@ -1361,7 +1359,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() / right.GetCurrentQBit();
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 T operand = right.GetCurrentQBit().ToCollapsedValues().First();
                 left._ops.Record(new DivisionOperation<T>(left, operand, left._runtime));
@@ -1374,7 +1372,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = left.GetCurrentQBit() % right;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(new ReversibleModulusOp<T>(left, right, left._runtime));
             }
@@ -1385,7 +1383,7 @@ namespace PositronicVariables.Variables
         {
             QuBit<T> resultQB = right.GetCurrentQBit() % left;
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && right._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && right._runtime.Entropy >= 0)
             {
                 right._ops.Record(new ReversibleModulusOp<T>(right, left, right._runtime));
             }
@@ -1397,7 +1395,7 @@ namespace PositronicVariables.Variables
             T divisor = right.GetCurrentQBit().ToCollapsedValues().First();
             QuBit<T> resultQB = left.GetCurrentQBit() % right.GetCurrentQBit();
             MarkAnyIfSuperposition(resultQB);
-            if (!s_SuppressOperatorLogging && left._runtime.Entropy >= 0)
+            if (!(s_SuppressOperatorLogging.Value) && left._runtime.Entropy >= 0)
             {
                 left._ops.Record(new ReversibleModulusOp<T>(left, divisor, left._runtime));
             }
@@ -1612,14 +1610,14 @@ namespace PositronicVariables.Variables
             // doesn't push addition/mul ops for this variable.
             if (ReferenceEquals(this, expr.Source))
             {
-                s_SuppressOperatorLogging = true;
+                s_SuppressOperatorLogging.Value = true;
                 try
                 {
                     qb = (QuBit<T>)expr;
                 }
                 finally
                 {
-                    s_SuppressOperatorLogging = false;
+                    s_SuppressOperatorLogging.Value = false;
                 }
 
                 if (InConvergenceLoop && _runtime.Entropy > 0)

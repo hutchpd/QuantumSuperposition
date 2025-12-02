@@ -4,6 +4,8 @@ using PositronicVariables.Operations;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace PositronicVariables.Variables
 {
@@ -66,7 +68,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
                 {
                     left.Source._ops.Record(new AdditionOperation<T>(left.Source, right, left.Source._runtime));
                 }
@@ -82,11 +84,28 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && right.Source._runtime.Entropy >= 0)
                 {
                     right.Source._ops.Record(new AdditionOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
+            }
+
+            public static QExpr operator +(QExpr left, QExpr right)
+            {
+                QuBit<T> Lazy()
+                {
+                    QuBit<T> resultQB = left.Resolve() + right.Resolve();
+                    resultQB.Any();
+                    return resultQB;
+                }
+
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
+                {
+                    T operand = ((QuBit<T>)right).ToCollapsedValues().First();
+                    left.Source._ops.Record(new AdditionOperation<T>(left.Source, operand, left.Source._runtime));
+                }
+                return new QExpr(left.Source, Lazy);
             }
 
             public static QExpr operator -(QExpr left, T right)
@@ -98,7 +117,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
                 {
                     left.Source._ops.Record(new SubtractionOperation<T>(left.Source, right, left.Source._runtime));
                 }
@@ -114,11 +133,28 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && right.Source._runtime.Entropy >= 0)
                 {
                     right.Source._ops.Record(new SubtractionReversedOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
+            }
+
+            public static QExpr operator -(QExpr left, QExpr right)
+            {
+                QuBit<T> Lazy()
+                {
+                    QuBit<T> resultQB = left.Resolve() - right.Resolve();
+                    resultQB.Any();
+                    return resultQB;
+                }
+
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
+                {
+                    T operand = ((QuBit<T>)right).ToCollapsedValues().First();
+                    left.Source._ops.Record(new SubtractionOperation<T>(left.Source, operand, left.Source._runtime));
+                }
+                return new QExpr(left.Source, Lazy);
             }
 
             public static QExpr operator *(QExpr left, T right)
@@ -130,7 +166,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
                 {
                     left.Source._ops.Record(
                         IsMinus1(right)
@@ -149,7 +185,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && right.Source._runtime.Entropy >= 0)
                 {
                     right.Source._ops.Record(
                         IsMinus1(left)
@@ -168,7 +204,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
                 {
                     left.Source._ops.Record(new DivisionOperation<T>(left.Source, right, left.Source._runtime));
                 }
@@ -184,11 +220,28 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && right.Source._runtime.Entropy >= 0)
                 {
                     right.Source._ops.Record(new DivisionReversedOperation<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
+            }
+
+            public static QExpr operator /(QExpr left, QExpr right)
+            {
+                QuBit<T> Lazy()
+                {
+                    QuBit<T> resultQB = left.Resolve() / right.Resolve();
+                    resultQB.Any();
+                    return resultQB;
+                }
+
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
+                {
+                    T operand = ((QuBit<T>)right).ToCollapsedValues().First();
+                    left.Source._ops.Record(new DivisionOperation<T>(left.Source, operand, left.Source._runtime));
+                }
+                return new QExpr(left.Source, Lazy);
             }
 
             public static QExpr operator %(QExpr left, T right)
@@ -200,7 +253,7 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && left.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
                 {
                     left.Source._ops.Record(new ReversibleModulusOp<T>(left.Source, right, left.Source._runtime));
                 }
@@ -216,11 +269,28 @@ namespace PositronicVariables.Variables
                     return resultQB;
                 }
 
-                if (!s_SuppressOperatorLogging && right.Source._runtime.Entropy >= 0)
+                if (!(s_SuppressOperatorLogging.Value) && right.Source._runtime.Entropy >= 0)
                 {
                     right.Source._ops.Record(new ReversibleModulusOp<T>(right.Source, left, right.Source._runtime));
                 }
                 return new QExpr(right.Source, Lazy);
+            }
+
+            public static QExpr operator %(QExpr left, QExpr right)
+            {
+                T divisor = ((QuBit<T>)right).ToCollapsedValues().First();
+                QuBit<T> Lazy()
+                {
+                    QuBit<T> resultQB = left.Resolve() % right.Resolve();
+                    resultQB.Any();
+                    return resultQB;
+                }
+
+                if (!(s_SuppressOperatorLogging.Value) && left.Source._runtime.Entropy >= 0)
+                {
+                    left.Source._ops.Record(new ReversibleModulusOp<T>(left.Source, divisor, left.Source._runtime));
+                }
+                return new QExpr(left.Source, Lazy);
             }
         }
     }
