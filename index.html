@@ -306,8 +306,16 @@
                     <li class="qs-menu-group">
                         <a href="#positronic">PositronicVariables &amp; Ecosystem</a>
                         <ul class="qs-submenu">
-                            <li><a href="#positronic">Temporal convergence</a></li>
-                            <li><a href="#positronic">STM &amp; telemetry</a></li>
+                            <li><a href="#positronic">Overview</a></li>
+                            <li><a href="#pv-convergence">Convergence loop</a></li>
+                            <li><a href="#pv-transactions">Transactions &amp; STM</a></li>
+                            <li><a href="#pv-reverse">Reverse replay</a></li>
+                            <li><a href="#pv-cross">Cross-variable flows</a></li>
+                            <li><a href="#pv-neural">Neural nodules</a></li>
+                            <li><a href="#pv-timeline">Timeline &amp; unification</a></li>
+                            <li><a href="#pv-telemetry">Telemetry &amp; diagnostics</a></li>
+                            <li><a href="#pv-concurrency">Concurrency patterns</a></li>
+                            <li><a href="#pv-practices">Best practices</a></li>
                         </ul>
                     </li>
 
@@ -827,7 +835,146 @@ antival.State = val;
                         PositronicVariables builds on QuantumSuperposition’s <code>QuBit&lt;T&gt;</code> types, while
                         QuantumSuperposition happily lives on its own. Same semantics, fewer mental gear changes.
                     </p>
+                    <div id="pv-convergence" class="qs-section">
+                        <h3>Convergence loop</h3>
+                        <p>
+                            Convergence is a polite argument with yourself conducted in epochs. Each forward pass proposes values; each reverse pass reconstructs the prior state; small cycles are unified. When the last slice matches a previous one, we declare peace.
+                        </p>
+<pre><code class="language-csharp">var rt = PositronicAmbient.Current; // ensure ambient runtime exists
+var a = PositronicVariable&lt;int&gt;.GetOrCreate("a", 0);
+var b = PositronicVariable&lt;int&gt;.GetOrCreate("b", 1);
 
+PositronicVariable&lt;int&gt;.RunConvergenceLoop(rt, () =&gt;
+{
+    // Mutual recursion with a small constant offset
+    a.Assign(b + 1);
+    b.Assign(a - 1);
+}, runFinalIteration: true, unifyOnConvergence: true);
+
+Console.WriteLine($"a: {a}");
+Console.WriteLine($"b: {b}");</code></pre>
+                        <p class="is-size-7 has-text-grey">
+                            Epoch tagging keeps slices aligned. Outside-loop writes are quarantined to bootstrap before the next run.
+                        </p>
+                    </div>
+                    <div id="pv-transactions" class="qs-section">
+                        <h3>Transactions &amp; STM</h3>
+                        <p>
+                            Use <code>TransactionV2</code> for atomic multi-variable updates. Reads validate; writes stage; apply happens at commit under per-variable locks with deterministic ordering. Telemetry recounts every dramatic retry.
+                        </p>
+<pre><code class="language-csharp">var x = PositronicVariable&lt;int&gt;.GetOrCreate("x", 41);
+var y = PositronicVariable&lt;int&gt;.GetOrCreate("y", 1);
+
+TransactionV2.RunWithRetry(tx =&gt;
+{
+    tx.RecordRead(x);
+    tx.RecordRead(y);
+
+    var next = x.GetCurrentQBit() + y.GetCurrentQBit(); // QExpr arithmetic
+    tx.StageWrite(x, (QuBit&lt;int&gt;)next);
+});
+
+Console.WriteLine(STMTelemetry.GetReport());</code></pre>
+                        <p class="is-size-7 has-text-grey">Read-only fast path: if no writes are staged, validation commits without taking write locks.</p>
+                    </div>
+                    <div id="pv-reverse" class="qs-section">
+                        <h3>Reverse replay</h3>
+                        <p>
+                            Reverse ticks reconstruct the pre-print slice using the operation log (the <em>QuantumLedgerOfRegret</em>). Cross-variable assignments capture small additive deltas <code>k</code> in the forward pass and rebuild scalars accordingly in reverse.
+                        </p>
+<pre><code class="language-csharp">var src = PositronicVariable&lt;int&gt;.GetOrCreate("src", 3);
+var dst = PositronicVariable&lt;int&gt;.GetOrCreate("dst", 0);
+
+PositronicVariable&lt;int&gt;.RunConvergenceLoop(PositronicAmbient.Current, () =&gt;
+{
+    // dst follows src + 2, but only src gets logged in forward
+    dst.Assign(src + 2);
+});
+
+Console.WriteLine(dst.ToTimelineString()); // shows reverse reconstruction slices</code></pre>
+                        <p class="is-size-7 has-text-grey">Edge guards suppress bootstrap union and scalar overwrite during the epoch a cross-reconstruction occurs, keeping causality tidy.</p>
+                    </div>
+                    <div id="pv-cross" class="qs-section">
+                        <h3>Cross-variable flows</h3>
+                        <p>
+                            Build networks of constraints across variables. Forward collects intent; reverse restores provenance.
+                        </p>
+<pre><code class="language-csharp">var a = PositronicVariable&lt;int&gt;.GetOrCreate("a", -1);
+var b = PositronicVariable&lt;int&gt;.GetOrCreate("b", 0);
+var c = PositronicVariable&lt;int&gt;.GetOrCreate("c", 0);
+
+PositronicVariable&lt;int&gt;.RunConvergenceLoop(PositronicAmbient.Current, () =&gt;
+{
+    b.Assign(a + 1);   // b trails a by +1
+    c.Assign(b + 1);   // c trails b by +1
+    a.Required = c - 2; // close the loop as an equality constraint
+});</code></pre>
+                        <p class="is-size-7 has-text-grey">If your loop has multiple consistent answers, the engine will keep both and call it character growth.</p>
+                    </div>
+                    <div id="pv-neural" class="qs-section">
+                        <h3>Neural nodules</h3>
+                        <p>
+                            Tiny quantum-aware neurons that accept multiple Positronic inputs, apply an activation function, and write to an output variable. Converge whole networks in one go.
+                        </p>
+<pre><code class="language-csharp">var rt = PositronicAmbient.Current;
+var n1 = new NeuralNodule&lt;int&gt;(vals =&gt;
+{
+    var sum = vals.Sum();
+    return new QuBit&lt;int&gt;(new[] { sum % 5, (sum + 1) % 5 });
+}, rt);
+
+var aIn = PositronicVariable&lt;int&gt;.GetOrCreate("aIn", 1);
+var bIn = PositronicVariable&lt;int&gt;.GetOrCreate("bIn", 2);
+
+n1.Inputs.Add(aIn);
+n1.Inputs.Add(bIn);
+
+NeuralNodule&lt;int&gt;.ConvergeNetwork(rt, n1);
+Console.WriteLine($"Neuron output: {n1.Output}");</code></pre>
+                    </div>
+                    <div id="pv-timeline" class="qs-section">
+                        <h3>Timeline &amp; unification</h3>
+                        <p>
+                            Each write appends or replaces the active slice. Cycles get detected (last equals a previous slice) and can be unified explicitly or automatically.
+                        </p>
+<pre><code class="language-csharp">var v = PositronicVariable&lt;int&gt;.GetOrCreate("v", -1);
+PositronicVariable&lt;int&gt;.RunConvergenceLoop(PositronicAmbient.Current, () =&gt;
+{
+    v.Assign((v + 1) % 3); // gentle 0..2 cycle, depending on bootstrap
+});
+
+// If you insist on a single slice
+v.UnifyAll();
+Console.WriteLine(v);</code></pre>
+                        <p class="is-size-7 has-text-grey">Bootstrap is treated as sacred during a loop; outside writes are scrubbed before the next pass.</p>
+                    </div>
+                    <div id="pv-telemetry" class="qs-section">
+                        <h3>Telemetry &amp; diagnostics</h3>
+                        <p>
+                            The STM layer tracks commits, retries, aborts, validation failures, lock-hold ticks and hotspots. The convergence layer exposes timeline snapshots and a readable ledger of operations.
+                        </p>
+<pre><code class="language-csharp">Console.WriteLine(STMTelemetry.GetReport()); // contention, retries, hot variables
+Console.WriteLine(v.ToTimelineString());     // per-slice states
+var json = v.ExportToJson();                 // take your timeline to a meeting
+</code></pre>
+                    </div>
+                    <div id="pv-concurrency" class="qs-section">
+                        <h3>Concurrency patterns</h3>
+                        <ul>
+                            <li>Concurrent mutation via transactions (deterministic lock ordering, id-based).</li>
+                            <li>Convergence loop is single-threaded through a coordinator; outside writes are deferred.</li>
+                            <li>Ambient state (operator logging suppression) is <code>AsyncLocal</code>-scoped.</li>
+                        </ul>
+                    </div>
+                    <div id="pv-practices" class="qs-section">
+                        <h3>Best practices</h3>
+                        <ul>
+                            <li>Keep forward writes simple; let reverse replay do the archaeology.</li>
+                            <li>Prefer <code>Required</code> for hard constraints and <code>Proposed</code>/<code>Assign</code> for soft influence.</li>
+                            <li>Quarantine outside-loop experimentation with <code>NoteOutsideWrites()</code> before convergence runs.</li>
+                            <li>Use telemetry to identify hotspots, then batch or reorder updates.</li>
+                        </ul>
+                    </div>
                     <p>
 
                         NuGet:
