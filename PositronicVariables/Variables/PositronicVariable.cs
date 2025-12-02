@@ -9,7 +9,6 @@ using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Initialisation;
 using PositronicVariables.Operations;
 using PositronicVariables.Runtime;
-using PositronicVariables.Runtime;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
@@ -71,12 +70,12 @@ namespace PositronicVariables.Variables
         private static int OutsideEpoch => -1;
 
         private static int s_LastEntropySeenForEpoch = int.MaxValue; // kick the epoch counter awake on first write
-        private bool _hasForwardScalarBaseline = false;
+        private volatile bool _hasForwardScalarBaseline = false;
         private T _forwardScalarBaseline;
-        private bool _hasCrossVarAddK; // captured additive delta between source and target forward expression
+        private volatile bool _hasCrossVarAddK; // captured additive delta between source and target forward expression
         private T _crossVarAddK;       // value of k for cross-variable a + k -> target
 
-        private bool _hadRequiredThisForward = false;
+        private volatile bool _hadRequiredThisForward = false;
         private readonly bool isValueType = typeof(T).IsValueType;
         private readonly HashSet<T> _domain = [];
         private static bool _reverseReplayStarted;
@@ -91,8 +90,8 @@ namespace PositronicVariables.Variables
             typeof(T) == typeof(long) || typeof(T) == typeof(ulong);
         private static readonly bool s_IsFloatingType =
             typeof(T) == typeof(float) || typeof(T) == typeof(double) || typeof(T) == typeof(decimal);
-        private int _reverseRebuiltEpoch = -1;
-        private PositronicVariable<T> _pendingCrossSource;
+        private volatile int _reverseRebuiltEpoch = -1;
+        private volatile PositronicVariable<T> _pendingCrossSource;
 
         private static bool IsZero(dynamic v) { try { return v == 0; } catch { return false; } }
         private static bool IsMinus1(dynamic v) { try { return v == -1; } catch { return false; } }
@@ -109,7 +108,7 @@ namespace PositronicVariables.Variables
         private readonly ITimelineArchivist<T> _temporalRecords;
 
         private static readonly object s_initLock = new();
-        private bool _hadOutsideWritesSinceLastLoop = false;
+        private volatile bool _hadOutsideWritesSinceLastLoop = false;
         private static IPositronicRuntime EnsureAmbientRuntime()
         {
             if (!PositronicAmbient.IsInitialized)
@@ -209,9 +208,12 @@ namespace PositronicVariables.Variables
 
         private void Remember(IEnumerable<T> xs)
         {
-            foreach (T x in xs)
+            lock (_tvarLock)
             {
-                _domain.Add(x);
+                foreach (T x in xs)
+                {
+                    _domain.Add(x);
+                }
             }
         }
 
@@ -283,7 +285,16 @@ namespace PositronicVariables.Variables
         /// The timeline of quantum slices, each a breadcrumb trail through the multiverse's tangled yarn.
         /// </summary>
         private readonly List<QuBit<T>> timeline = [];
-        public IReadOnlyList<QuBit<T>> Timeline => timeline; // expose read-only view
+        public IReadOnlyList<QuBit<T>> Timeline
+        {
+            get
+            {
+                lock (_tvarLock)
+                {
+                    return timeline.ToList().AsReadOnly();
+                }
+            }
+        }
         private void MutateTimeline(Action<List<QuBit<T>>> mutator)
         {
 #if DEBUG
@@ -296,8 +307,8 @@ namespace PositronicVariables.Variables
             }
         }
         private bool bootstrapSuperseded = false;
-        private bool _suppressBootstrapUnionThisEpoch = false; // prevent bootstrap union after cross-variable reverse rebuild within same epoch
-        private bool _skipReverseScalarThisEpoch; // suppress scalar overwrite after cross-variable reverse reconstruction
+        private volatile bool _suppressBootstrapUnionThisEpoch = false; // prevent bootstrap union after cross-variable reverse rebuild within same epoch
+        private volatile bool _skipReverseScalarThisEpoch; // suppress scalar overwrite after cross-variable reverse reconstruction
 
         // Epoch helpers
         internal static void BeginEpoch()
@@ -482,21 +493,24 @@ namespace PositronicVariables.Variables
             TruncateToBootstrapOnly();
 
             // Rebuild domain strictly from the bootstrap. No leakage from the wild frontier.
-            _domain.Clear();
-            foreach (T x in timeline[0].ToCollapsedValues())
+            lock (_tvarLock)
             {
-                _domain.Add(x);
-            }
+                _domain.Clear();
+                foreach (T x in timeline[0].ToCollapsedValues())
+                {
+                    _domain.Add(x);
+                }
 
-            // Fresh pass bookkeeping
-            bootstrapSuperseded = false;
-            _ops.SawForwardWrite = false;
-            _hadOutsideWritesSinceLastLoop = false;
-            // Also clear forward scalar baseline and any captured cross-var delta; they belong to the last forward half-cycle
-            _hasForwardScalarBaseline = false;
-            _forwardScalarBaseline = default;
-            _hasCrossVarAddK = false;
-            _reverseRebuiltEpoch = -1;
+                // Fresh pass bookkeeping
+                bootstrapSuperseded = false;
+                _ops.SawForwardWrite = false;
+                _hadOutsideWritesSinceLastLoop = false;
+                // Also clear forward scalar baseline and any captured cross-var delta; they belong to the last forward half-cycle
+                _hasForwardScalarBaseline = false;
+                _forwardScalarBaseline = default;
+                _hasCrossVarAddK = false;
+                _reverseRebuiltEpoch = -1;
+            }
         }
 
         // Helpers used by reverse replay so epoch tags never drift out of sync
@@ -504,13 +518,15 @@ namespace PositronicVariables.Variables
         {
             MutateTimeline(tl => tl.Add(qb));
             StampAppendCurrentEpoch();
-            OnTimelineAppended?.Invoke();
+            var handler = OnTimelineAppended;
+            handler?.Invoke();
         }
         internal void ReplaceLastFromReverse(QuBit<T> qb)
         {
             MutateTimeline(tl => tl[^1] = qb);
             StampReplaceCurrentEpoch();
-            OnTimelineAppended?.Invoke();
+            var handler = OnTimelineAppended;
+            handler?.Invoke();
         }
         internal void ReplaceForwardHistoryWith(QuBit<T> qb)
         {
@@ -523,7 +539,8 @@ namespace PositronicVariables.Variables
                 tl.Add(qb);
             });
             StampAppendCurrentEpoch();
-            OnTimelineAppended?.Invoke();
+            var handler = OnTimelineAppended;
+            handler?.Invoke();
         }
 
 
@@ -607,10 +624,13 @@ namespace PositronicVariables.Variables
             }
             MutateTimeline(tl => tl.Add(unified));
             StampAppendCurrentEpoch();
-            _domain.Clear();
-            foreach (T x in mergedStates)
+            lock (_tvarLock)
             {
-                _domain.Add(x);
+                _domain.Clear();
+                foreach (T x in mergedStates)
+                {
+                    _domain.Add(x);
+                }
             }
             _runtime.Converged = true;
             OnCollapse?.Invoke();
@@ -742,11 +762,14 @@ namespace PositronicVariables.Variables
                     BeginEpoch();
                     s_LastEntropySeenForEpoch = e;
                     ResetReverseReplayFlag();
-                    // Reset per-epoch reconstruction flags
-                    _reverseRebuiltEpoch = -1;
-                    _skipReverseScalarThisEpoch = false;
-                    _suppressBootstrapUnionThisEpoch = false;
-                    _hasCrossVarAddK = false;
+                    // Reset per-epoch reconstruction flags together
+                    lock (_tvarLock)
+                    {
+                        _reverseRebuiltEpoch = -1;
+                        _skipReverseScalarThisEpoch = false;
+                        _suppressBootstrapUnionThisEpoch = false;
+                        _hasCrossVarAddK = false;
+                    }
                 }
             }
 
@@ -1111,7 +1134,8 @@ namespace PositronicVariables.Variables
 
                     // Outside loop: keep a single rebuilt slice beyond bootstrap.
                     ReplaceForwardHistoryWith(rebuilt);
-                    OnTimelineAppended?.Invoke();
+                    var handler = OnTimelineAppended;
+                    handler?.Invoke();
                     return;
                 }
 
@@ -1124,7 +1148,8 @@ namespace PositronicVariables.Variables
                 // True reverse replay for self-feedback or same-variable.
                 QuBit<T> rebuiltStd = _reverseReplay.ReplayReverseCycle(qb, this);
                 AppendFromReverse(rebuiltStd);
-                OnTimelineAppended?.Invoke();
+                var handler2 = OnTimelineAppended;
+                handler2?.Invoke();
                 return;
             }
 
@@ -1882,7 +1907,8 @@ namespace PositronicVariables.Variables
 
             MutateTimeline(tl => tl.Add(copy));
             StampAppendCurrentEpoch();
-            OnTimelineAppended?.Invoke();
+            var handler = OnTimelineAppended;
+            handler?.Invoke();
         }
 
         /// <summary>
@@ -1890,10 +1916,13 @@ namespace PositronicVariables.Variables
         /// </summary>
         internal void ResetDomainToCurrent()
         {
-            _domain.Clear();
-            foreach (T x in GetCurrentQBit().ToCollapsedValues())
+            lock (_tvarLock)
             {
-                _domain.Add(x);
+                _domain.Clear();
+                foreach (T x in GetCurrentQBit().ToCollapsedValues())
+                {
+                    _domain.Add(x);
+                }
             }
         }
 
