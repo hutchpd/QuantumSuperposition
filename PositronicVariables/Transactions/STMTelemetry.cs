@@ -20,6 +20,16 @@ namespace PositronicVariables.Transactions
         // Track hotspots by TxId (identity-based)
         private static readonly ConcurrentDictionary<long, long> _contentionCounts = new();
 
+        // Per-variable aggregates
+        private static readonly ConcurrentDictionary<long, VarStats> _varStats = new();
+
+        private struct VarStats
+        {
+            public long ValidationFailures;
+            public long WritesApplied;
+            public long LockHoldTicksTotal;
+        }
+
         public static long TotalCommits => System.Threading.Interlocked.Read(ref _totalCommits);
         public static long TotalReadOnlyCommits => System.Threading.Interlocked.Read(ref _totalReadOnlyCommits);
         public static long TotalAborts => System.Threading.Interlocked.Read(ref _totalAborts);
@@ -67,6 +77,16 @@ namespace PositronicVariables.Transactions
         {
             System.Threading.Interlocked.Increment(ref _totalValidationFailures);
             _contentionCounts.AddOrUpdate(txId, 1, (_, v) => v + 1);
+            _varStats.AddOrUpdate(txId,
+                _ => new VarStats { ValidationFailures = 1 },
+                (_, s) => new VarStats { ValidationFailures = s.ValidationFailures + 1, WritesApplied = s.WritesApplied, LockHoldTicksTotal = s.LockHoldTicksTotal });
+        }
+
+        public static void RecordWriteApplied(long txId, long lockHoldTicksFraction)
+        {
+            _varStats.AddOrUpdate(txId,
+                _ => new VarStats { WritesApplied = 1, LockHoldTicksTotal = lockHoldTicksFraction },
+                (_, s) => new VarStats { ValidationFailures = s.ValidationFailures, WritesApplied = s.WritesApplied + 1, LockHoldTicksTotal = s.LockHoldTicksTotal + lockHoldTicksFraction });
         }
 
         public static (long txId, long count)[] GetContentionHotspots(int top = 10)
@@ -76,6 +96,11 @@ namespace PositronicVariables.Transactions
                 .Take(top)
                 .Select(kv => (kv.Key, kv.Value))
                 .ToArray();
+        }
+
+        public static (long txId, long failures, long writes, long lockTicks)[] GetPerVariableStats()
+        {
+            return _varStats.Select(kv => (kv.Key, kv.Value.ValidationFailures, kv.Value.WritesApplied, kv.Value.LockHoldTicksTotal)).ToArray();
         }
 
         public static void Reset()
@@ -89,6 +114,7 @@ namespace PositronicVariables.Transactions
             _totalLockHoldTicks = 0;
             _maxLockHoldTicks = 0;
             _contentionCounts.Clear();
+            _varStats.Clear();
         }
 
         public static string GetReport()

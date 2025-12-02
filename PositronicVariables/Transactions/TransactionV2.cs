@@ -134,6 +134,12 @@ namespace PositronicVariables.Transactions
 
             long ticks = sw?.ElapsedTicks ?? 0;
             STMTelemetry.RecordCommit(readOnly: false, writesApplied: ordered.Length, lockHoldTicks: ticks);
+            // Attribute lock hold ticks to each var roughly equally
+            long perVarTicks = ordered.Length == 0 ? 0 : ticks / ordered.Length;
+            foreach (var (v, _, _) in ordered)
+            {
+                STMTelemetry.RecordWriteApplied(v.TxId, perVarTicks);
+            }
 
             // After variable locks released, append ledger entries idempotently under ledger lock
             AppendBufferedLedgerEntries();
