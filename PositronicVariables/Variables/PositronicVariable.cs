@@ -653,7 +653,12 @@ namespace PositronicVariables.Variables
             QuBit<T> qb = other.GetCurrentQBit();
 
             // Treat this as a cross-variable assignment (source = other).
-            ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: ReferenceEquals(this, other), crossSource: other);
+            lock (_tvarLock)
+            {
+                ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: ReferenceEquals(this, other), crossSource: other);
+                _sawStateReadThisForward = false;
+                Interlocked.Increment(ref _tvarVersion);
+            }
         }
 
 
@@ -669,8 +674,12 @@ namespace PositronicVariables.Variables
 
             // Temporal law: for cross-variable forward writes, only the SOURCE gets logged.
             // The TARGET stays unlogged here; reconstruction happens during reverse ticks.
-            ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf, expr.Source);
-            _sawStateReadThisForward = false;
+            lock (_tvarLock)
+            {
+                ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf, expr.Source);
+                _sawStateReadThisForward = false;
+                Interlocked.Increment(ref _tvarVersion);
+            }
         }
         /// <summary>
         /// Detects if we've accidentally invented time travel by repeating ourselves.
@@ -1633,7 +1642,11 @@ namespace PositronicVariables.Variables
             {
                 // Cross-variable equality: route through central ingest to preserve cross-source context
                 qb = (QuBit<T>)expr;
-                ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: false, crossSource: expr.Source);
+                lock (_tvarLock)
+                {
+                    ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: false, crossSource: expr.Source);
+                    Interlocked.Increment(ref _tvarVersion);
+                }
                 return;
             }
         }

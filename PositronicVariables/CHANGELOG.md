@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2025-12-02
+
+### Added
+- Safety gateway: centralised `MutateTimeline(Action<IList<QuBit<T>>>)` on `PositronicVariable<T>`; all timeline mutations route through this gateway.
+- Read-only public view: timeline is now exposed as `IReadOnlyList<QuBit<T>>`. External mutation of the live list is no longer possible.
+- ConvergenceCoordinator: single-threaded coordinator that processes `IConvergenceWorkItem` via a bounded Channel queue; provides `FlushAsync()` for deterministic tests and queue/latency metrics.
+- Exclusive engine token: coordinator holds an engine token recognised by `MutateTimeline` context checks.
+- Transactional ledger: introduced `ILedgerSink` and buffered ledger entries (`BufferedLedgerEntry`) with per-commit identifiers to append exactly-once after successful commits.
+- Immutable archival: `ImmutableTimelineSnapshot` and `Archivist.PublishSnapshot(snapshot)`; snapshots are cloned arrays detached from live lists.
+- Hotspot telemetry: aggregation of abort rate, retries and lock-hold ticks per variable; hooks for pluggable `IHotspotMitigationStrategy` (e.g., sharding/single-writer promotion).
+- Async-ready ambient context: `TransactionV2.Current` backed by `AsyncLocal<T>`; flat nested transaction semantics.
+- Operator logging suppression: suppression is tied to the ambient transaction (AsyncLocal) instead of thread-static state.
+- Model checking harness (short-run): linearizability/model-check based tests for small operation sets, with CI-friendly configuration.
+- Paranoia mode: optional fail-fast diagnostics (lock ordering assertions, coordinator re-entry guards) and long-running stress harness configuration.
+
+### Changed
+- All convergence-related mutations now build/commit transactions through the coordinator; convergence/replay logic no longer mutates TVars directly.
+- `QuantumLedgerOfRegret` operations are serialised and driven by transactions or coordinator hooks; direct stack manipulation is deprecated.
+- Reverse reconstruction: replaced `dynamic` arithmetic with explicit numeric strategy/helpers to remove late binding.
+- Concurrency docs: explicitly document single-threaded convergence and multi-threaded transactional updates.
+
+### Fixed
+- Data races around timeline mutation by guarding all mutation paths behind `MutateTimeline` with context assertions.
+- Occasional ledger corruption under concurrent access by serialising and making append idempotent via commit-ids.
+- Snapshot mutation hazards: archivist now receives immutable snapshots created post-commit, preventing shared mutable state.
+
+### Performance
+- Reduced GC pressure by avoiding live list exposure and by batching/deferring ledger appends to post-commit hooks.
+- Coordinator-run convergence avoids unnecessary contention in user threads while keeping TVar lock windows short during commit.
+
+### Diagnostics
+- Debug guards: assert that convergence entry points are not invoked while `s_activeTransactions > 0`.
+- Expanded STM telemetry report to include queue metrics and hotspot indicators when configured.
+
+### Testing
+- New tests for: mutation gateway guard, concurrent ledger appends, reverse replay numeric strategy behaviour, coordinator serialisation and `FlushAsync()`, immutable snapshot stability, async/nested transactions, linearizability smoke tests, and paranoia mode assertions.
+
+### Notes
+- Public API surface remains backward compatible for most usages; direct list mutation was never supported and is now technically prevented.
+- Coordinator and transactional ledger are on by default and require no code changes for typical users.
+
 ## [1.5.0] - 2025-11-27
 
 ### Added

@@ -2,7 +2,7 @@
 A time looping variable container for quantum misfits and deterministic dreamers.
 [![NuGet](https://img.shields.io/nuget/v/PositronicVariables.svg)](https://www.nuget.org/packages/PositronicVariables)
 
-`PositronicVariable<T>` simulates values that evolve across iterative timelines. Think Schr√∂dinger's variable: simultaneously filled with regret and potential. Now with automatic convergence, STM-backed transactional updates, telemetry, and existential debugging.
+`PositronicVariable<T>` simulates values that evolve across iterative timelines. Think Schrˆdinger's variable: simultaneously filled with regret and potential. Now with automatic convergence, STM-backed transactional updates, telemetry, and existential debugging.
 
 > Not exactly time travel but close enough to confuse your boss.
 
@@ -73,10 +73,12 @@ Time ->
 We created a cycle. The engine iterates until the values stabilise. If they never settle you get superpositions. Emotional baggage for integers.
 
 ## Thread-safety Notes
-- Per-variable locks and versions guard non-transactional writes.
-- Transactions acquire per-variable locks in id order to prevent deadlocks; read-only transactions use a fast path without locks.
-- For concurrent writers on multiple variables, prefer `TransactionScope`/`TransactionV2` to ensure atomicity and serializability.
-- The convergence loop itself is not designed for parallel mutation from multiple threads; run the loop on a single coordinator thread.
+- Ordinary updates: feel free to mutate from multiple threads via `TransactionV2`/`TransactionScope`. Reads-only take the fast lane (no locks), writes stage and commit atomically with per-variable locks.
+- Convergence and friends: the convergence loop, reverse/forward replay, the Timeline Archivist, and the QuantumLedgerOfRegret all behave like a very polite single passenger queue. A `ConvergenceCoordinator` owns this queue and the exclusive engine token.
+- Mutation gates: timelines only change in two blessed places: (a) during transactional apply at commit for variables in the write set, or (b) on the coordinator while it clutches the engine token. Public API exposes `IReadOnlyList<QuBit<T>>`; bring your own transactions if you want changes.
+- Ledger etiquette: ledger entries are buffered inside transactions and appended exactly once after commit. Direct poking of the global stack is discouraged and internally serialised for everyoneís safety and tea time.
+- Debug nags: in Debug builds we complain loudly if the convergence engine is entered while transactions are active, or if something tries to mutate a timeline outside the approved gateways. This is for your own good (and ours).
+- Async sanity: ambient transaction context and operator logging suppression use `AsyncLocal`, so `await` wonít quietly wander off with your invariants.
 
 ## Useful For
 - Chaotic yet stable feedback loops

@@ -9,6 +9,10 @@ using PositronicVariables.Transactions;
 
 namespace PositronicVariables.Engine.Coordinator
 {
+    /// <summary>
+    /// The very patient queue runner that convinces time to behave.
+    /// Single reader, many hopeful writers. Tea is implied, towels recommended.
+    /// </summary>
     public sealed class ConvergenceCoordinator : IDisposable
     {
         private readonly Channel<IConvergenceWorkItem> _channel;
@@ -23,6 +27,7 @@ namespace PositronicVariables.Engine.Coordinator
 
         public ConvergenceCoordinator(int capacity = 1024)
         {
+            // Single reader so the engine feels like a proper British queue.
             var options = new BoundedChannelOptions(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -33,6 +38,9 @@ namespace PositronicVariables.Engine.Coordinator
             _worker = Task.Run(WorkerLoop);
         }
 
+        /// <summary>
+        /// Take a number, join the queue, bring snacks. The coordinator will see you shortly.
+        /// </summary>
         public ValueTask EnqueueAsync(IConvergenceWorkItem item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
@@ -44,6 +52,7 @@ namespace PositronicVariables.Engine.Coordinator
 
         private async Task WorkerLoop()
         {
+            // One worker to rule them all, and in the darkness converge them.
             while (await _channel.Reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
             {
                 while (_channel.Reader.TryRead(out var item))
@@ -62,7 +71,7 @@ namespace PositronicVariables.Engine.Coordinator
         {
             try
             {
-                // Mark this worker as the coordinator/engine thread for guard allowances
+                // Declare loudly that this thread is the coordinator; the universe listens (mostly).
                 ConcurrencyGuard.RegisterCoordinatorThread();
                 ConcurrencyGuard.RegisterEngineThread();
 
@@ -75,13 +84,13 @@ namespace PositronicVariables.Engine.Coordinator
                 {
                     try { hook(); } catch (Exception exHook) { Console.Error.WriteLine($"[ConvergenceCoordinator] Commit hook error: {exHook.Message}"); }
                 }
-                _ = item.GetResultAfterCommit(); // ignore result unless test uses it
+                _ = item.GetResultAfterCommit(); // Ignore result unless tests need a prophecy.
             }
             catch (Exception ex)
             {
-                // Surface exception immediately so tests fail fast instead of hanging in FlushAsync
+                // Surface exception immediately so tests fail fast instead of hanging in FlushAsync.
                 Console.Error.WriteLine($"[ConvergenceCoordinator] Work item failed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-                // No rethrow: allow loop to continue; tests observing output will report failure state
+                // No rethrow: the queue must carry on, like a determined penguin.
             }
         }
 
@@ -108,6 +117,9 @@ namespace PositronicVariables.Engine.Coordinator
             }
         }
 
+        /// <summary>
+        /// Waits until the queue is empty, the kettle has boiled, and all improbabilities have settled.
+        /// </summary>
         public async Task FlushAsync()
         {
             // Marker: enqueue a no-op item and wait until processed count catches up.
@@ -120,7 +132,7 @@ namespace PositronicVariables.Engine.Coordinator
 
         public void Dispose()
         {
-            // optional unregister; multiple worker items may run on same thread
+            // optional unregister; multiple work items may run on same thread, like buses.
             ConcurrencyGuard.UnregisterCoordinatorThread();
             ConcurrencyGuard.UnregisterEngineThread();
             _cts.Cancel();

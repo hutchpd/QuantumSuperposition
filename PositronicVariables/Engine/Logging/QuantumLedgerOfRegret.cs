@@ -6,7 +6,7 @@ namespace PositronicVariables.Engine.Logging
 {
     /// <summary>
     /// The Quantum Ledger of Regret™ — remembers every dumb thing you've done so you can go back and pretend you didn't.
-    /// Now provides idempotent, commit-identified append semantics for transactional usage.
+    /// Now with idempotent, commit-identified append semantics so your mistakes aren’t recorded twice by an overenthusiastic historian.
     /// </summary>
     public static class QuantumLedgerOfRegret
     {
@@ -16,6 +16,7 @@ namespace PositronicVariables.Engine.Logging
 
         /// <summary>
         /// Legacy direct record. Prefer buffering via TransactionV2 and appending via Append(op, commitId).
+        /// Useful in emergencies and overly dramatic unit tests.
         /// </summary>
         public static void Record(IOperation op)
         {
@@ -25,6 +26,7 @@ namespace PositronicVariables.Engine.Logging
 
         /// <summary>
         /// Idempotent append guarded by commit id. If the commit id was already seen, the entry is ignored.
+        /// This prevents déjà vu from becoming data duplication.
         /// </summary>
         public static void Append(IOperation op, Guid commitId)
         {
@@ -57,7 +59,7 @@ namespace PositronicVariables.Engine.Logging
             }
         }
 
-        // violently yeet the last recorded mistake into the entropy void
+        // Violently yeet the last recorded mistake into the entropy void.
         public static void Pop()
         {
             lock (_lock)

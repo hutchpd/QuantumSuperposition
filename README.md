@@ -119,6 +119,13 @@ It is not a quantum simulator. It is a logic engine that reuses the same superpo
 
 [Full README](PositronicVariables/readme.md)
 
+### Architecture & Concurrency 
+- Convergence runs on a single, very patient `ConvergenceCoordinator` thread. Everyone else takes a number and waits for tea.
+- Timeline mutations pass through a single gate inside `PositronicVariable<T>`. Outside callers see an `IReadOnlyList<QuBit<T>>`, because we’ve learned to childproof reality.
+- User code may update from many threads through transactions; writes apply during commit, not during dramatic monologues.
+- Ledger entries are buffered per transaction and appended exactly once after commit (no time paradoxes due to duplicate regrets).
+- The archivist only receives immutable snapshots. No one gets to share mutable lists with their past self.
+
 ---
 ## Example
 ```csharp

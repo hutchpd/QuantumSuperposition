@@ -4,6 +4,7 @@ namespace PositronicVariables.Engine.Logging
 {
     /// <summary>
     /// Default ledger sink delegating to QuantumLedgerOfRegret with idempotent append.
+    /// Think of it as a responsible adult supervising your regrets.
     /// </summary>
     public sealed class LedgerSink : ILedgerSink
     {

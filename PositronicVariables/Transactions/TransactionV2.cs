@@ -27,6 +27,8 @@ namespace PositronicVariables.Transactions
         internal static TransactionV2? Current => s_current.Value;
         internal bool IsApplying { get; private set; }
 
+        private static readonly object s_globalFallbackLock = new object();
+
         private TransactionV2() { ConcurrencyGuard.TransactionStarted(); }
 
         public static void Run(Action<TransactionV2> body)
@@ -86,6 +88,30 @@ namespace PositronicVariables.Transactions
 
         private void CommitOnce()
         {
+            // Optional global fallback under extreme contention
+            if (ParanoiaConfig.EnableGlobalFallback && !ParanoiaConfig.FallbackActive)
+            {
+                long totalPressure = STMTelemetry.TotalRetries + STMTelemetry.TotalAborts;
+                if (totalPressure >= ParanoiaConfig.AbortRetryThreshold)
+                {
+                    ParanoiaConfig.FallbackActive = true;
+                }
+            }
+
+            if (ParanoiaConfig.FallbackActive)
+            {
+                lock (s_globalFallbackLock)
+                {
+                    CommitCore();
+                }
+                return;
+            }
+
+            CommitCore();
+        }
+
+        private void CommitCore()
+        {
             // Read-only fast path: validate read versions, no locks
             if (_writeSet.Count == 0)
             {
@@ -109,9 +135,21 @@ namespace PositronicVariables.Transactions
 
             try
             {
+                long lastId = long.MinValue;
                 for (int i = 0; i < ordered.Length; i++)
                 {
                     var (v, _, _) = ordered[i];
+                    // Paranoia: assert strictly increasing TxId order
+                    if (ParanoiaConfig.EnableParanoia)
+                    {
+                        if (v.TxId <= lastId)
+                        {
+                            throw new InvalidOperationException($"Lock ordering violation: TxId {v.TxId} acquired after {lastId}.");
+                        }
+                        lastId = v.TxId;
+                        ParanoiaConfig.LockStacks[v.TxId] = Environment.StackTrace;
+                    }
+
                     Monitor.Enter(v.TxLock);
                     if (i == 0)
                     {

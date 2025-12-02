@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.5] - 2025-11-23
+## [1.7.5] - 2025-12-02
 ### Added
 - Fix: `QuantumSystem.SetFromTensorProduct` now constructs system-managed `QuBit<T>` instances using the `QuBit(QuantumSystem, int[])` constructor for local qubits passed into the method. These qubits are registered with the system and preserve qubit indices so collapse propagation, partial observation and entanglement bookkeeping behave correctly.
 - Extensibility: `SetFromTensorProduct<T>` now accepts an optional `Func<T,int>` basis mapper to support non-int/bool basis types (e.g., enums or custom types). Defaults provided for `int`, `bool`, and any enum via `Convert.ToInt32`.
