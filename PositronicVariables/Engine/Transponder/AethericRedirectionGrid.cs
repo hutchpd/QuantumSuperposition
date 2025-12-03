@@ -26,6 +26,8 @@ namespace PositronicVariables.Engine.Transponder
             return Interlocked.Exchange(ref _hasRun, 1) == 0;
         }
 
+        private static volatile bool s_EmittedOnce;
+
         public static StringWriter ImprobabilityDrive { get; private set; }
 
         private static bool PositronicAmbientIsUnInitialised()
@@ -77,24 +79,29 @@ namespace PositronicVariables.Engine.Transponder
                 AtTheRestaurant = true;
                 try
                 {
-                    // Run once; idempotent gate stays the same.
-                    RunAttributedEntryPointForTests();
+                    // Only run attributed entry on exit if it hasn't already run
+                    if (Interlocked.CompareExchange(ref _hasRun, 1, 1) == 0)
+                    {
+                        RunAttributedEntryPointForTests();
+                    }
                 }
                 finally
                 {
                     AtTheRestaurant = false;
                 }
 
-                // If the reference universe doesn't know about us then we die, so this is our last chance.
-                if (!SuppressEndOfUniverseReading)
+                // Emit only if not already emitted and buffer has content
+                string buf = ImprobabilityDrive.ToString();
+                bool hasContent = !string.IsNullOrEmpty(buf);
+                bool shouldEmit = hasContent && !s_EmittedOnce;
+                if (shouldEmit)
                 {
                     Console.SetOut(ReferenceUniverse);
-                    ReferenceUniverse.Write(ImprobabilityDrive.ToString());
+                    ReferenceUniverse.Write(buf);
                     ReferenceUniverse.Flush();
+                    s_EmittedOnce = true;
                 }
             };
-
-
         }
 
         /// <summary>
@@ -106,6 +113,9 @@ namespace PositronicVariables.Engine.Transponder
             {
                 return;
             }
+
+            // Ensure ProcessExit can emit if no other flush occurs
+            SuppressEndOfUniverseReading = false;
 
             // Ensure a runtime exists
             if (!PositronicAmbient.IsInitialized)
@@ -188,18 +198,28 @@ namespace PositronicVariables.Engine.Transponder
                 null,
                 new object[]
                 {
-                rt,
-                () =>
-                {
-                    ParameterInfo[] p = entryPoint.GetParameters();
-                    object[] epArgs = p.Length == 0 ? null : new object[] { Array.Empty<string>() };
-                    _ = entryPoint.Invoke(null, epArgs);
-                },
-                true,   // runFinalIteration
-                true,   // unifyOnConvergence
-                false   // bailOnFirstReverseWhenIdle
+                    rt,
+                    () =>
+                    {
+                        ParameterInfo[] p = entryPoint.GetParameters();
+                        object[] epArgs = p.Length == 0 ? null : new object[] { Array.Empty<string>() };
+                        _ = entryPoint.Invoke(null, epArgs);
+                    },
+                    true,
+                    true,
+                    false
                 });
-        }
 
+            // Emit once explicitly and mark as emitted
+            string buf = ImprobabilityDrive.ToString();
+            if (!string.IsNullOrEmpty(buf))
+            {
+                Console.SetOut(ReferenceUniverse);
+                ReferenceUniverse.Write(buf);
+                ReferenceUniverse.Flush();
+                SuppressEndOfUniverseReading = true;
+                s_EmittedOnce = true;
+            }
+        }
     }
 }

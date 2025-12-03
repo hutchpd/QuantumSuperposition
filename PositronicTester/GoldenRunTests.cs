@@ -9,6 +9,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System;
+using System.IO;
+using PositronicVariables.Engine.Transponder;
 
 namespace PositronicVariables.Tests
 {
@@ -173,6 +176,42 @@ namespace PositronicVariables.Tests
             Assert.That(supA.Intersect(new[] { 0, 4 }).Count(), Is.EqualTo(2), "A must include 0 and 4");
             Assert.That(supB.Intersect(new[] { 3, 4 }).Count(), Is.EqualTo(2), "B must include 3 and 4");
             Assert.That(supC.Intersect(new[] { 1, 2 }).Count(), Is.EqualTo(2), "C must include 1 and 2");
+        }
+
+        [Test]
+        public void AttributedEntry_PrintsExactlyOnce_NoDuplicateEmission()
+        {
+            // Capture console output
+            StringWriter sw = new StringWriter();
+            TextWriter prev = Console.Out;
+            Console.SetOut(sw);
+            try
+            {
+                // Run the attributed entry point (TestPV program)
+                AethericRedirectionGrid.RunAttributedEntryPointForTests();
+            }
+            finally
+            {
+                Console.SetOut(prev);
+            }
+
+            string output = sw.ToString();
+            // Count occurrences of the two expected prefixes
+            int antivalCount = CountOccurrences(output, "The antival is ");
+            int valueCount = CountOccurrences(output, "The value is ");
+
+            Assert.That(antivalCount, Is.EqualTo(1), "Antival line should print exactly once.");
+            Assert.That(valueCount, Is.EqualTo(1), "Value line should print exactly once.");
+        }
+
+        private static int CountOccurrences(string text, string needle)
+        {
+            int count = 0; int idx = 0;
+            while ((idx = text.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++; idx += needle.Length;
+            }
+            return count;
         }
     }
 }

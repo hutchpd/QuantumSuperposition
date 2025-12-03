@@ -1,76 +1,133 @@
-﻿using QuantumSuperposition.Core;
-using QuantumSuperposition.Operators;
-using QuantumSuperposition.QuantumSoup;
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Numerics;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;
 
 internal static class Program
 {
-    // Operator set for basic quantum arithmetic on integers.
-    // Think of it as your dimensional toolbox for integer superpositions.
-    private static readonly IQuantumOperators<int> intOps = new IntOperators();
-
     public static void Main()
     {
-        // === PRIME DETECTION VIA QUANTUM RESIDUAL ECHOES ===
-        // For each number from 1 to 100, we test primality by creating
-        // a quantum superposition of all smaller potential divisors (2...n-1).
-        //
-        // Then, we simultaneously divide the number 'i' by *all* of these at once,
-        // and evaluate whether *any* of the divisions produced a clean zero remainder.
-        //
-        // If *none* of the remainders were zero, we’ve just confirmed the number is prime.
-        for (int i = 1; i <= 100; i++)
-        {
-            // Build a quantum state of all potential divisors.
-            QuBit<int> divisors = new(Enumerable.Range(2, i > 2 ? i - 2 : 1), intOps);
+        // Section 8.3: Grover search over a 2-qubit database
+        // We produce console output and CSV artifacts for plotting and measurement statistics.
+        string outDir = Path.Combine("Artifacts", "Grover", "2Qubits-OneTarget");
+        Directory.CreateDirectory(outDir);
 
-            // Collapse the quantum result of (i % all divisors), and check for zeros.
-            // If all outcomes were non-zero, then 'i' has no divisors and is prime.
-            if ((i % divisors).EvaluateAll())
+        // Build a QuantumSystem with 2 qubits initialised to uniform superposition via H ⊗ H
+        QuantumSystem system = new QuantumSystem();
+        // Start in |00⟩ with explicit amplitudes
+        var initDict = new System.Collections.Generic.Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer())
+        {
+            { new[] {0,0}, Complex.One }
+        };
+        system.SetAmplitudes(initDict);
+
+        // Apply H on both qubits to create uniform superposition
+        system.ApplyMultiQubitGate(new[] { 0 }, QuantumGates.Hadamard.Matrix, "H");
+        system.ApplyMultiQubitGate(new[] { 1 }, QuantumGates.Hadamard.Matrix, "H");
+        // no queue processing needed (multi-qubit API applies immediately)
+
+        // Initial uniform superposition amplitudes
+        WriteAmpsCsv(Path.Combine(outDir, "initial_uniform.csv"), system);
+        Console.WriteLine("=== Initial uniform (H ⊗ H) ===\n" + system.GetAmplitudePhaseDebugView());
+
+        // Define oracle: mark target |10⟩ (MSB-first convention used by helpers/tests)
+        static bool Oracle(int[] bits) => bits.Length == 2 && bits[0] == 1 && bits[1] == 0;
+
+        // Perform one Grover iteration manually to capture intermediate amplitudes
+        ApplyOracle(system, new[] { 0, 1 }, Oracle);
+        ApplyDiffusion(system, new[] { 0, 1 });
+
+        // After one iteration amplitudes
+        WriteAmpsCsv(Path.Combine(outDir, "after_one_iteration.csv"), system);
+        Console.WriteLine("=== After one Grover iteration ===\n" + system.GetAmplitudePhaseDebugView());
+
+        // Final measurement statistics over many runs (rebuild system each run to ensure identical start)
+        int runs = 5000;
+        var counts = new int[4]; // indices 0..3 for |00>,|01>,|10>,|11>
+        Random rng = new Random(42);
+        for (int i = 0; i < runs; i++)
+        {
+            QuantumSystem s = new QuantumSystem();
+            var startDict = new System.Collections.Generic.Dictionary<int[], Complex>(new QuantumSuperposition.Utilities.IntArrayComparer())
             {
-                Console.WriteLine($"{i} is prime!");
+                { new[] {0,0}, Complex.One }
+            };
+            s.SetAmplitudes(startDict);
+            s.ApplyMultiQubitGate(new[] { 0 }, QuantumGates.Hadamard.Matrix, "H");
+            s.ApplyMultiQubitGate(new[] { 1 }, QuantumGates.Hadamard.Matrix, "H");
+            // no queue processing
+            ApplyOracle(s, new[] { 0, 1 }, Oracle);
+            ApplyDiffusion(s, new[] { 0, 1 });
+            int[] observed = s.PartialObserve(new[] { 0, 1 }, rng);
+            int idx = (observed[0] << 1) | observed[1];
+            counts[idx]++;
+        }
+
+        // Write measurement histogram CSV
+        using (var sw = new StreamWriter(Path.Combine(outDir, "measurement_histogram.csv")))
+        {
+            sw.WriteLine("basis,state,count,frequency");
+            for (int i = 0; i < 4; i++)
+            {
+                int[] bits = QuantumAlgorithms.IndexToBits(i, 2);
+                double freq = counts[i] / (double)runs;
+                sw.WriteLine($"{i},|{bits[0]}{bits[1]}>,{counts[i]},{freq:F6}");
             }
         }
 
-        // We extract the factors of 10 by projecting the modulo result (10 % x)
-        // across all integers 1 to 10, and filtering the ones where result == 0.
-        //
-        // This is equivalent to asking the multiverse: "Which of you evenly divide 10?"
-        Eigenstates<int> factors = Factors(10);
-        Console.WriteLine("Factors: " + factors.ToString());
+        Console.WriteLine("=== Measurement histogram (" + runs + ") ===");
+        for (int i = 0; i < 4; i++)
+        {
+            int[] bits = QuantumAlgorithms.IndexToBits(i, 2);
+            Console.WriteLine($"|{bits[0]}{bits[1]}>: {counts[i]} ({counts[i] / (double)runs:P2})");
+        }
 
-        // Using quantum comparison operators to find the minimum of multiple values
-        // without sorting or iteration. It’s a logic circuit built from reality checks.
-        Console.WriteLine("min value of 3, 5, 8 is " + MinValue([3, 5, 8]));
-
-        Console.WriteLine("Press any key to close...");
-        _ = Console.ReadKey();
+        Console.WriteLine("Artifacts written to: " + outDir);
     }
 
-    /// <summary>
-    /// Projects the modulo (v % x) over a range of integers 1 to v.
-    /// Returns all values x for which the remainder is 0 — i.e., the true factors of v.
-    /// </summary>
-    /// <param name="v"></param>
-    /// <returns></returns>
-    public static Eigenstates<int> Factors(int v)
+    // Write current system amplitudes to CSV for plotting
+    private static void WriteAmpsCsv(string path, QuantumSystem system)
     {
-        // Use the new projection constructor.
-        Eigenstates<int> candidates = new(Enumerable.Range(1, v), x => v % x, intOps);
-        // Filter for keys whose projected value equals 0.
-        return candidates == 0;
+        using var sw = new StreamWriter(path);
+        sw.WriteLine("bits,index,real,imag,prob");
+        foreach (var kv in system.Amplitudes)
+        {
+            int[] bits = kv.Key;
+            int idx = QuantumAlgorithms.BitsToIndex(bits);
+            Complex a = kv.Value;
+            double p = a.Magnitude * a.Magnitude;
+            sw.WriteLine($"{string.Join("", bits)},{idx},{a.Real},{a.Imaginary},{p}");
+        }
     }
 
-    /// <summary>
-    /// Finds the minimum value in a set using quantum filtering and composite logic.
-    /// Avoids traditional min/max functions by constructing conditional relationships.
-    /// </summary>
-    /// <param name="range"></param>
-    /// <returns></returns>
-    public static int MinValue(IEnumerable<int> range)
+    // Apply oracle: phase flip on target basis
+    private static void ApplyOracle(QuantumSystem system, int[] qubits, Func<int[], bool> oracle)
     {
-        Eigenstates<int> values = new(range, intOps);
-        // Combine filtering operators.
-        Eigenstates<int> filtered = values.Any() <= values.All();
-        return filtered.ToValues().First();
+        int n = qubits.Length;
+        int dim = 1 << n;
+        Complex[,] m = new Complex[dim, dim];
+        for (int i = 0; i < dim; i++)
+        {
+            int[] basis = QuantumAlgorithms.IndexToBits(i, n);
+            m[i, i] = oracle(basis) ? -Complex.One : Complex.One;
+        }
+        system.ApplyMultiQubitGate(qubits, m, "Oracle");
+    }
+
+    // Apply diffusion operator (H all, X all, MCZ on |00>, X all, H all)
+    private static void ApplyDiffusion(QuantumSystem system, int[] qubits)
+    {
+        foreach (int q in qubits) system.ApplyMultiQubitGate(new[] { q }, QuantumGates.Hadamard.Matrix, "H");
+        foreach (int q in qubits) system.ApplyMultiQubitGate(new[] { q }, QuantumGates.PauliX.Matrix, "X");
+        int n = qubits.Length; int dim = 1 << n;
+        Complex[,] mcz = new Complex[dim, dim];
+        for (int i = 0; i < dim; i++) mcz[i, i] = (i == 0) ? -Complex.One : Complex.One;
+        system.ApplyMultiQubitGate(qubits, mcz, "MCZ");
+        foreach (int q in qubits) system.ApplyMultiQubitGate(new[] { q }, QuantumGates.PauliX.Matrix, "X");
+        foreach (int q in qubits) system.ApplyMultiQubitGate(new[] { q }, QuantumGates.Hadamard.Matrix, "H");
+        // no queue processing
     }
 }
