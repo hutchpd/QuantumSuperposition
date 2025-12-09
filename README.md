@@ -3,7 +3,7 @@
 **QuantumSuperposition** and **PositronicVariables**
 *Subtle multiverse engineering for .NET developers who should probably know better.*
 
-Two complementary .NET libraries for modelling uncertainty, multi-state computation, quantum-style reasoning, reversible temporal logic and timeline convergence. One gives you strongly typed superpositions and actual quantum circuit tooling. The other lets your variables negotiate with their own futures until everyone agrees.
+Two complementary .NET libraries for modelling uncertainty, multi-state computation, quantum-style reasoning, reversible temporal logic and timeline convergence. One gives you strongly typed superpositions and actual quantum circuit tooling. The other lets your variables negotiate with their own futures until everyone agrees. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17863969.svg)](https://doi.org/10.5281/zenodo.17863969)
 
 ---
 ## Overview
@@ -121,7 +121,7 @@ It is not a quantum simulator. It is a logic engine that reuses the same superpo
 
 ### Architecture & Concurrency 
 - Convergence runs on a single, very patient `ConvergenceCoordinator` thread. Everyone else takes a number and waits for tea.
-- Timeline mutations pass through a single gate inside `PositronicVariable<T>`. Outside callers see an `IReadOnlyList<QuBit<T>>`, because we’ve learned to childproof reality.
+- Timeline mutations pass through a single gate inside `PositronicVariable<T>`. Outside callers see an `IReadOnlyList<QuBit<T>>`, because weâ€™ve learned to childproof reality.
 - User code may update from many threads through transactions; writes apply during commit, not during dramatic monologues.
 - Ledger entries are buffered per transaction and appended exactly once after commit (no time paradoxes due to duplicate regrets).
 - The archivist only receives immutable snapshots. No one gets to share mutable lists with their past self.
