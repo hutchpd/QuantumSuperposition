@@ -3,7 +3,7 @@
 **QuantumSuperposition** and **PositronicVariables**
 *Subtle multiverse engineering for .NET developers who should probably know better.*
 
-Two complementary .NET libraries for modelling uncertainty, multi-state computation, quantum-style reasoning, reversible temporal logic and timeline convergence. One gives you strongly typed superpositions and actual quantum circuit tooling. The other lets your variables negotiate with their own futures until everyone agrees. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17863969.svg)](https://doi.org/10.5281/zenodo.17863969)
+Two complementary .NET libraries for modelling uncertainty, multi-state computation, quantum-style reasoning, reversible temporal logic and timeline convergence. One gives you strongly typed superpositions and actual quantum circuit tooling. The other lets your variables negotiate with their own futures until everyone agrees. [**Read the full paper (DOI link)**](https://doi.org/10.5281/zenodo.17863969) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17863969.svg)](https://doi.org/10.5281/zenodo.17863969)
 
 ---
 ## Overview
