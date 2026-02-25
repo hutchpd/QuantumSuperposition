@@ -1,0 +1,8 @@
+antival<int> x;
+antival<int> y;
+
+time {
+    print(x);
+    x := y + 1;
+    y := 3;
+}
