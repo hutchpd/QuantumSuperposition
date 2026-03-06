@@ -151,6 +151,10 @@
             color: #e5e7eb; /* gray-200 */
         }
 
+            body.dark .qs-main {
+                background: #0f172a;
+            }
+
             body.dark .qs-sidebar {
                 background: #0b1220; /* near slate-950 */
                 border-color: #1f2a44; /* darker border */
@@ -185,6 +189,39 @@
 
             body.dark a {
                 color: #93c5fd;
+            }
+
+            body.dark .title,
+            body.dark .subtitle,
+            body.dark .content h1,
+            body.dark .content h2,
+            body.dark .content h3,
+            body.dark .content h4,
+            body.dark .content h5,
+            body.dark .content h6 {
+                color: #e5e7eb;
+            }
+
+            body.dark .content {
+                color: #d1d5db;
+            }
+
+            body.dark .content strong {
+                color: #e5e7eb;
+            }
+
+            body.dark .content code {
+                background: rgba(255, 255, 255, 0.08);
+                color: inherit;
+            }
+
+            body.dark pre code,
+            body.dark code.hljs {
+                background: transparent;
+            }
+
+            body.dark .qs-section + .qs-section {
+                border-top-color: #1f2a44;
             }
 
             body.dark .button.is-light {
