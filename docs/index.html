@@ -319,6 +319,7 @@
                             <li><a href="#entanglement">Entanglement &amp; collapse</a></li>
                             <li><a href="#gates">Gate model &amp; circuits</a></li>
                             <li><a href="#algorithms">Quantum algorithms</a></li>
+                            <li><a href="#noise">Noise &amp; error mitigation</a></li>
                         </ul>
                     </li>
 
@@ -682,6 +683,43 @@ int[] searchQubits = { 0, 1 };
 Func&lt;int[], bool&gt; oracle = bits =&gt; bits[0] == 1 &amp;&amp; bits[1] == 0;
 
 QuantumAlgorithms.GroverSearch(system, searchQubits, oracle);</code></pre>
+                </div>
+
+                <div id="noise" class="content" style="margin-top: 1.5rem;">
+                    <h3>Noise &amp; error mitigation</h3>
+                    <p>
+                        The ideal simulator is fun, but real quantum hardware is fun in the way a raccoon is fun.
+                        If you want circuits to be wrong in realistic ways, then less wrong on purpose, this library
+                        includes an opt-in noise layer plus a small error mitigation playground.
+                    </p>
+                    <ul>
+                        <li><code>NoiseModel</code> describes the chaos.</li>
+                        <li><code>NoisyQuantumSystem</code> wraps a <code>QuantumSystem</code> and injects probabilistic errors.</li>
+                        <li>Readout mitigation supports single-qubit counts and multi-qubit bitstrings like <code>"00"</code>..<code>"11"</code>.</li>
+                        <li>ZNE and PEC are included for when you want the maths to stare back.</li>
+                    </ul>
+
+                    <h4>Quick sketch</h4>
+<pre><code class="language-csharp">using QuantumSuperposition.Core;
+using QuantumSuperposition.NoiseProperties;
+using QuantumSuperposition.Systems;
+
+var noise = new NoiseModel(
+    singleQubitErrorRate: 0.01,
+    twoQubitErrorRate: 0.05,
+    readoutErrorMatrix: ReadoutErrorMatrix.FromFlipProbabilities(p01: 0.02, p10: 0.03));
+
+var noisy = new NoisyQuantumSystem(noise);
+noisy.Apply(QuantumGates.Hadamard, qubitIndex: 0);
+noisy.ProcessGateQueue();
+
+// measurement, now with optional readout noise
+int[] outcome = noisy.ObserveGlobal(new[] { 0 });</code></pre>
+
+                    <p class="is-size-7 has-text-grey">
+                        Full details and examples live in
+                        <a href="https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Noise.md" target="_blank" rel="noopener"><code>QuantumSuperposition/docs/Noise.md</code></a>.
+                    </p>
                 </div>
             </section>
 
@@ -1060,6 +1098,7 @@ var json = v.ExportToJson();                 // take your timeline to a meeting
                         <li>Gate ↔ register sugar - <a href="https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/GateRegisterSugar.md" target="_blank" rel="noopener"><code>QuantumSuperposition/docs/GateRegisterSugar.md</code></a></li>
                         <li>Gate catalogue extensions - <a href="https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/GateCatalogue.md" target="_blank" rel="noopener"><code>QuantumSuperposition/docs/GateCatalogue.md</code></a></li>
                         <li>Equality and AlmostEquals - <a href="https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Equality.md" target="_blank" rel="noopener"><code>QuantumSuperposition/docs/Equality.md</code></a></li>
+                        <li>Noise and error mitigation - <a href="https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Noise.md" target="_blank" rel="noopener"><code>QuantumSuperposition/docs/Noise.md</code></a></li>
                     </ul>
 
                     <h3>External docs site</h3>
