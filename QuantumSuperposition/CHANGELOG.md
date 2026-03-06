@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-03-06
+### Added
+- Noise foundation: `NoiseModel`, `ReadoutErrorMatrix`, `ThermalRelaxation` in `QuantumSuperposition.NoiseProperties` for defining optional noise behaviour.
+- Noise injection layer: `NoisyQuantumSystem` decorator that injects probabilistic post-gate Pauli errors (single and two qubit) without modifying base `QuantumSystem` behaviour.
+- Readout error mitigation:
+  - `ReadoutMitigator` for single-qubit histogram correction.
+  - `TensoredReadoutMitigator` for multi-qubit mitigation using per-qubit calibration and an O(n·2^n) tensored inverse application.
+  - `MitigationResult` with raw vs mitigated frequencies and a total variation distance metric.
+- ZNE (Zero Noise Extrapolation): `ZeroNoiseExtrapolation` plus `ZneCircuit`, supporting linear and polynomial extrapolation and noise scaling via `NoiseModel` parameter scaling.
+- PEC (Probabilistic Error Cancellation): `PECSampler`, `PecDecomposition`, and `PecTerm` for quasi-probability sampling and re-weighting.
+- Multi-qubit count dictionary support for mitigation utilities, including bitstring keys like "00".."11" and `Dictionary<int[], int>` inputs (via `IntArrayComparer`).
+- Documentation: new `docs/Noise.md` plus README mention and documentation map entry.
+- Tests: added coverage for the new noise, mitigation, ZNE, and PEC utilities.
+
+### Fixed
+- Readout mitigation now correctly inverts the transpose of the confusion matrix (consistent with counts being indexed by measured outcomes).
+
 ## [1.7.5] - 2025-12-02
 ### Added
 - Fix: `QuantumSystem.SetFromTensorProduct` now constructs system-managed `QuBit<T>` instances using the `QuBit(QuantumSystem, int[])` constructor for local qubits passed into the method. These qubits are registered with the system and preserve qubit indices so collapse propagation, partial observation and entanglement bookkeeping behave correctly.
