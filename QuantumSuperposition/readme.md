@@ -248,6 +248,7 @@ Trailer above. Full movie lives in the docs:
 - Gate Register Sugar: `docs/GateRegisterSugar.md`
 - Gate Catalogue Extensions: `docs/GateCatalogue.md`
 - Equality and AlmostEquals: `docs/Equality.md`
+- Noise and error mitigation: `docs/Noise.md`
 
 ---
 

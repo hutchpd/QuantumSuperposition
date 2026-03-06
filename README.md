@@ -86,6 +86,16 @@ Write declarative logic that reasons over possibilities without forcing early co
 - Grover search with oracle integration, multi controlled Z, diffusion operator
 - Algorithms assembled from the same gate primitives you can manipulate
 
+#### Noise and error mitigation
+
+For when you want your quantum results to be wrong in realistic ways, then less wrong on purpose:
+
+- `NoiseModel` and `NoisyQuantumSystem` for optional noise injection
+- Readout error mitigation, including multi-qubit count dictionaries like "00".."11"
+- Zero Noise Extrapolation (ZNE) and Probabilistic Error Cancellation (PEC)
+
+See `QuantumSuperposition/docs/Noise.md`.
+
 ### Documentation
 Focused documentation per subsystem: entanglement behaviour, complex number support, gate references, functional programming patterns.
 
