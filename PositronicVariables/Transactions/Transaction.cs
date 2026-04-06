@@ -6,6 +6,7 @@ namespace PositronicVariables.Transactions
     /// <summary>
     /// Coarse-grained transactional guard. Stage 1: serialize transactional bodies using a global lock.
     /// </summary>
+    [Obsolete("Use TransactionScope or TransactionV2 instead. Transaction is a legacy coarse-grained global lock.")]
     public sealed class Transaction : IDisposable
     {
         private static readonly object GlobalTxLock = new();

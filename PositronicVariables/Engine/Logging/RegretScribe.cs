@@ -6,10 +6,10 @@ namespace PositronicVariables.Engine.Logging
 {
     public class RegretScribe<T> : IOperationLogHandler<T> where T : IComparable<T>
     {
-        private static ILedgerSink s_sink = new LedgerSink();
+        private static ILedgerSink s_sink;
         public static ILedgerSink Sink
         {
-            get => s_sink;
+            get => s_sink ?? Ledger.Sink;
             set => s_sink = value ?? throw new ArgumentNullException(nameof(value));
         }
 
@@ -19,7 +19,7 @@ namespace PositronicVariables.Engine.Logging
             // During the convergence loop, preserve immediate ledger ordering
             if (PositronicVariable<T>.InConvergenceLoop)
             {
-                s_sink.Append(op, Guid.NewGuid());
+                Sink.Append(op, Guid.NewGuid());
                 return;
             }
 
@@ -31,7 +31,7 @@ namespace PositronicVariables.Engine.Logging
             else
             {
                 // outside tx: append immediately with unique id
-                s_sink.Append(op, Guid.NewGuid());
+                Sink.Append(op, Guid.NewGuid());
             }
         }
 
@@ -40,7 +40,7 @@ namespace PositronicVariables.Engine.Logging
         /// </summary>
         public void UndoLastForwardCycle()
         {
-            s_sink.ReverseLastOperations();
+            Sink.ReverseLastOperations();
         }
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace PositronicVariables.Engine.Logging
         /// </summary>
         public void Clear()
         {
-            s_sink.Clear();
+            Sink.Clear();
         }
     }
 }

@@ -8,10 +8,12 @@ using PositronicVariables.Engine.Timeline;
 using PositronicVariables.Engine.Transponder;
 using PositronicVariables.Initialisation;
 using PositronicVariables.Operations;
+using PositronicVariables.Persistence;
 using PositronicVariables.Runtime;
 using QuantumSuperposition.QuantumSoup;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using PositronicVariables.Transactions;
@@ -285,6 +287,7 @@ namespace PositronicVariables.Variables
         /// The timeline of quantum slices, each a breadcrumb trail through the multiverse's tangled yarn.
         /// </summary>
         private readonly List<QuBit<T>> timeline = [];
+        private static readonly JsonSerializerOptions s_snapshotJsonOptions = new() { WriteIndented = true };
         public IReadOnlyList<QuBit<T>> Timeline
         {
             get
@@ -357,6 +360,111 @@ namespace PositronicVariables.Variables
         /// How many alternate realities we've stacked on this poor variable's timeline. More is usually bad.
         /// </summary>
         public int TimelineLength => timeline.Count;
+
+        public PositronicVariableSnapshot<T> ExportSnapshot()
+        {
+            lock (_tvarLock)
+            {
+                return new PositronicVariableSnapshot<T>
+                {
+                    SourceVariableId = _tvarId,
+                    Version = _tvarVersion,
+                    CapturedAt = DateTimeOffset.UtcNow,
+                    TimelineSlices = timeline
+                        .Select(q => q.ToCollapsedValues().ToArray())
+                        .ToList()
+                };
+            }
+        }
+
+        public void SaveSnapshot(string filePath, JsonSerializerOptions options = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+            string fullPath = Path.GetFullPath(filePath);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string json = JsonSerializer.Serialize(ExportSnapshot(), options ?? s_snapshotJsonOptions);
+            File.WriteAllText(fullPath, json);
+        }
+
+        public static PositronicVariable<T> LoadSnapshot(string filePath, IPositronicRuntime runtime = null, JsonSerializerOptions options = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+            string json = File.ReadAllText(filePath);
+            PositronicVariableSnapshot<T> snapshot = JsonSerializer.Deserialize<PositronicVariableSnapshot<T>>(json, options ?? s_snapshotJsonOptions)
+                ?? throw new InvalidOperationException("Snapshot file did not contain a valid positronic timeline.");
+
+            return FromSnapshot(snapshot, runtime);
+        }
+
+        public static PositronicVariable<T> FromSnapshot(PositronicVariableSnapshot<T> snapshot, IPositronicRuntime runtime = null)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+            if (snapshot.TimelineSlices == null || snapshot.TimelineSlices.Count == 0)
+            {
+                throw new InvalidOperationException("Snapshot must contain at least one timeline slice.");
+            }
+
+            runtime ??= EnsureAmbientRuntime();
+
+            T[] bootstrap = snapshot.TimelineSlices[0] ?? Array.Empty<T>();
+            T initialValue = bootstrap.Length > 0 ? bootstrap[0] : default;
+
+            var variable = new PositronicVariable<T>(initialValue, runtime);
+            variable.ApplySnapshot(snapshot);
+            return variable;
+        }
+
+        private void ApplySnapshot(PositronicVariableSnapshot<T> snapshot)
+        {
+            if (snapshot.TimelineSlices == null || snapshot.TimelineSlices.Count == 0)
+            {
+                throw new InvalidOperationException("Snapshot must contain at least one timeline slice.");
+            }
+
+            lock (_tvarLock)
+            {
+                timeline.Clear();
+                _sliceEpochs.Clear();
+                _domain.Clear();
+
+                foreach (T[] sliceValues in snapshot.TimelineSlices)
+                {
+                    if (sliceValues == null || sliceValues.Length == 0)
+                    {
+                        throw new InvalidOperationException("Snapshot slices cannot be null or empty.");
+                    }
+
+                    QuBit<T> slice = new(sliceValues);
+                    slice.Any();
+                    timeline.Add(slice);
+                    _sliceEpochs.Add(timeline.Count == 1 ? 0 : OutsideEpoch);
+
+                    foreach (T value in sliceValues)
+                    {
+                        _domain.Add(value);
+                    }
+                }
+
+                bootstrapSuperseded = timeline.Count > 1;
+                _hadOutsideWritesSinceLastLoop = false;
+                _sawStateReadThisForward = false;
+                _hasForwardScalarBaseline = false;
+                _hasCrossVarAddK = false;
+                _hadRequiredThisForward = false;
+                _reverseRebuiltEpoch = -1;
+                _pendingCrossSource = null;
+                _skipReverseScalarThisEpoch = false;
+                _suppressBootstrapUnionThisEpoch = false;
+                _tvarVersion = snapshot.Version;
+            }
+        }
 
         /// <summary>
         /// Politely asks the universe which way time is flowing today.
@@ -2011,10 +2119,13 @@ namespace PositronicVariables.Variables
         /// Run an action under a coarse-grained global transaction.
         /// Stage 1 API to help tests serialize multivariable mutations.
         /// </summary>
+        [Obsolete("Use TransactionScope.Run or TransactionV2.RunWithRetry for new code.")]
         public static void InTransaction(Action action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
+#pragma warning disable CS0618
             Transaction.Run(_ => action());
+#pragma warning restore CS0618
         }
     }
 }

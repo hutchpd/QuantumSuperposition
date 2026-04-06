@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-04-06
+
+### Added
+- Snapshot persistence: `PositronicVariable<T>.ExportSnapshot()`, `SaveSnapshot(...)`, `LoadSnapshot(...)`, and `FromSnapshot(...)` for JSON-based timeline export and restore.
+- Durable audit trail: new `FileLedgerSink` writes append-only JSON Lines ledger entries to disk while preserving the in-memory reverse replay ledger.
+- Documentation: added `docs/Persistence.md` and README guidance for snapshot and ledger workflows.
+
+### Changed
+- Package metadata is now aligned with QuantumSuperposition 1.9.0.
+
+### Deprecated
+- Legacy coarse-grained `Transaction` and `PositronicVariable<T>.InTransaction(...)` are now marked obsolete in favour of `TransactionScope` or `TransactionV2`.
+
 ## [1.7.5] - 2025-12-02
 
 ### Added

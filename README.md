@@ -117,6 +117,10 @@ A higher level framework using the generic superposition layer to simulate varia
 
 A `PositronicVariable` may change across iterative passes until all dependent values agree. Cycles are detected and divergent states merge into consistent outcomes.
 
+New in the aligned 1.9.0 release:
+- Snapshot export and restore for positronic timelines
+- File backed ledger audit sink for durable operation traces
+
 ### Key Features
 - Creation and linking of variables holding superpositions
 - Automatic cycle detection across the computation graph

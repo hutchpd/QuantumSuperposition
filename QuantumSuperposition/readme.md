@@ -1,10 +1,12 @@
-## QuantumSuperposition (.NET Library) - v1.8
+## QuantumSuperposition (.NET Library) - v1.9
 
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 ![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet) [![Docs](https://img.shields.io/badge/docs-quantumsuperposition.hashnode.space-blue)](https://quantumsuperposition.hashnode.space)
 
 
 > .NET's most confident way to say "maybe"
+
+This release is aligned with PositronicVariables 1.9.0 so the shared `QuBit<T>` model, package metadata, and documentation stay in lockstep.
 
 QuantumSuperposition lets your variables live in several states at once then collapse them when you finally make up your mind. Think Schrödinger's cat but with fewer ethical questions and more LINQ.
 

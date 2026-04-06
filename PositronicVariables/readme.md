@@ -2,7 +2,7 @@
 A time looping variable container for quantum misfits and deterministic dreamers.
 [![NuGet](https://img.shields.io/nuget/v/PositronicVariables.svg)](https://www.nuget.org/packages/PositronicVariables)
 
-`PositronicVariable<T>` simulates values that evolve across iterative timelines. Think Schrödinger's variable: simultaneously filled with regret and potential. Now with automatic convergence, STM-backed transactional updates, telemetry, and existential debugging.
+`PositronicVariable<T>` simulates values that evolve across iterative timelines. Think Schrï¿½dinger's variable: simultaneously filled with regret and potential. Now with automatic convergence, STM-backed transactional updates, telemetry, and existential debugging.
 
 > Not exactly time travel but close enough to confuse your boss.
 
@@ -14,6 +14,8 @@ A time looping variable container for quantum misfits and deterministic dreamers
 - Seamless integration with `QuBit<T>` from [QuantumSuperposition](https://www.nuget.org/packages/QuantumSuperposition)
 - STM telemetry: commits, retries, aborts, validation failures, lock-hold timings, contention hotspots
 - Read-only fast path: validate-only transactions with no lock acquisition
+- Timeline snapshot export/import for pause, inspect, and resume workflows
+- File-backed ledger audit sink for durable append-only operation traces
 
 ## Getting Started
 ### Installation
@@ -64,6 +66,31 @@ TransactionV2.RunWithRetry(tx =>
 Console.WriteLine(STMTelemetry.GetReport());
 ```
 
+## Snapshot Persistence
+Export a timeline to JSON, then restore it later in a fresh runtime.
+```csharp
+using Microsoft.Extensions.Hosting;
+using PositronicVariables.DependencyInjection;
+using PositronicVariables.Runtime;
+
+var path = Path.Combine("Artifacts", "Positronic", "state.json");
+var runtime = PositronicAmbient.Current;
+
+var value = PositronicVariable<int>.GetOrCreate("resume-demo", 1, runtime);
+value.Assign(2);
+value.Assign(3);
+value.SaveSnapshot(path);
+
+var hostBuilder = Host.CreateDefaultBuilder().ConfigureServices(s => s.AddPositronicRuntime());
+PositronicAmbient.InitialiseWith(hostBuilder);
+var restored = PositronicVariable<int>.LoadSnapshot(path, PositronicAmbient.Current);
+Console.WriteLine(string.Join(", ", restored.ToValues()));
+```
+
+For append-only ledger audit files, set `Ledger.Sink = new FileLedgerSink("Artifacts/Positronic/ledger.jsonl");` before running a convergence pass or transactional workload.
+
+See `docs/Persistence.md`.
+
 ## Feynman Diagram Style View
 ```
 Time ->
@@ -76,9 +103,9 @@ We created a cycle. The engine iterates until the values stabilise. If they neve
 - Ordinary updates: feel free to mutate from multiple threads via `TransactionV2`/`TransactionScope`. Reads-only take the fast lane (no locks), writes stage and commit atomically with per-variable locks.
 - Convergence and friends: the convergence loop, reverse/forward replay, the Timeline Archivist, and the QuantumLedgerOfRegret all behave like a very polite single passenger queue. A `ConvergenceCoordinator` owns this queue and the exclusive engine token.
 - Mutation gates: timelines only change in two blessed places: (a) during transactional apply at commit for variables in the write set, or (b) on the coordinator while it clutches the engine token. Public API exposes `IReadOnlyList<QuBit<T>>`; bring your own transactions if you want changes.
-- Ledger etiquette: ledger entries are buffered inside transactions and appended exactly once after commit. Direct poking of the global stack is discouraged and internally serialised for everyone’s safety and tea time.
+- Ledger etiquette: ledger entries are buffered inside transactions and appended exactly once after commit. Direct poking of the global stack is discouraged and internally serialised for everyoneï¿½s safety and tea time.
 - Debug nags: in Debug builds we complain loudly if the convergence engine is entered while transactions are active, or if something tries to mutate a timeline outside the approved gateways. This is for your own good (and ours).
-- Async sanity: ambient transaction context and operator logging suppression use `AsyncLocal`, so `await` won’t quietly wander off with your invariants.
+- Async sanity: ambient transaction context and operator logging suppression use `AsyncLocal`, so `await` wonï¿½t quietly wander off with your invariants.
 
 ## Useful For
 - Chaotic yet stable feedback loops
@@ -90,6 +117,7 @@ We created a cycle. The engine iterates until the values stabilise. If they neve
 ## Limitations
 - Convergence engine is not intended for multi-threaded mutation while the loop is running.
 - Types must implement `IComparable`.
+- Snapshot persistence captures timeline values, not weighted amplitude metadata.
 
 ## License
 Unlicensed. Use it. Break it. Ship it. Regret it.
