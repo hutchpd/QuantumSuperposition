@@ -1,0 +1,487 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{Goo19}{article}{}{}
+      \name{author}{10}{}{%
+        {{hash=967fdc0debe04587dbcc6f9641fdadc5}{%
+           family={Bingham},
+           familyi={B\bibinitperiod},
+           given={Eli},
+           giveni={E\bibinitperiod}}}%
+        {{hash=dc29dace8d81385eacfaccfe19debb96}{%
+           family={Chen},
+           familyi={C\bibinitperiod},
+           given={Jonathan\bibnamedelima P.},
+           giveni={J\bibinitperiod\bibinitdelim P\bibinitperiod}}}%
+        {{hash=2bbbb2e337b0804bee3cbb85169efb59}{%
+           family={Jankowiak},
+           familyi={J\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=f88c2ce9415f508736652e6e7db0b065}{%
+           family={Obermeyer},
+           familyi={O\bibinitperiod},
+           given={Fritz},
+           giveni={F\bibinitperiod}}}%
+        {{hash=16fddf7795611fdb65485ede2fb13438}{%
+           family={Pradhan},
+           familyi={P\bibinitperiod},
+           given={Neeraj},
+           giveni={N\bibinitperiod}}}%
+        {{hash=a13808cdd6b2e36ed78e154babb8124f}{%
+           family={Karaletsos},
+           familyi={K\bibinitperiod},
+           given={Theofanis},
+           giveni={T\bibinitperiod}}}%
+        {{hash=abfb0e0d17f319f8f5a7221109361edc}{%
+           family={Singh},
+           familyi={S\bibinitperiod},
+           given={Rohit},
+           giveni={R\bibinitperiod}}}%
+        {{hash=53a4b4da3506f4023ab0d1520eb74452}{%
+           family={Szerlip},
+           familyi={S\bibinitperiod},
+           given={Paul\bibnamedelima A.},
+           giveni={P\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=77e6264c3c96e9ed0edf04741b94ce20}{%
+           family={Horsfall},
+           familyi={H\bibinitperiod},
+           given={Paul},
+           giveni={P\bibinitperiod}}}%
+        {{hash=17c6b9edbad988db7d426fba005cecff}{%
+           family={Goodman},
+           familyi={G\bibinitperiod},
+           given={Noah\bibnamedelima D.},
+           giveni={N\bibinitperiod\bibinitdelim D\bibinitperiod}}}%
+      }
+      \strng{namehash}{710c90914a96beaa8d35ab271d8a1372}
+      \strng{fullhash}{b53d1c34d34c27808dd34129bf3fc389}
+      \strng{fullhashraw}{b53d1c34d34c27808dd34129bf3fc389}
+      \strng{bibnamehash}{710c90914a96beaa8d35ab271d8a1372}
+      \strng{authorbibnamehash}{710c90914a96beaa8d35ab271d8a1372}
+      \strng{authornamehash}{710c90914a96beaa8d35ab271d8a1372}
+      \strng{authorfullhash}{b53d1c34d34c27808dd34129bf3fc389}
+      \strng{authorfullhashraw}{b53d1c34d34c27808dd34129bf3fc389}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Mach. Learn. Res.}
+      \field{title}{Pyro: Deep Universal Probabilistic Programming}
+      \field{year}{2019}
+      \field{pages}{28:1\bibrangedash 28:6}
+      \range{pages}{-1}
+      \verb{urlraw}
+      \verb https://github.com/pyro-ppl/pyro
+      \endverb
+      \verb{url}
+      \verb https://github.com/pyro-ppl/pyro
+      \endverb
+    \endentry
+    \entry{Dam25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=0e631663fc0bfbe3faf4b587dbfe9801}{%
+           family={Conway},
+           familyi={C\bibinitperiod},
+           given={Damian},
+           giveni={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{fullhash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{fullhashraw}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{bibnamehash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{authorbibnamehash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{authornamehash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{authorfullhash}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \strng{authorfullhashraw}{0e631663fc0bfbe3faf4b587dbfe9801}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{NIC.FUNET.FI}
+      \field{month}{12}
+      \field{title}{Release of Version 1.03 of \texttt{Quantum::Superpositions}}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://www.nic.funet.fi/index/CPAN/modules/by-module/Module/DCONWAY/Quantum-Superpositions-1.03.readme
+      \endverb
+      \verb{url}
+      \verb https://www.nic.funet.fi/index/CPAN/modules/by-module/Module/DCONWAY/Quantum-Superpositions-1.03.readme
+      \endverb
+    \endentry
+    \entry{Hud97}{misc}{}{}
+      \name{author}{2}{}{%
+        {{hash=8cda345210e062e3fe85eaa4954fa44e}{%
+           family={Elliott},
+           familyi={E\bibinitperiod},
+           given={Conal},
+           giveni={C\bibinitperiod}}}%
+        {{hash=ebfbf9d5ed6e5a1698b8fe9fb2b322a4}{%
+           family={Hudak},
+           familyi={H\bibinitperiod},
+           given={Paul},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{fullhash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{fullhashraw}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{bibnamehash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{authorbibnamehash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{authornamehash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{authorfullhash}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \strng{authorfullhashraw}{2738725fb05c95a9f54e0ff00fa5b4d3}
+      \field{sortinit}{E}
+      \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Conference paper}
+      \field{note}{conal}
+      \field{title}{International Conference on Functional Programming (ICFP 1997)}
+      \field{year}{1997}
+      \verb{urlraw}
+      \verb http://conal.net/papers/icfp97/
+      \endverb
+      \verb{url}
+      \verb http://conal.net/papers/icfp97/
+      \endverb
+    \endentry
+    \entry{Goo25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=8b36e9207c24c76e6719268e49201d94}{%
+           family={{Google}},
+           familyi={G\bibinitperiod}}}%
+      }
+      \strng{namehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{fullhash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{fullhashraw}{8b36e9207c24c76e6719268e49201d94}
+      \strng{bibnamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorbibnamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authornamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorfullhash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorfullhashraw}{8b36e9207c24c76e6719268e49201d94}
+      \field{sortinit}{G}
+      \field{sortinithash}{32d67eca0634bf53703493fb1090a2e8}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{GitHub repository}
+      \field{month}{12}
+      \field{title}{Cirq}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://github.com/quantumlib/Cirq
+      \endverb
+      \verb{url}
+      \verb https://github.com/quantumlib/Cirq
+      \endverb
+    \endentry
+    \entry{Tim05}{article}{}{}
+      \name{author}{4}{}{%
+        {{hash=0074fd9f9da537e51b88596b5f635943}{%
+           family={Harris},
+           familyi={H\bibinitperiod},
+           given={Tim},
+           giveni={T\bibinitperiod}}}%
+        {{hash=dff0947b507b881bf43b333bdea82006}{%
+           family={Marlow},
+           familyi={M\bibinitperiod},
+           given={Simon},
+           giveni={S\bibinitperiod}}}%
+        {{hash=ac370005fbe7908b1923dd54aa4f05b3}{%
+           family={Peyton\bibnamedelima Jones},
+           familyi={P\bibinitperiod\bibinitdelim J\bibinitperiod},
+           given={Simon},
+           giveni={S\bibinitperiod}}}%
+        {{hash=dec3948f0497f5447bae5c2365b87e8f}{%
+           family={Herlihy},
+           familyi={H\bibinitperiod},
+           given={Maurice},
+           giveni={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{7c90f5949d4903752b4e61bc2eea71c0}
+      \strng{fullhash}{3787b0b1d4bca78ee56959f821a89a7d}
+      \strng{fullhashraw}{3787b0b1d4bca78ee56959f821a89a7d}
+      \strng{bibnamehash}{7c90f5949d4903752b4e61bc2eea71c0}
+      \strng{authorbibnamehash}{7c90f5949d4903752b4e61bc2eea71c0}
+      \strng{authornamehash}{7c90f5949d4903752b4e61bc2eea71c0}
+      \strng{authorfullhash}{3787b0b1d4bca78ee56959f821a89a7d}
+      \strng{authorfullhashraw}{3787b0b1d4bca78ee56959f821a89a7d}
+      \field{sortinit}{H}
+      \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{ACM}
+      \field{title}{Composable Memory Transactions}
+      \field{year}{2005}
+    \endentry
+    \entry{Pau255}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=2f273a29fb9ce31bf185701256d2bb32}{%
+           family={Hutchinson},
+           familyi={H\bibinitperiod},
+           given={Paul},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{bibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorbibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authornamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \field{extraname}{1}
+      \field{sortinit}{H}
+      \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{GitHub}
+      \field{month}{12}
+      \field{title}{Entanglement \& Collapse Propagation}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Entanglement.md
+      \endverb
+      \verb{url}
+      \verb https://github.com/hutchpd/QuantumSuperposition/blob/master/QuantumSuperposition/docs/Entanglement.md
+      \endverb
+    \endentry
+    \entry{Pau251}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=2f273a29fb9ce31bf185701256d2bb32}{%
+           family={Hutchinson},
+           familyi={H\bibinitperiod},
+           given={Paul},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{bibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorbibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authornamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \field{extraname}{2}
+      \field{sortinit}{H}
+      \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{GitHub repository}
+      \field{month}{12}
+      \field{title}{QuantumSuperposition}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://github.com/hutchpd/QuantumSuperposition
+      \endverb
+      \verb{url}
+      \verb https://github.com/hutchpd/QuantumSuperposition
+      \endverb
+    \endentry
+    \entry{Pau25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=2f273a29fb9ce31bf185701256d2bb32}{%
+           family={Hutchinson},
+           familyi={H\bibinitperiod},
+           given={Paul},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{fullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{bibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorbibnamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authornamehash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhash}{2f273a29fb9ce31bf185701256d2bb32}
+      \strng{authorfullhashraw}{2f273a29fb9ce31bf185701256d2bb32}
+      \field{extraname}{3}
+      \field{sortinit}{H}
+      \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Online}
+      \field{month}{12}
+      \field{title}{QuantumSuperposition for .NET -- Strongly Typed Multiverse Engine}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://quantumsuperposition.findonsoftware.com/
+      \endverb
+      \verb{url}
+      \verb https://quantumsuperposition.findonsoftware.com/
+      \endverb
+    \endentry
+    \entry{pyp25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=59ceab62ce925644ab183eeed5eafbb5}{%
+           family={{IBM Research}},
+           familyi={I\bibinitperiod}}}%
+      }
+      \strng{namehash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{fullhash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{fullhashraw}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{bibnamehash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{authorbibnamehash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{authornamehash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{authorfullhash}{59ceab62ce925644ab183eeed5eafbb5}
+      \strng{authorfullhashraw}{59ceab62ce925644ab183eeed5eafbb5}
+      \field{sortinit}{I}
+      \field{sortinithash}{8d291c51ee89b6cd86bf5379f0b151d8}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{PyPI}
+      \field{month}{12}
+      \field{title}{qiskit 2.2.3}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://pypi.org/project/qiskit/
+      \endverb
+      \verb{url}
+      \verb https://pypi.org/project/qiskit/
+      \endverb
+    \endentry
+    \entry{Mic251}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=140864078aeca1c7c35b4beb33c53c34}{%
+           family={{Microsoft}},
+           familyi={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{bibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorbibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authornamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \field{extraname}{1}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{dotnet.github.io}
+      \field{month}{12}
+      \field{title}{Infer.NET}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://dotnet.github.io/infer/
+      \endverb
+      \verb{url}
+      \verb https://dotnet.github.io/infer/
+      \endverb
+    \endentry
+    \entry{Mic25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=140864078aeca1c7c35b4beb33c53c34}{%
+           family={{Microsoft}},
+           familyi={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{bibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorbibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authornamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \field{extraname}{2}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{learn.microsoft.com}
+      \field{month}{2}
+      \field{title}{Introduction to the Quantum Programming Language Q\#}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb https://learn.microsoft.com/en-us/azure/quantum/qsharp-overview
+      \endverb
+      \verb{url}
+      \verb https://learn.microsoft.com/en-us/azure/quantum/qsharp-overview
+      \endverb
+    \endentry
+    \entry{Nie10}{book}{}{}
+      \name{author}{2}{}{%
+        {{hash=afe17482fc813e497188aee3b3783879}{%
+           family={Nielsen},
+           familyi={N\bibinitperiod},
+           given={Michael\bibnamedelima A.},
+           giveni={M\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=415ddff2f58b25977b1a2dedf18f4501}{%
+           family={Chuang},
+           familyi={C\bibinitperiod},
+           given={Isaac\bibnamedelima L.},
+           giveni={I\bibinitperiod\bibinitdelim L\bibinitperiod}}}%
+      }
+      \list{location}{1}{%
+        {Cambridge}%
+      }
+      \list{publisher}{1}{%
+        {Cambridge University Press}%
+      }
+      \strng{namehash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{fullhash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{fullhashraw}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{bibnamehash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{authorbibnamehash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{authornamehash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{authorfullhash}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \strng{authorfullhashraw}{456599bb4a61c2e997e2a7e1a21b25b4}
+      \field{sortinit}{N}
+      \field{sortinithash}{22369a73d5f88983a108b63f07f37084}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{edition}{10th Anniversary}
+      \field{title}{Quantum Computation and Quantum Information}
+      \field{year}{2010}
+    \endentry
+    \entry{Sta25}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=bf53fa184b9f6925c14bf3f5002a5620}{%
+           family={{Stanford CoCoLab}},
+           familyi={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{fullhash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{fullhashraw}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{bibnamehash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{authorbibnamehash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{authornamehash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{authorfullhash}{bf53fa184b9f6925c14bf3f5002a5620}
+      \strng{authorfullhashraw}{bf53fa184b9f6925c14bf3f5002a5620}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Online}
+      \field{month}{12}
+      \field{title}{WebPPL: Probabilistic Programming for the Web}
+      \field{year}{2025}
+      \verb{urlraw}
+      \verb http://webppl.org/
+      \endverb
+      \verb{url}
+      \verb http://webppl.org/
+      \endverb
+    \endentry
+  \enddatalist
+  \missing{HarrisSTM}
+\endrefsection
+\endinput
+

@@ -1,0 +1,25 @@
+$path = "C:\Users\xhabl\Documents\QPV\output.tex"
+$c = Get-Content -Raw $path
+
+# Braket notation
+$c = $c -replace '⟨','\langle '
+$c = $c -replace '⟩',' \rangle'
+$c = $c -replace '∣','|'
+
+# Script/math letters
+$c = $c -replace '𝒫','\mathcal{P}'
+$c = $c -replace '𝑓','f'
+$c = $c -replace '𝑎','a'jm
+$c = $c -replace '𝑍','Z'
+
+# Math symbols (text contexts)
+$c = $c -replace 'π','\\(\\pi\\)'
+$c = $c -replace 'Δ','\\(\\Delta\\)'
+$c = $c -replace '≤','\\(\\le\\)'
+$c = $c -replace '≈','\\(\\approx\\)'
+$c = $c -replace '⊗','\\(\\otimes\\)'
+
+# Em-space → normal space
+$c = $c -replace ' ',' '
+
+Set-Content -Path $path -Value $c -Encoding UTF8

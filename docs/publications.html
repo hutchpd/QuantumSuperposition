@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Publications - QuantumSuperposition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description"
+          content="Publications and research papers related to QuantumSuperposition and PositronicVariables." />
+
+    <!-- Bulma CSS (lightweight layout) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
+
+    <style>
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #ffffff;
+            color: #111827;
+            transition: background-color .2s ease, color .2s ease;
+        }
+
+        .qs-layout {
+            min-height: 100vh;
+        }
+
+        .qs-sidebar {
+            border-right: 1px solid #e5e5e5;
+            background: #fafafa;
+            padding: 1.25rem 1rem;
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        .qs-main {
+            padding: 2rem 2.5rem;
+        }
+
+        .qs-logo {
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: 0.02em;
+        }
+
+        .qs-tagline {
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .qs-menu ul {
+            list-style: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+
+        .qs-menu li {
+            margin: 0.15rem 0;
+        }
+
+        .qs-menu a {
+            display: block;
+            padding: 0.15rem 0.25rem;
+            font-size: 0.9rem;
+            color: #333;
+            text-decoration: none;
+            border-radius: 3px;
+            transition: background-color .15s ease, color .15s ease;
+        }
+
+            .qs-menu a:hover {
+                background-color: #e8f1ff;
+            }
+
+        .qs-menu .qs-menu-group > a {
+            font-weight: 600;
+            margin-top: 0.2rem;
+        }
+
+        .qs-menu .qs-submenu {
+            padding-left: 0.75rem;
+            margin-top: 0.1rem;
+        }
+
+        .qs-menu a.is-active {
+            background-color: #3273dc;
+            color: #fff;
+            border-radius: 3px;
+        }
+
+        .qs-section + .qs-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+        }
+
+        .qs-badge-row img {
+            margin-right: 0.4rem;
+        }
+
+        .qs-top-mobile-bar {
+            display: none;
+        }
+
+        .qs-top-mobile-bar,
+        .qs-mobile-sidebar {
+            display: none;
+        }
+
+        .qs-pub-card {
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            padding: 1.5rem;
+            background: #fafafa;
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        /* Dark mode overrides */
+        body.dark {
+            background: #0f172a;
+            color: #e5e7eb;
+        }
+
+            body.dark .qs-main {
+                background: #0f172a;
+            }
+
+            body.dark .qs-sidebar {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+            body.dark .qs-tagline {
+                color: #a3adc2;
+            }
+
+            body.dark .qs-menu a {
+                color: #d1d5db;
+            }
+
+                body.dark .qs-menu a:hover {
+                    background-color: #1f2a44;
+                }
+
+                body.dark .qs-menu a.is-active {
+                    background-color: #2563eb;
+                    color: #ffffff;
+                }
+
+            body.dark a {
+                color: #93c5fd;
+            }
+
+            body.dark .title,
+            body.dark .subtitle,
+            body.dark .content h1,
+            body.dark .content h2,
+            body.dark .content h3,
+            body.dark .content h4,
+            body.dark .content h5,
+            body.dark .content h6 {
+                color: #e5e7eb;
+            }
+
+            body.dark .content {
+                color: #d1d5db;
+            }
+
+            body.dark .content strong {
+                color: #e5e7eb;
+            }
+
+            body.dark .qs-section + .qs-section {
+                border-top-color: #1f2a44;
+            }
+
+            body.dark .button.is-light {
+                background: #0b1220;
+                color: #e5e7eb;
+                border: 1px solid #1f2a44;
+            }
+
+            body.dark .qs-pub-card {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+        @media (max-width: 1023px) {
+            .qs-layout {
+                flex-direction: column;
+            }
+
+            .qs-sidebar {
+                display: none;
+            }
+
+            .qs-main {
+                padding: 1.5rem 1rem;
+            }
+
+            .qs-top-mobile-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid #e5e5e5;
+                background: #fafafa;
+                position: sticky;
+                top: 0;
+                z-index: 20;
+            }
+
+            body.dark .qs-top-mobile-bar {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+            .qs-mobile-menu-toggle {
+                border: none;
+                background: transparent;
+                font-size: 1.4rem;
+                padding: 0.25rem 0.5rem;
+                color: inherit;
+            }
+
+            .qs-mobile-sidebar {
+                display: none;
+                border-bottom: 1px solid #e5e5e5;
+                background: #fafafa;
+                padding: 0.75rem 1rem;
+            }
+
+            body.dark .qs-mobile-sidebar {
+                background: #0b1220;
+                border-color: #1f2a44;
+            }
+
+            .qs-mobile-sidebar.is-open {
+                display: block;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+
+            .qs-top-mobile-bar {
+                display: flex !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile top bar -->
+    <div class="qs-top-mobile-bar">
+        <div>
+            <div class="qs-logo">QuantumSuperposition</div>
+            <div class="qs-tagline">Strongly typed multiverse for .NET</div>
+        </div>
+        <div>
+            <button class="qs-mobile-menu-toggle" aria-label="Toggle dark mode" id="qs-theme-toggle-mobile" title="Toggle dark mode">🌓</button>
+            <button class="qs-mobile-menu-toggle" aria-label="Toggle navigation" id="qs-mobile-toggle" title="Toggle navigation">☰</button>
+        </div>
+    </div>
+    <div class="qs-mobile-sidebar" id="qs-mobile-sidebar">
+        <!-- mobile nav gets cloned in JS -->
+    </div>
+
+    <div class="columns is-gapless qs-layout">
+        <!-- Sidebar / TOC -->
+        <aside class="column is-3-tablet is-3-desktop qs-sidebar">
+            <header style="margin-bottom: 0.75rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+                <div>
+                    <div class="qs-logo">QuantumSuperposition</div>
+                    <div class="qs-tagline">.NET superpositions &amp; quantum simulation</div>
+                </div>
+                <button class="button is-small is-light" id="qs-theme-toggle" title="Toggle dark mode">🌓</button>
+            </header>
+
+            <div class="qs-badge-row" style="margin-bottom: 0.75rem; display:flex; align-items:center; flex-wrap:wrap;">
+                <a href="https://www.nuget.org/packages/QuantumSuperposition" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/nuget/v/QuantumSuperposition.svg" alt="NuGet QuantumSuperposition" />
+                </a>
+                <a href="https://quantumsuperposition.hashnode.space" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/badge/docs-quantumsuperposition.hashnode.space-blue" alt="Docs" />
+                </a>
+            </div>
+
+            <nav class="qs-menu" id="qs-side-nav">
+                <ul>
+                    <li class="qs-menu-group"><a href="index.html">Home</a></li>
+                    <li class="qs-menu-group"><a href="publications.html" class="is-active">Publications</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main content -->
+        <main class="column qs-main">
+            <section id="publications" class="qs-section">
+                <h1 class="title">Publications</h1>
+                <p class="subtitle" style="max-width: 48rem;">
+                    Research papers and technical write-ups covering QuantumSuperposition and PositronicVariables.
+                </p>
+
+                <div class="qs-pub-card" style="max-width: 52rem;">
+                    <h2 class="title is-5" style="margin-bottom: 0.4rem;">
+                        Quantum Superpositions and Positronic Variables
+                    </h2>
+                    <p class="is-size-7 has-text-grey" style="margin-bottom: 0.75rem;">
+                        Technical paper &mdash; QuantumSuperposition project
+                    </p>
+                    <p class="content" style="margin-bottom: 1rem;">
+                        A detailed treatment of the strongly-typed superposition model, PositronicVariables temporal
+                        convergence engine, and their theoretical underpinnings, including amplitude arithmetic,
+                        interference, entanglement, and timeline-based variable management in .NET.
+                    </p>
+                    <a class="button is-primary"
+                       href="QuantumSuperpositions_and_PositronicVariables.pdf"
+                       target="_blank" rel="noopener">
+                        Download PDF
+                    </a>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Theme persistence
+        (function () {
+            const root = document.body;
+            const stored = localStorage.getItem('qs-theme');
+            if (stored === 'dark') {
+                root.classList.add('dark');
+            }
+            function toggleTheme() {
+                root.classList.toggle('dark');
+                localStorage.setItem('qs-theme', root.classList.contains('dark') ? 'dark' : 'light');
+            }
+            const btnDesktop = document.getElementById('qs-theme-toggle');
+            const btnMobile = document.getElementById('qs-theme-toggle-mobile');
+            if (btnDesktop) btnDesktop.addEventListener('click', toggleTheme);
+            if (btnMobile) btnMobile.addEventListener('click', toggleTheme);
+        })();
+
+        // Mobile: clone sidebar nav into mobile container
+        (function () {
+            const sideNav = document.getElementById("qs-side-nav");
+            const mobileSidebar = document.getElementById("qs-mobile-sidebar");
+            const toggle = document.getElementById("qs-mobile-toggle");
+
+            if (!sideNav || !mobileSidebar || !toggle) return;
+
+            mobileSidebar.innerHTML = sideNav.outerHTML;
+
+            toggle.addEventListener("click", function () {
+                mobileSidebar.classList.toggle("is-open");
+            });
+
+            mobileSidebar.addEventListener("click", function (e) {
+                const target = e.target;
+                if (target.tagName === "A" && target.getAttribute("href").startsWith("#")) {
+                    mobileSidebar.classList.remove("is-open");
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
