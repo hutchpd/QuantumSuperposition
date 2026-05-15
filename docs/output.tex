@@ -236,11 +236,11 @@ PositronicVariables builds on the same superposition semantics to model
 roll their state backwards and forwards through hypothetical timelines, and converge 
 to a consistent fixed point (or, in pathological cases, a politely documented paradox).
 
-We additionally frame PositronicVariables as a software analogue of David Deutsch's
-self-consistency condition for quantum systems interacting with closed timelike
-curves: when a value depends on the context it helps create, the runtime searches
-for states that can survive the loop, including stable plural outcomes where no
-single classical answer is adequate.\parencite{Deutsch91CTC}
+We additionally use David Deutsch's self-consistency condition for quantum
+systems interacting with closed timelike curves as a software-design analogy for
+PositronicVariables: when a value depends on the context it helps create, the
+runtime searches for states that can survive the loop, including stable plural
+outcomes where no single classical answer is adequate.\parencite{Deutsch91CTC}
 
 The resulting ecosystem lets .NET developers treat “maybe” and “many possible futures” 
 as first-class values while still enjoying static typing, IDE autocompletion and the 
@@ -559,16 +559,16 @@ Avoid ``stringly typed quantum'' in favour of generics, interfaces and C\#'s usu
 Provide seeded random number generation, collapse replay and test-friendly APIs so that `quantum randomness'' does not become `my CI pipeline is haunted''. The same scenario can be re-run under a known seed, logged, debugged locally and then replayed in a test harness without surprises.~\parencite{Pau25}
 
 \item
-\textbf{Humour as documentation strategy}\
-Use light-hearted names, examples and comments to lower the barrier to entry. The aim is not to trivialise the ideas but to make it easier to keep reading once the abstractions get dense; if you are going to model entanglement and time loops, you might as well collect a few jokes along the way.
-
-\item
 \textbf{Stable plurality rather than premature collapse}\
-When a feedback loop stabilises on several individually self-consistent outcomes,
+When a feedback loop stabilises on a support preserved by the loop as a whole,
 the runtime should expose that plurality as a value rather than hiding it behind
 an exception, an arbitrary tie-break, or an opaque inference procedure. A result
 such as \texttt{any(1, 2)} is not a shrug; it is a compact report of what survived
 the consistency process.
+
+\item
+\textbf{Humour as documentation strategy}\
+Use light-hearted names, examples and comments to lower the barrier to entry. The aim is not to trivialise the ideas but to make it easier to keep reading once the abstractions get dense; if you are going to model entanglement and time loops, you might as well collect a few jokes along the way.
 
 \end{enumerate}
 
@@ -1856,6 +1856,12 @@ weights changing only below tolerance:
 \[
   \mathrm{supp}(\mathcal{F}(s)) = \mathrm{supp}(s).
 \]
+A stable support is weaker than a scalar fixed point. It does not require each
+value in the support to map to itself; it requires the update process to preserve
+the set of admissible alternatives as a whole. This is exactly the distinction
+that matters for examples such as antival, where no single value is fixed by the
+update, but the support survives the loop unchanged.
+
 Operationally, that is what results such as \texttt{any(-1, 1)} mean. They are not
 exceptions and they are not arbitrary fallbacks. They are the runtime saying:
 ``these are the values that survived the loop.''
@@ -1866,8 +1872,8 @@ We therefore distinguish three outcomes:
 \item
   \textbf{Scalar fixed point}: one stable value remains.
 \item
-  \textbf{Stable support}: several individually self-consistent values remain and
-  are reported as a superposition.
+  \textbf{Stable support}: a set of admissible alternatives is preserved by the
+  loop, even when no member is individually fixed by the update.
 \item
   \textbf{Failure to stabilise}: the engine reaches a guard condition, such as
   maximum iterations or a time budget, and reports telemetry rather than pretending
@@ -1888,9 +1894,9 @@ We therefore distinguish three outcomes:
     Commit that value &
     The temporal loop has a single consistent story. \\
 
-    Converges to several stable values &
+    Converges to a stable support &
     Commit a \texttt{QuBit<T>} support such as \texttt{any(-1, 1)} &
-    The loop has plural consistent stories, exposed as data. \\
+    The loop preserves a plural admissible support, exposed as data. \\
 
     Oscillates without stable support &
     Stop at guard condition and emit telemetry &
@@ -2159,8 +2165,9 @@ Required value
 \end{lstlisting}
 
 After convergence, the system reports a two-state superposition, essentially
-acknowledging: ``the loop can live with either polarity, but not with a single forced
-winner''. This illustrates the core philosophy: when a system of constraints cannot
+acknowledging: ``the loop preserves the support \(\{-1,1\}\), even though neither
+polarity is a scalar fixed point on its own''. This illustrates the core philosophy:
+when a system of constraints cannot
 settle on one timeline, we keep \textbf{all} stable possibilities rather than choosing
 arbitrarily or diverging. We revisit the antival in more detail in
 Section~\ref{sec:positronic-case-studies} and do not repeat that analysis here.
@@ -3240,9 +3247,9 @@ and the console prints a human-readable summary:
 {[}Antival{]} final states: any(-1, 1)
 \end{lstlisting}
 
-In other words, the engine recognises that there are two locally stable stories
-around the loop (``you are either -1 or 1, and observation may choose one'') and
-preserves both rather than arbitrarily choosing one or diverging.
+In other words, the engine recognises that the support \(\{-1,1\}\) is stable
+under the loop even though neither member is a scalar fixed point, and preserves
+that support rather than arbitrarily choosing one branch or diverging.
 
 From a fixed-point perspective, the mapping
 
