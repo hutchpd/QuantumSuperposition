@@ -41,8 +41,6 @@
   basicstyle=\ttfamily\scriptsize,
   backgroundcolor=\color{black!5},
   frame=single,
-  float,
-  floatplacement=htbp,
   columns=fullflexible,
   keepspaces=true,
   breaklines=true,
@@ -609,15 +607,7 @@ Key operations include:
 \end{itemize}
 
 The library's documentation describes this succinctly as ``variables living in several states at once, then collapsing when you finally make up your mind''-an accurate description of both qubits and many human decisions.~\parencite{Pau251}.
-
-  \textbf{Example: tiny multiverse of integers}
-
-\begin{lstlisting}[style=codeblock]
-var qubit = new QuBit<int>(new[] { 1, 2, 3 });
-var doubled = qubit.Select(x => x * 2);
-var sample = doubled.SampleWeighted();
-Console.WriteLine(sample);
-\end{lstlisting}
+\clearpage
 
 \subsubsection{A tiny worked example: probability tables before and after Select}\label{tiny-select-example}
 

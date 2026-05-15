@@ -17,53 +17,53 @@
 \contentsline {subsubsection}{\numberline {4.1.2}When Select merges worlds}{13}{subsubsection.4.1.2}%
 \contentsline {subsection}{\numberline {4.2}LINQ and functional operations without collapse}{14}{subsection.4.2}%
 \contentsline {subsection}{\numberline {4.3}Complex amplitudes and interference}{17}{subsection.4.3}%
-\contentsline {subsection}{\numberline {4.4}PhysicsQubit: a friendlier bridge to textbook qubits}{19}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.4}PhysicsQubit: a friendlier bridge to textbook qubits}{18}{subsection.4.4}%
 \contentsline {subsection}{\numberline {4.5}QuantumSystem: global state and partial observation}{19}{subsection.4.5}%
 \contentsline {subsubsection}{\numberline {4.5.1}Tensor product complexity and scaling behaviour}{19}{subsubsection.4.5.1}%
 \contentsline {subsection}{\numberline {4.6}Entanglement and collapse propagation}{21}{subsection.4.6}%
-\contentsline {subsubsection}{\numberline {4.6.1}Graph model of entanglement}{22}{subsubsection.4.6.1}%
+\contentsline {subsubsection}{\numberline {4.6.1}Graph model of entanglement}{21}{subsubsection.4.6.1}%
 \contentsline {subsection}{\numberline {4.7}Gate model and scheduling}{25}{subsection.4.7}%
 \contentsline {subsection}{\numberline {4.8}Quantum algorithms: QFT and Grover search}{25}{subsection.4.8}%
-\contentsline {subsubsection}{\numberline {4.8.1}Quantum Fourier Transform (QFT)}{26}{subsubsection.4.8.1}%
+\contentsline {subsubsection}{\numberline {4.8.1}Quantum Fourier Transform (QFT)}{25}{subsubsection.4.8.1}%
 \contentsline {subsubsection}{\numberline {4.8.2}Worked example: QFT on a 3-qubit basis state}{26}{subsubsection.4.8.2}%
 \contentsline {subsubsection}{\numberline {4.8.3}Grover search}{28}{subsubsection.4.8.3}%
-\contentsline {paragraph}{Sketch and forward reference.}{30}{lstnumber.-10.8}%
+\contentsline {paragraph}{Sketch and forward reference.}{28}{lstlisting.-9}%
 \contentsline {subsection}{\numberline {4.9}QuantumRegister and canonical states}{33}{subsection.4.9}%
 \contentsline {section}{\numberline {5}PositronicVariables: Temporal Self-Consistency in C Sharp}{34}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Conceptual model}{35}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.1}Conceptual model}{34}{subsection.5.1}%
 \contentsline {subsection}{\numberline {5.2}Self-consistency semantics}{35}{subsection.5.2}%
 \contentsline {subsection}{\numberline {5.3}Plurality as a first-class result}{36}{subsection.5.3}%
 \contentsline {subsection}{\numberline {5.4}Convergence engine and STM-style transactions}{36}{subsection.5.4}%
 \contentsline {subsubsection}{\numberline {5.4.1}Transaction lifecycle: STM with a sense of humour}{39}{subsubsection.5.4.1}%
 \contentsline {subsubsection}{\numberline {5.4.2}Informal correctness guarantees}{41}{subsubsection.5.4.2}%
 \contentsline {subsection}{\numberline {5.5}A toy paradox: the antival}{43}{subsection.5.5}%
-\contentsline {subsection}{\numberline {5.6}Neural nodules and network-style flows}{44}{subsection.5.6}%
+\contentsline {subsection}{\numberline {5.6}Neural nodules and network-style flows}{43}{subsection.5.6}%
 \contentsline {subsubsection}{\numberline {5.6.1}Neural nodules and network-style flows (expanded case study)}{44}{subsubsection.5.6.1}%
 \contentsline {subsubsection}{\numberline {5.6.2}A three-nodule ring}{44}{subsubsection.5.6.2}%
-\contentsline {subsubsection}{\numberline {5.6.3}Oscillation: when opinions keep changing}{46}{subsubsection.5.6.3}%
-\contentsline {subsubsection}{\numberline {5.6.4}Stabilised superpositions as ``network beliefs''}{49}{subsubsection.5.6.4}%
+\contentsline {subsubsection}{\numberline {5.6.3}Oscillation: when opinions keep changing}{45}{subsubsection.5.6.3}%
+\contentsline {subsubsection}{\numberline {5.6.4}Stabilised superpositions as ``network beliefs''}{48}{subsubsection.5.6.4}%
 \contentsline {subsubsection}{\numberline {5.6.5}Discussion}{50}{subsubsection.5.6.5}%
-\contentsline {subsection}{\numberline {5.7}Thread-safety and debugging philosophy}{52}{subsection.5.7}%
-\contentsline {section}{\numberline {6}Implementation Notes}{56}{section.6}%
-\contentsline {subsection}{\numberline {6.1}Type system and generic design}{56}{subsection.6.1}%
+\contentsline {subsection}{\numberline {5.7}Thread-safety and debugging philosophy}{51}{subsection.5.7}%
+\contentsline {section}{\numberline {6}Implementation Notes}{55}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Type system and generic design}{55}{subsection.6.1}%
 \contentsline {subsection}{\numberline {6.2}Performance considerations}{56}{subsection.6.2}%
-\contentsline {subsection}{\numberline {6.3}Deterministic randomness}{57}{subsection.6.3}%
-\contentsline {section}{\numberline {7}Case Studies and Experiments}{57}{section.7}%
-\contentsline {subsection}{\numberline {7.1}Prime detection and factor queries}{57}{subsection.7.1}%
+\contentsline {subsection}{\numberline {6.3}Deterministic randomness}{56}{subsection.6.3}%
+\contentsline {section}{\numberline {7}Case Studies and Experiments}{56}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Prime detection and factor queries}{56}{subsection.7.1}%
 \contentsline {subsubsection}{\numberline {7.1.1}Runtime behaviour vs readability}{57}{subsubsection.7.1.1}%
-\contentsline {subsection}{\numberline {7.2}Interference demo: H--Phase--H}{60}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.2}Interference demo: H--Phase--H}{59}{subsection.7.2}%
 \contentsline {subsubsection}{\numberline {7.2.1}Instrumentation and visualisation}{60}{subsubsection.7.2.1}%
-\contentsline {paragraph}{Probability evolution.}{61}{section*.4}%
-\contentsline {paragraph}{Bloch-sphere trajectory.}{62}{section*.5}%
-\contentsline {subsection}{\numberline {7.3}Grover search over a 2-qubit database}{62}{subsection.7.3}%
-\contentsline {subsubsection}{\numberline {7.3.1}Empirical behaviour and classical comparison}{63}{subsubsection.7.3.1}%
-\contentsline {subsection}{\numberline {7.4}Temporal convergence and paradox handling}{64}{subsection.7.4}%
+\contentsline {paragraph}{Probability evolution.}{60}{section*.4}%
+\contentsline {paragraph}{Bloch-sphere trajectory.}{61}{section*.5}%
+\contentsline {subsection}{\numberline {7.3}Grover search over a 2-qubit database}{61}{subsection.7.3}%
+\contentsline {subsubsection}{\numberline {7.3.1}Empirical behaviour and classical comparison}{62}{subsubsection.7.3.1}%
+\contentsline {subsection}{\numberline {7.4}Temporal convergence and paradox handling}{63}{subsection.7.4}%
 \contentsline {subsection}{\numberline {7.5}Concrete protocols and observed behaviour}{64}{subsection.7.5}%
-\contentsline {section}{\numberline {8}Related Work}{68}{section.8}%
-\contentsline {section}{\numberline {9}Limitations and Future Work}{70}{section.9}%
-\contentsline {paragraph}{State-vector scaling (Hilbert space blow-up).}{71}{section*.7}%
-\contentsline {paragraph}{No automatic inference (no Bayesian/MCMC).}{71}{section*.8}%
-\contentsline {paragraph}{Single-node focus (no distributed convergence).}{72}{section*.9}%
-\contentsline {paragraph}{Why this trade-off matters.}{72}{section*.10}%
-\contentsline {section}{\numberline {10}Conclusion}{72}{section.10}%
-\contentsline {section}{\numberline {11}Acknowledgements}{73}{section.11}%
+\contentsline {section}{\numberline {8}Related Work}{67}{section.8}%
+\contentsline {section}{\numberline {9}Limitations and Future Work}{69}{section.9}%
+\contentsline {paragraph}{State-vector scaling (Hilbert space blow-up).}{70}{section*.7}%
+\contentsline {paragraph}{No automatic inference (no Bayesian/MCMC).}{70}{section*.8}%
+\contentsline {paragraph}{Single-node focus (no distributed convergence).}{71}{section*.9}%
+\contentsline {paragraph}{Why this trade-off matters.}{71}{section*.10}%
+\contentsline {section}{\numberline {10}Conclusion}{71}{section.10}%
+\contentsline {section}{\numberline {11}Acknowledgements}{72}{section.11}%
