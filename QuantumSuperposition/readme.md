@@ -6,7 +6,7 @@
 
 > .NET's most confident way to say "maybe"
 
-This release is aligned with PositronicVariables 1.9.0 so the shared `QuBit<T>` model, package metadata, and documentation stay in lockstep.
+This release is aligned with PositronicVariables v1.9 so the shared `QuBit<T>` model, package metadata, and documentation stay in lockstep.
 
 QuantumSuperposition lets your variables live in several states at once then collapse them when you finally make up your mind. Think Schrödinger's cat but with fewer ethical questions and more LINQ.
 

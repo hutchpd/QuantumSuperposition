@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "QuantumSuperposition and PositronicVariables"
+type: software
+version: "v1.9"
+date-released: 2026-04-06
+authors:
+  - family-names: "Hutchinson"
+    given-names: "Paul"
+    affiliation: "Findon Software"
+    orcid: "https://orcid.org/0009-0009-8578-2649"
+repository-code: "https://github.com/hutchpd/QuantumSuperposition"
+url: "https://github.com/hutchpd/QuantumSuperposition"
+license: "Unlicense"
+keywords:
+  - "dotnet"
+  - "csharp"
+  - "quantum-computing"
+  - "superposition"
+  - "temporal-logic"
+  - "probabilistic-programming"
+preferred-citation:
+  type: article
+  title: "QuantumSuperposition and PositronicVariables"
+  authors:
+    - family-names: "Hutchinson"
+      given-names: "Paul"
+      affiliation: "Findon Software"
+      orcid: "https://orcid.org/0009-0009-8578-2649"
+  year: 2026
+  doi: "10.5281/zenodo.17863968"
+  url: "https://doi.org/10.5281/zenodo.17863968"

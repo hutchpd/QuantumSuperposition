@@ -1,15 +1,15 @@
 [0] Config.pm:328> INFO - This is Biber 2.21
 [0] Config.pm:331> INFO - Logfile is 'output.blg'
-[94] biber-MSWIN64:342> INFO - === 
-[137] Biber.pm:421> INFO - Reading 'output.bcf'
-[241] Biber.pm:1002> INFO - Found 28 citekeys in bib section 0
-[256] Biber.pm:4487> INFO - Processing section 0
-[267] Biber.pm:4678> INFO - Looking for bibtex file 'references.bib' for section 0
-[353] bibtex.pm:1713> INFO - LaTeX decoding ...
-[400] bibtex.pm:1519> INFO - Found BibTeX data source 'references.bib'
-[524] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
-[524] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
-[524] Biber.pm:4307> INFO - Sorting list 'nty/global//global/global/global' of type 'entry' with template 'nty' and locale 'en-US'
-[524] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
-[547] bbl.pm:676> INFO - Writing 'output.bbl' with encoding 'UTF-8'
-[562] bbl.pm:779> INFO - Output to output.bbl
+[117] biber-MSWIN64:342> INFO - === 
+[159] Biber.pm:421> INFO - Reading 'output.bcf'
+[267] Biber.pm:1002> INFO - Found 28 citekeys in bib section 0
+[279] Biber.pm:4487> INFO - Processing section 0
+[292] Biber.pm:4678> INFO - Looking for bibtex file 'references.bib' for section 0
+[370] bibtex.pm:1713> INFO - LaTeX decoding ...
+[413] bibtex.pm:1519> INFO - Found BibTeX data source 'references.bib'
+[545] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[546] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[546] Biber.pm:4307> INFO - Sorting list 'nty/global//global/global/global' of type 'entry' with template 'nty' and locale 'en-US'
+[546] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
+[572] bbl.pm:676> INFO - Writing 'output.bbl' with encoding 'UTF-8'
+[587] bbl.pm:779> INFO - Output to output.bbl
