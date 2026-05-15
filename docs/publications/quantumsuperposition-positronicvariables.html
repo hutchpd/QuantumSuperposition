@@ -2,12 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Publications - QuantumSuperposition</title>
+    <title>QuantumSuperposition and PositronicVariables | Publications</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description"
-          content="Publications and research papers related to QuantumSuperposition and PositronicVariables." />
+          content="QuantumSuperposition and PositronicVariables: Strongly-Typed Multiverse Programming and Quantum-Inspired Circuits for .NET." />
+    <meta name="citation_title" content="QuantumSuperposition and PositronicVariables: Strongly-Typed Multiverse Programming and Quantum-Inspired Circuits for .NET" />
+    <meta name="citation_author" content="Hutchinson, Paul" />
+    <meta name="citation_publication_date" content="2025" />
+    <meta name="citation_pdf_url" content="https://quantumsuperposition.findonsoftware.com/QuantumSuperpositions_and_PositronicVariables.pdf" />
+    <meta name="citation_abstract_html_url" content="https://quantumsuperposition.findonsoftware.com/publications/quantumsuperposition-positronicvariables.html" />
+    <meta name="citation_online_date" content="2025" />
+    <meta name="citation_doi" content="10.5281/zenodo.17863969" />
 
-    <!-- Bulma CSS (lightweight layout) -->
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
 
@@ -82,11 +88,6 @@
             margin-top: 0.2rem;
         }
 
-        .qs-menu .qs-submenu {
-            padding-left: 0.75rem;
-            margin-top: 0.1rem;
-        }
-
         .qs-menu a.is-active {
             background-color: #3273dc;
             color: #fff;
@@ -99,8 +100,41 @@
             border-top: 1px solid #eee;
         }
 
-        .qs-badge-row img {
-            margin-right: 0.4rem;
+        .qs-paper-card {
+            border: 1px solid #e5e5e5;
+            border-radius: 10px;
+            padding: 1.5rem;
+            background: linear-gradient(180deg, #fbfbfd 0%, #f7faff 100%);
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        .qs-citation {
+            padding: 1rem 1.1rem;
+            border-left: 4px solid #3273dc;
+            background: #ffffff;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .qs-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .qs-meta-item {
+            border: 1px solid #e8ebf0;
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+            background: #fff;
+        }
+
+        .qs-meta-label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            margin-bottom: 0.25rem;
         }
 
         .qs-top-mobile-bar {
@@ -112,15 +146,6 @@
             display: none;
         }
 
-        .qs-pub-card {
-            border: 1px solid #e5e5e5;
-            border-radius: 6px;
-            padding: 1.5rem;
-            background: #fafafa;
-            transition: background-color .2s ease, border-color .2s ease;
-        }
-
-        /* Dark mode overrides */
         body.dark {
             background: #0f172a;
             color: #e5e7eb;
@@ -175,19 +200,15 @@
                 color: #e5e7eb;
             }
 
-            body.dark .qs-section + .qs-section {
-                border-top-color: #1f2a44;
-            }
-
-            body.dark .button.is-light {
-                background: #0b1220;
-                color: #e5e7eb;
-                border: 1px solid #1f2a44;
-            }
-
-            body.dark .qs-pub-card {
+            body.dark .qs-paper-card,
+            body.dark .qs-citation,
+            body.dark .qs-meta-item {
                 background: #0b1220;
                 border-color: #1f2a44;
+            }
+
+            body.dark .qs-meta-label {
+                color: #94a3b8;
             }
 
         @media (max-width: 1023px) {
@@ -253,7 +274,6 @@
     </style>
 </head>
 <body>
-    <!-- Mobile top bar -->
     <div class="qs-top-mobile-bar">
         <div>
             <div class="qs-logo">QuantumSuperposition</div>
@@ -264,12 +284,9 @@
             <button class="qs-mobile-menu-toggle" aria-label="Toggle navigation" id="qs-mobile-toggle" title="Toggle navigation">☰</button>
         </div>
     </div>
-    <div class="qs-mobile-sidebar" id="qs-mobile-sidebar">
-        <!-- mobile nav gets cloned in JS -->
-    </div>
+    <div class="qs-mobile-sidebar" id="qs-mobile-sidebar"></div>
 
     <div class="columns is-gapless qs-layout">
-        <!-- Sidebar / TOC -->
         <aside class="column is-3-tablet is-3-desktop qs-sidebar">
             <header style="margin-bottom: 0.75rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
                 <div>
@@ -279,58 +296,68 @@
                 <button class="button is-small is-light" id="qs-theme-toggle" title="Toggle dark mode">🌓</button>
             </header>
 
-            <div class="qs-badge-row" style="margin-bottom: 0.75rem; display:flex; align-items:center; flex-wrap:wrap;">
-                <a href="https://www.nuget.org/packages/QuantumSuperposition" target="_blank" rel="noopener">
-                    <img src="https://img.shields.io/nuget/v/QuantumSuperposition.svg" alt="NuGet QuantumSuperposition" />
-                </a>
-                <a href="https://quantumsuperposition.hashnode.space" target="_blank" rel="noopener">
-                    <img src="https://img.shields.io/badge/docs-quantumsuperposition.hashnode.space-blue" alt="Docs" />
-                </a>
-            </div>
-
             <nav class="qs-menu" id="qs-side-nav">
                 <ul>
-                    <li class="qs-menu-group"><a href="index.html">Home</a></li>
-                    <li class="qs-menu-group"><a href="publications.html" class="is-active">Publications</a></li>
+                    <li class="qs-menu-group"><a href="../index.html">Home</a></li>
+                    <li class="qs-menu-group"><a href="../publications.html">Publications</a></li>
+                    <li class="qs-menu-group"><a href="quantumsuperposition-positronicvariables.html" class="is-active">Paper</a></li>
                 </ul>
             </nav>
         </aside>
 
-        <!-- Main content -->
         <main class="column qs-main">
-            <section id="publications" class="qs-section">
-                <h1 class="title">Publications</h1>
-                <p class="subtitle" style="max-width: 48rem;">
-                    Research papers and technical write-ups covering QuantumSuperposition and PositronicVariables.
+            <section class="qs-section">
+                <p class="qs-pill" style="margin-bottom: 0.75rem;">Paper</p>
+                <h1 class="title">QuantumSuperposition and PositronicVariables</h1>
+                <p class="subtitle" style="max-width: 56rem;">
+                    Strongly-Typed Multiverse Programming and Quantum-Inspired Circuits for .NET.
                 </p>
 
-                <div class="qs-pub-card" style="max-width: 52rem;">
-                    <h2 class="title is-5" style="margin-bottom: 0.4rem;">
-                        QuantumSuperposition and PositronicVariables
-                    </h2>
-                    <p class="is-size-7 has-text-grey" style="margin-bottom: 0.75rem;">
-                        Technical paper &mdash; QuantumSuperposition project
+                <div class="qs-paper-card content" style="max-width: 58rem;">
+                    <p>
+                        This paper presents <strong>QuantumSuperposition</strong> and <strong>PositronicVariables</strong>,
+                        two interlinked .NET libraries for modelling uncertainty, quantum-style superposition, and
+                        time-looped convergence in ordinary C# code.
                     </p>
-                    <p class="content" style="margin-bottom: 1rem;">
-                        A detailed treatment of the strongly-typed superposition model, PositronicVariables temporal
-                        convergence engine, and their theoretical underpinnings, including amplitude arithmetic,
-                        interference, entanglement, and timeline-based variable management in .NET.
+                    <p>
+                        QuantumSuperposition provides a generic superposition engine in the form of
+                        <code>QuBit&lt;T&gt;</code> and <code>Eigenstates&lt;T&gt;</code>, plus a physics-flavoured quantum
+                        layer with multi-qubit systems, entanglement management, gate catalogues, canonical states,
+                        and bundled implementations of the Quantum Fourier Transform and Grover's search algorithm.
                     </p>
-                    <div class="buttons">
-                        <a class="button is-link"
-                           href="publications/quantumsuperposition-positronicvariables.html">
-                            View paper page
-                        </a>
-                        <a class="button is-primary"
-                           href="QuantumSuperpositions_and_PositronicVariables.pdf"
-                           target="_blank" rel="noopener">
-                            Download PDF
-                        </a>
-                        <a class="button is-light"
-                           href="https://doi.org/10.5281/zenodo.17863969"
-                           target="_blank" rel="noopener">
-                            DOI
-                        </a>
+                    <p>
+                        PositronicVariables builds on the same superposition semantics to model reversible temporal
+                        logic, recursive convergence, and timeline-based variable management with just enough weirdness
+                        to keep the tests interesting.
+                    </p>
+                </div>
+            </section>
+
+            <section class="qs-section">
+                <h2 class="title is-4">Citation</h2>
+                <div class="qs-citation content" style="max-width: 58rem;">
+<p>
+  Paul Hutchinson. 2025.
+  <em>QuantumSuperposition and PositronicVariables: Strongly-Typed Multiverse Programming and Quantum-Inspired Circuits for .NET</em>.
+  Zenodo. DOI: 10.5281/zenodo.17863969.
+</p>
+                </div>
+            </section>
+
+            <section class="qs-section">
+                <h2 class="title is-4">Links</h2>
+                <div class="qs-meta-grid" style="max-width: 58rem;">
+                    <div class="qs-meta-item">
+                        <span class="qs-meta-label">DOI</span>
+                        <a href="https://doi.org/10.5281/zenodo.17863969" target="_blank" rel="noopener">https://doi.org/10.5281/zenodo.17863969</a>
+                    </div>
+                    <div class="qs-meta-item">
+                        <span class="qs-meta-label">PDF</span>
+                        <a href="https://quantumsuperposition.findonsoftware.com/QuantumSuperpositions_and_PositronicVariables.pdf" target="_blank" rel="noopener">Download the paper PDF</a>
+                    </div>
+                    <div class="qs-meta-item">
+                        <span class="qs-meta-label">Source page</span>
+                        <a href="https://quantumsuperposition.findonsoftware.com/publications.html" target="_blank" rel="noopener">Publications index</a>
                     </div>
                 </div>
             </section>
@@ -338,7 +365,6 @@
     </div>
 
     <script>
-        // Theme persistence
         (function () {
             const root = document.body;
             const stored = localStorage.getItem('qs-theme');
@@ -355,7 +381,6 @@
             if (btnMobile) btnMobile.addEventListener('click', toggleTheme);
         })();
 
-        // Mobile: clone sidebar nav into mobile container
         (function () {
             const sideNav = document.getElementById("qs-side-nav");
             const mobileSidebar = document.getElementById("qs-mobile-sidebar");
