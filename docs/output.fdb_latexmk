@@ -1,17 +1,17 @@
 # Fdb version 4
-["biber output"] 1778832253.47888 "output.bcf" "output.bbl" "output" 1778832316.77136 0
-  "output.bcf" 1778832315 112902 e58ebf82934ddb6ae41d3cd6a834d685 "xelatex"
+["biber output"] 1778836796.99496 "output.bcf" "output.bbl" "output" 1778836803.30145 0
+  "output.bcf" 1778836802 112841 98b351dbea24f5289ab6005f0f4baccb "xelatex"
   "references.bib" 1778777558 11106 f54402c8a9bf98985cb09d9f8f1d161a ""
   (generated)
   "output.bbl"
   "output.blg"
   (rewritten before read)
-["xdvipdfmx"] 1778832316.08328 "output.xdv" "output.pdf" "output" 1778832316.77482 0
-  "output.xdv" 1778832315 1656168 0472ff40a6df2ecc6d443bcb17dfada4 "xelatex"
+["xdvipdfmx"] 1778836802.50157 "output.xdv" "output.pdf" "output" 1778836803.30479 0
+  "output.xdv" 1778836802 1655320 e974a3fbd1e34276953d3ad74e7c71e4 "xelatex"
   (generated)
   "output.pdf"
   (rewritten before read)
-["xelatex"] 1778832312.58253 "c:/Users/xhabl/source/repos/QuantumSuperposition/docs/output.tex" "output.xdv" "output" 1778832316.77163 0
+["xelatex"] 1778836799.00814 "c:/Users/xhabl/source/repos/QuantumSuperposition/docs/output.tex" "output.xdv" "output" 1778836803.30161 0
   "C:/Users/xhabl/AppData/Local/MiKTeX/miktex/data/le/xetex/xelatex.fmt" 1764856307 27176696 12a8227a29ef8b0917e265bb0e1dbec2 ""
   "C:/Users/xhabl/AppData/Local/Programs/MiKTeX/fonts/tfm/adobe/zapfding/pzdr.tfm" 1136772254 1528 7e12f4c0fcf5a072cebdcfbfc610f54c ""
   "C:/Users/xhabl/AppData/Local/Programs/MiKTeX/fonts/tfm/public/cm/cmmi10.tfm" 1136765053 1528 abec98dbc43e172678c11b3b9031252a ""
@@ -114,16 +114,16 @@
   "C:/Users/xhabl/AppData/Local/Programs/MiKTeX/tex/latex/url/url.sty" 1388490452 12796 8edb7d69a20b857904dd0ea757c14ec9 ""
   "C:/Users/xhabl/AppData/Local/Programs/MiKTeX/tex/latex/xcolor/xcolor.sty" 1729265222 55384 b454dec21c2d9f45ec0b793f0995b992 ""
   "C:/Users/xhabl/AppData/Local/Programs/MiKTeX/tex/latex/xurl/xurl.sty" 1641733940 4675 e4b8c405820368c2dfb03526e16d725a ""
-  "c:/Users/xhabl/source/repos/QuantumSuperposition/docs/output.tex" 1778832235 165263 85a6467f09e962c09e880ba1d9544596 ""
+  "c:/Users/xhabl/source/repos/QuantumSuperposition/docs/output.tex" 1778836792 165240 db68b7fb9190cedd9b7eb93fbda7ecc5 ""
   "media/image2.png" 1764927809 52974 64c71687d5438b9d343f97d6ff6ea9b5 ""
   "media/image3.png" 1764854582 69364 433c4081ec2083e0ffeab55bff852dfd ""
   "media/image4.png" 1764854582 119452 02a47962288f9ddbbd467885972e77f0 ""
   "media/image5.png" 1764854582 64454 77ece76afb0c5895566f2db1dc2d0dbc ""
-  "output.aux" 1778832315 23601 79a26e12df2615f81b1517bb2253a219 "xelatex"
-  "output.bbl" 1778832255 42236 1164ff24856fde58f6a484a644a546f8 "biber output"
-  "output.run.xml" 1778832315 2386 545c9d9dead93dbdb5f666ac4b98c946 "xelatex"
-  "output.tex" 1778832235 165263 85a6467f09e962c09e880ba1d9544596 ""
-  "output.toc" 1778832315 6765 2918138a57c6dd8c5a585ec872bbedd1 "xelatex"
+  "output.aux" 1778836802 23550 685d14dffd81d8c4eec4edd7664ca2c4 "xelatex"
+  "output.bbl" 1778836798 42236 1164ff24856fde58f6a484a644a546f8 "biber output"
+  "output.run.xml" 1778836802 2386 545c9d9dead93dbdb5f666ac4b98c946 "xelatex"
+  "output.tex" 1778836792 165240 db68b7fb9190cedd9b7eb93fbda7ecc5 ""
+  "output.toc" 1778836802 6765 d95136204bf07f11d5318bcf7d01fbf9 "xelatex"
   (generated)
   "output.aux"
   "output.bcf"
