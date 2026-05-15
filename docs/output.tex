@@ -187,6 +187,18 @@
   pdfcreator={LaTeX via pandoc},
 }
 
+% Polyglossia injects language metadata into caption labels via \@caption.
+% In this monolingual document, restoring the original caption writer avoids
+% malformed aux entries on clean rebuilds.
+\ExplSyntaxOn
+\AddToHook{begindocument/end}{
+  \cs_if_exist:cT { __xpg_save_caption:n }
+    {
+      \cs_set_eq:cc { @caption } { __xpg_save_caption:n }
+    }
+}
+\ExplSyntaxOff
+
 % ------------------------------------------------------------
 % Title / Subtitle
 % ------------------------------------------------------------
@@ -394,20 +406,31 @@ curiosities. They are different attitudes to the same family of problems: values
 depend on each other non-sequentially, computations whose outputs constrain their
 inputs, and loops where the runtime must decide what counts as an admissible state.
 
-\begin{table}[htbp]
-  \centering
-  \begin{tabularx}{\linewidth}{@{}
-    >{\raggedright\arraybackslash}p{0.18\linewidth}
-    >{\raggedright\arraybackslash}p{0.20\linewidth}
-    >{\raggedright\arraybackslash}X
-    >{\raggedright\arraybackslash}X
-  @{}}
-    \toprule
-    \textbf{Approach} &
-    \textbf{Attitude to loops} &
-    \textbf{Typical behaviour} &
-    \textbf{Contrast with PositronicVariables} \\
-    \midrule
+\begingroup
+\small
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{@{}
+  >{\raggedright\arraybackslash}p{0.16\linewidth}
+  >{\raggedright\arraybackslash}p{0.18\linewidth}
+  >{\raggedright\arraybackslash}p{0.30\linewidth}
+  >{\raggedright\arraybackslash}p{0.28\linewidth}
+@{}}
+  \caption{Different software attitudes to cyclic consistency and self-reference}\label{tab:attitudes-to-paradox}\\
+  \toprule
+  \textbf{Approach} &
+  \textbf{Attitude to loops} &
+  \textbf{Typical behaviour} &
+  \textbf{Contrast with PositronicVariables} \\
+  \midrule
+  \endfirsthead
+  \toprule
+  \textbf{Approach} &
+  \textbf{Attitude to loops} &
+  \textbf{Typical behaviour} &
+  \textbf{Contrast with PositronicVariables} \\
+  \midrule
+  \endhead
     Mariposa &
     Refusal by runtime guard &
     Provides explicit time-travel primitives, but rejects conflicting or invalid
@@ -456,11 +479,9 @@ inputs, and loops where the runtime must decide what counts as an admissible sta
     fixed point, a stable support such as \texttt{any(-1, 1)}, or diagnostics. &
     This is the contribution developed in Sections~\ref{sec:pv-self-consistency}
     through~\ref{sec:positronic-case-studies}. \\
-    \bottomrule
-  \end{tabularx}
-  \caption{Different software attitudes to cyclic consistency and self-reference}
-  \label{tab:attitudes-to-paradox}
-\end{table}
+  \bottomrule
+\end{longtable}
+\endgroup
 
 This comparison is intentionally pragmatic. Constraint systems and probabilistic
 languages are deeper and more general in their own domains; reversible languages
@@ -1788,7 +1809,7 @@ Gate arity is inferred from matrix size and checked against the register length,
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\section{PositronicVariables: Temporal Self-Consistency in C\#}
+\section[PositronicVariables: Temporal Self-Consistency in C Sharp]{PositronicVariables: Temporal Self-Consistency in C\#}
 
 QuantumSuperposition models uncertainty and quantum behaviour in a single timeline.
 \textbf{PositronicVariables} is what happens when you look at that timeline and say
