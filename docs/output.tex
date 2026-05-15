@@ -612,10 +612,11 @@ The library's documentation describes this succinctly as ``variables living in s
 
 \subsubsection{A tiny worked example: probability tables before and after Select}\label{tiny-select-example}
 
-\footnote{Select maps eigenvalues and merges amplitudes when targets collide. Because the input
-is normalized, the resulting probabilities are computed over the derived eigenstate distribution;
-in injective cases the per-branch weights carry through; in non-injective cases merged weights
-reflect the number and phases of contributing branches (See Tables~\ref{tab:select-double}--\ref{tab:select-merge}).}
+\footnote{In the generic layer, Select acts as an \textbf{incoherent push-forward} of the
+eigenstate probability distribution: branch probabilities are transported through the mapping,
+and when targets collide their \textbf{probability masses} are added. Coherent amplitude
+addition, phase-sensitive cancellation, and other interference effects are reserved for explicit
+quantum operations in the physics layer (See Tables~\ref{tab:select-double}--\ref{tab:select-merge}).}
 
 To make the semantics slightly less hand-wavy, consider again the minimal multiverse of integers:
 
@@ -659,14 +660,14 @@ The initial state appears in Table~\ref{tab:initial-superposition}:
 
 If we were to call qubit.Observe() at this point, each of 1, 2 and 3 would be returned with probability 1/3 (modulo seeding and collapse configuration), and the qubit would then be marked as collapsed.\parencite{Pau255}
 
-However, the call to Select(x =\textgreater{} x * 2) does not collapse the state. Instead, it lifts the pure function x ↦ 2x over the eigenstates, giving us a new superposition in which:
+However, the call to Select(x =\textgreater{} x * 2) does not collapse the state. Instead, in the generic layer it pushes forward the eigenstate \textbf{probability distribution} through the pure function x ↦ 2x, giving us a new superposition in which:
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \item
   each original value v becomes 2v, and
 \item
-  the amplitudes are carried across unchanged.
+  because this map is injective on \{1,2,3\}, each branch keeps its original probability mass.
 \end{enumerate}
 \begin{table}[htbp]
   \centering
@@ -704,7 +705,7 @@ You can read the diagram as ``three equally likely universes, in which the integ
 
 \subsubsection{When Select merges worlds}
 
-In this toy example the function x ↦ 2x is injective on \{1, 2, 3\}, so no two branches of the multiverse crash into the same target value. If we instead used a function that is not injective, such as x ↦ x \% 2, then multiple eigenstates would map to the same result and their amplitudes would combine.
+In this toy example the function x ↦ 2x is injective on \{1, 2, 3\}, so no two branches of the multiverse crash into the same target value. If we instead used a function that is not injective, such as x ↦ x \% 2, then multiple eigenstates would map to the same result and their probability masses would aggregate.
 
 For example:
 
@@ -719,7 +720,7 @@ Before Select we have the same uniform table as above. After Select, the eigenst
 
 2 maps to 0 (even).
 
-Assuming purely real amplitudes, the new amplitudes for 0 and 1 are obtained by summing the contributions from all branches that landed there and then renormalising; Table~\ref{tab:select-merge} collects the resulting probabilities:
+For generic Select, this is a straight probability push-forward: start from P(1)=P(2)=P(3)=1/3, then add source masses that land on the same target. So P(even)=P(2)=1/3 and P(odd)=P(1)+P(3)=1/3+1/3=2/3. Table~\ref{tab:select-merge} shows the same aggregation in tabular form:
 
 \begin{table}[htbp]
   \centering
@@ -729,13 +730,13 @@ Assuming purely real amplitudes, the new amplitudes for 0 and 1 are obtained by 
     >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
     >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
   	\toprule
-  	\textbf{Eigenstate (value)} & \textbf{Contributing sources} & \textbf{Raw amplitude sum} & \textbf{Normalised probability} \\
+  	\textbf{Eigenstate (value)} & \textbf{Contributing sources} & \textbf{Source probability contributions} & \textbf{Aggregated probability mass} \\
   \midrule
-  0 (even) & 2 & 1/√3 & 1/3 \\
-  1 (odd) & 1, 3 & 2/√3 & 2/3 \\
+  0 (even) & 2 & 1/3 & 1/3 \\
+  1 (odd) & 1, 3 & 1/3 + 1/3 & 2/3 \\
   \bottomrule
   \end{tabular}
-  \caption{Eigenstate amplitudes after Select merges multiple branches into the same value}
+  \caption{Probability-mass aggregation after generic Select maps multiple branches to the same value}
   \label{tab:select-merge}
 \end{table}
 
@@ -743,9 +744,9 @@ The net effect is that parity.SampleWeighted() will now return 0 with probabilit
 
 From the library's point of view, both of these examples are handled by the same machinery:
 
-QuBit\textless T\textgreater{} stores a mapping from values to complex amplitudes.
+QuBit\textless T\textgreater{} stores eigenstates with weights from which probabilities are derived.
 
-Select builds a new mapping using the provided function, merging amplitudes when keys collide.
+Generic Select pushes forward branch probabilities through the provided function and adds probability mass when keys collide (an incoherent many-to-one map, not a unitary transform).
 
 Methods like SampleWeighted() and MostProbable() then operate purely on the derived eigenstate distribution.
 
