@@ -134,6 +134,12 @@ namespace QuantumSuperposition.Systems
         // Helper: Converts an array of bits to its integer representation.
         private static int BitsToIndex(int[] bits) { int index = 0; foreach (int bit in bits) index = (index << 1) | bit; return index; }
 
+        private static void TryPartialCollapseReference(IQuantumReference reference, int[] chosenOutcome)
+        {
+            var partialCollapse = reference.GetType().GetMethod("PartialCollapse", new[] { typeof(int[]) });
+            partialCollapse?.Invoke(reference, new object[] { chosenOutcome });
+        }
+
         /// <summary>
         /// Optionally construct the system with explicit amplitudes.
         /// </summary>
@@ -178,9 +184,8 @@ namespace QuantumSuperposition.Systems
             double roll = rng.NextDouble() * totalProb; double cumulative = 0.0; int[]? chosen = null;
             foreach (var kv in ordered) { cumulative += kv.Value; if (roll <= cumulative) { chosen = kv.Key; break; } }
             chosen ??= ordered[^1].Key;
-            Guid collapseId = Guid.NewGuid();
             foreach (IQuantumReference refQ in _registered)
-                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) (refQ as QuBit<bool>)?.PartialCollapse(chosen);
+                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) TryPartialCollapseReference(refQ, chosen);
             return chosen;
         }
 
@@ -228,7 +233,9 @@ namespace QuantumSuperposition.Systems
             double totalProb = probSums.Values.Sum();
             if (totalProb <= 1e-15) throw new InvalidOperationException($"Global observation failed: projected probability ~0. Indices=[{string.Join(',', qubitIndices)}], BasisStates={_amplitudes.Count}, ProjectionGroups={projectionGroups.Count}, TotalProb={totalProb:E3}");
             double roll = rng.NextDouble() * totalProb; double cumulative = 0.0; int[] chosenProjection = Array.Empty<int>();
-            foreach (var kv in probSums) { cumulative += kv.Value; if (roll <= cumulative) { chosenProjection = kv.Key; break; } }
+            var orderedProjections = probSums.OrderBy(kv => BitsToIndex(kv.Key)).ToList();
+            foreach (var kv in orderedProjections) { cumulative += kv.Value; if (roll <= cumulative) { chosenProjection = kv.Key; break; } }
+            if (chosenProjection.Length == 0) chosenProjection = orderedProjections[^1].Key;
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
             foreach (var item in projectionGroups[chosenProjection]) newAmps[item.state] = item.amplitude;
             _amplitudes = newAmps; NormaliseAmplitudes(); Guid collapseId = Guid.NewGuid();
