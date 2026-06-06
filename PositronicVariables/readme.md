@@ -52,6 +52,7 @@ dotnet add package PositronicVariables
 Here is a logical loop with no single stable resolution:
 
 ```csharp
+[DontPanic]
 private static void Main()
 {
     var antival = PositronicVariable<int>.GetOrCreate("antival", -1);
