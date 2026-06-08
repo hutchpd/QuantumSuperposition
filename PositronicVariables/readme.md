@@ -4,38 +4,23 @@
 
 *A time-looping variable container for deterministic dreamers, recursive state machines, and integers with unfinished business.*
 
-`PositronicVariables` is a .NET library for values that evolve across iterative timelines until they converge, contradict themselves honestly, or become a superposition of the answers they could not choose between.
+`PositronicVariables` is a .NET library for values that move the wrong way through execution.
+
+Ordinary values travel forwards. They are calculated, assigned, passed along, and eventually forgotten by a runtime that has places to be.
+
+A `PositronicVariable<T>` carries state backwards through the execution trace. It allows later assignments to revise earlier assumptions, then asks the programme to run the conversation again until the forwards-moving code and the backwards-moving variable agree on what must have happened.
+
+When they cannot agree on one answer, the result may become a `QuBit<T>` superposition.
+
+Not because the library has become vague.
+
+Because the contradiction has become precise.
 
 It is built on top of `QuBit<T>` from [QuantumSuperposition](https://www.nuget.org/packages/QuantumSuperposition), but it is not a quantum simulator. There are no physical qubits here. No gates. No Bloch spheres. No particles pretending to be well behaved.
 
-Instead, this is a library for temporal logic, recursive state, causal feedback, transactional mutation, convergence, replay, and variables that occasionally need to negotiate with their own future.
+This is a library for temporal logic, recursive state, causal feedback, transactional mutation, replay, convergence, and variables that occasionally need to negotiate with their own past.
 
 > Not exactly time travel. More a strongly typed argument with causality.
-
----
-
-## What this library is
-
-A normal variable has a value.
-
-A `PositronicVariable<T>` has a history.
-
-That history may be revised, replayed, inspected, converged, snapshotted, restored, or recorded in an append-only ledger where every regrettable operation receives a timestamp and a place in the archive.
-
-The library is useful when values depend on one another in loops:
-
-* `a` depends on `b`;
-* `b` depends on `c`;
-* `c` has opinions about `a`;
-* the system cannot move forward until everyone stops changing their mind.
-
-Rather than pretending such structures are always mistakes, `PositronicVariables` gives them a place to happen deliberately.
-
-Sometimes the loop stabilises.
-
-Sometimes it produces a multi-state answer.
-
-Sometimes it reveals that your model has summoned a paradox and expects you to provide biscuits.
 
 ---
 
@@ -44,6 +29,59 @@ Sometimes it reveals that your model has summoned a paradox and expects you to p
 ```shell
 dotnet add package PositronicVariables
 ```
+
+---
+
+## The core mechanic: forwards code, backwards variables
+
+The whole library rests on one strange idea:
+
+**normal execution moves forwards, but positronic state propagates backwards.**
+
+Most code works like this:
+
+```text
+Time ->
+read value -> calculate result -> assign new value -> continue
+```
+
+A positronic variable disturbs that tidy little procession.
+
+When you assign a value to a `PositronicVariable<T>`, that assignment is not treated as merely “what happens next”. It becomes evidence about what the variable must have been earlier for the execution to make sense.
+
+So the engine replays.
+
+It lets the ordinary code flow forwards again, while the positronic variable carries revised state backwards into the next pass. If the two directions meet cleanly, the system converges. If they meet in contradiction, the system preserves the contradiction as a structured set of possible states.
+
+The loop is not a bug hidden inside the engine.
+
+The loop is the point.
+
+```text
+Forward execution:
+    antival -> val = -1 * antival -> antival.State = val
+
+Backward positronic propagation:
+    antival.State = val -> revise antival -> rerun forward expression
+```
+
+Together, those two directions form the causal knot:
+
+```text
+                ordinary execution
+Time -> [antival] -> [val = -1 * antival] -> [antival.State = val]
+          ^                                                |
+          |                                                |
+          +------------- positronic propagation ------------+
+```
+
+The programme walks around that knot until it finds a stable story.
+
+Sometimes the story is a single value.
+
+Sometimes it is a superposition.
+
+Sometimes it is the programme quietly admitting that arithmetic and causality have been left unsupervised for too long.
 
 ---
 
@@ -74,13 +112,71 @@ The antival is any(-1, 1)
 The value is any(1, -1)
 ```
 
-The system is being asked to hold a value that must be the negative of itself once the loop completes.
+Read the example in both directions.
 
-There is no single integer that satisfies the story, so the variable becomes the shape of the contradiction: two possible values, both necessary, neither permitted to win outright.
+Going forwards:
+
+```text
+antival starts as -1
+val becomes -1 * antival
+antival is assigned val
+```
+
+Going backwards:
+
+```text
+the final assignment tells antival what it must have been
+the expression is replayed
+the result revises the assignment
+the assignment revises the original
+```
+
+If `antival` is `-1`, then `val` is `1`, so `antival` becomes `1`.
+
+If `antival` is `1`, then `val` is `-1`, so `antival` becomes `-1`.
+
+The loop does not settle on one integer. It alternates between two mutually dependent histories.
+
+So the stable answer is not `-1`.
+
+It is not `1`.
+
+It is the two-state shape of the paradox:
+
+```text
+antival = any(-1, 1)
+val     = any(1, -1)
+```
 
 This is not the engine failing to choose.
 
-This is the engine refusing to lie.
+This is the engine refusing to falsify the timeline for your comfort.
+
+---
+
+## What this library is
+
+A normal variable has a value.
+
+A `PositronicVariable<T>` has a timeline.
+
+That timeline may be revised, replayed, inspected, converged, snapshotted, restored, or recorded in an append-only ledger where every regrettable operation receives a timestamp and a place in the archive.
+
+The library is useful when values depend on one another in loops:
+
+* `a` depends on `b`;
+* `b` depends on `c`;
+* `c` has opinions about `a`;
+* a later assignment changes what an earlier read must have meant;
+* the system cannot move forward until the forwards and backwards passes agree.
+
+Rather than pretending such structures are always mistakes, `PositronicVariables` gives them a place to happen deliberately.
+
+Sometimes the loop stabilises.
+
+Sometimes it produces a multi-state answer.
+
+Sometimes it reveals that your model has summoned a paradox and expects you to provide biscuits.
 
 ---
 
@@ -96,19 +192,20 @@ It can:
 * hold `QuBit<T>` superpositions;
 * track previous states;
 * participate in convergence;
+* propagate state backwards through replay;
 * be updated through transactional workflows;
 * export and restore snapshots;
 * record operations through a ledger sink.
 
 The point is not that every variable should behave this way.
 
-The point is that some variables are born into recursive families and should not be forced to pretend they live alone.
+The point is that some variables are born inside recursive families and should not be forced to pretend they live alone.
 
 ---
 
 ## 2. Convergence
 
-Convergence is the process of repeatedly evaluating a network of dependent values until the system reaches a stable state.
+Convergence is the process of repeatedly replaying the network until forwards execution and backwards propagation stop changing one another.
 
 If the values settle, the system has found a fixed point.
 
@@ -119,31 +216,35 @@ If they continue misbehaving beyond the permitted limits, the engine has learned
 That, too, is information.
 
 ```csharp
-var x = PositronicVariable<int>.GetOrCreate("x", 1);
-var y = PositronicVariable<int>.GetOrCreate("y", 2);
-
-var node = new NeuralNodule<int>(inputs =>
+[DontPanic]
+private static void Main()
 {
-    var sum = inputs.Sum();
+    var x = PositronicVariable<int>.GetOrCreate("x", 1);
+    var y = PositronicVariable<int>.GetOrCreate("y", 2);
 
-    return new QuBit<int>(new[]
+    var node = new NeuralNodule<int>(inputs =>
     {
-        sum % 5,
-        (sum + 1) % 5
+        var sum = inputs.Sum();
+
+        return new QuBit<int>(new[]
+        {
+            sum % 5,
+            (sum + 1) % 5
+        });
     });
-});
 
-node.Inputs.Add(x);
-node.Inputs.Add(y);
+    node.Inputs.Add(x);
+    node.Inputs.Add(y);
 
-NeuralNodule<int>.ConvergeNetwork(node);
+    NeuralNodule<int>.ConvergeNetwork(node);
 
-Console.WriteLine($"Final Output: {node.Output}");
+    Console.WriteLine($"Final Output: {node.Output}");
+}
 ```
 
 A convergence pass is not a mystical event.
 
-It is just a structured argument between current state, derived state, and the increasingly weary coordinator trying to make them agree.
+It is the engine asking the same question from both ends of time until the answers stop flinching.
 
 ---
 
@@ -172,16 +273,20 @@ Useful for:
 That means a positronic variable can hold more than one possible state, and those states can be transformed using the same superposition semantics as the lower-level library.
 
 ```csharp
-var value = PositronicVariable<int>.GetOrCreate("value", 1);
+[DontPanic]
+private static void Main()
+{
+    var value = PositronicVariable<int>.GetOrCreate("value", 1);
 
-value.Assign(new QuBit<int>(new[] { 1, 2, 3 }));
+    value.Assign(new QuBit<int>(new[] { 1, 2, 3 }));
 
-Console.WriteLine(value);
+    Console.WriteLine(value);
+}
 ```
 
 The result is not merely uncertain.
 
-It is typed uncertainty with a forwarding address.
+It is typed uncertainty with a forwarding address and a return ticket.
 
 ---
 
@@ -194,25 +299,29 @@ Use the ambient transaction scope when several variables need to be read and wri
 ```csharp
 using PositronicVariables.Transactions;
 
-var a = PositronicVariable<int>.GetOrCreate("a", 1);
-
-// Read-only fast path
-using (var tx = TransactionScope.Begin())
+[DontPanic]
+private static void Main()
 {
-    TransactionScope.RecordRead(a);
+    var a = PositronicVariable<int>.GetOrCreate("a", 1);
+
+    // Read-only fast path
+    using (var tx = TransactionScope.Begin())
+    {
+        TransactionScope.RecordRead(a);
+    }
+
+    // Update with retry and telemetry
+    TransactionV2.RunWithRetry(tx =>
+    {
+        tx.RecordRead(a);
+
+        var next = a.GetCurrentQBit();
+
+        tx.StageWrite(a, next + 1);
+    });
+
+    Console.WriteLine(STMTelemetry.GetReport());
 }
-
-// Update with retry and telemetry
-TransactionV2.RunWithRetry(tx =>
-{
-    tx.RecordRead(a);
-
-    var next = a.GetCurrentQBit();
-
-    tx.StageWrite(a, next + 1);
-});
-
-Console.WriteLine(STMTelemetry.GetReport());
 ```
 
 Telemetry can report:
@@ -239,30 +348,34 @@ using Microsoft.Extensions.Hosting;
 using PositronicVariables.DependencyInjection;
 using PositronicVariables.Runtime;
 
-var path = Path.Combine("Artifacts", "Positronic", "state.json");
-var runtime = PositronicAmbient.Current;
+[DontPanic]
+private static void Main()
+{
+    var path = Path.Combine("Artifacts", "Positronic", "state.json");
+    var runtime = PositronicAmbient.Current;
 
-var value = PositronicVariable<int>.GetOrCreate(
-    "resume-demo",
-    1,
-    runtime);
+    var value = PositronicVariable<int>.GetOrCreate(
+        "resume-demo",
+        1,
+        runtime);
 
-value.Assign(2);
-value.Assign(3);
+    value.Assign(2);
+    value.Assign(3);
 
-value.SaveSnapshot(path);
+    value.SaveSnapshot(path);
 
-var hostBuilder = Host
-    .CreateDefaultBuilder()
-    .ConfigureServices(services => services.AddPositronicRuntime());
+    var hostBuilder = Host
+        .CreateDefaultBuilder()
+        .ConfigureServices(services => services.AddPositronicRuntime());
 
-PositronicAmbient.InitialiseWith(hostBuilder);
+    PositronicAmbient.InitialiseWith(hostBuilder);
 
-var restored = PositronicVariable<int>.LoadSnapshot(
-    path,
-    PositronicAmbient.Current);
+    var restored = PositronicVariable<int>.LoadSnapshot(
+        path,
+        PositronicAmbient.Current);
 
-Console.WriteLine(string.Join(", ", restored.ToValues()));
+    Console.WriteLine(string.Join(", ", restored.ToValues()));
+}
 ```
 
 Snapshots are useful when you want to pause a timeline, inspect it, move it somewhere else, or prove to a future version of yourself that the past really did look like that.
@@ -289,19 +402,44 @@ Because it can be cross-examined.
 
 ## Feynman-style view
 
-A tiny cycle:
+A positronic programme is easiest to picture as two arrows disagreeing politely about the order of events.
+
+```text
+Forward time:
+    initial guess -> derived value -> assignment -> programme continues
+
+Backward state:
+    assignment -> revised variable -> replay -> new derived value
+```
+
+The antival example becomes:
 
 ```text
 Time ->
-[initial guess] -> val = -1 * antival -> antival = val -> [re-evaluate]
-       ^_________________________________________________________|
+[antival = -1] -> [val = -1 * antival] -> [antival.State = val]
+       ^                                                  |
+       |                                                  |
+       +------------- revised positronic state -----------+
 ```
 
-The engine walks the loop until the values stabilise or until the contradiction becomes explicit.
+The loop is not inferred after the fact.
 
-In the example above, the system cannot honestly reduce to a single value. So it produces a superposed answer.
+It is the execution model.
 
-This is what happens when arithmetic and causality are left in a room together without supervision.
+The forward pass creates the expression. The backward pass revises the premise. The next forward pass recomputes the expression using the revised premise. Around it goes until the timeline either settles or becomes a superposition of its own possible histories.
+
+This is why the paradox example produces:
+
+```text
+antival = any(-1, 1)
+val     = any(1, -1)
+```
+
+The result is the smallest stable shape that contains both directions of the loop.
+
+A classical variable would pick a side.
+
+A positronic variable keeps the receipts.
 
 ---
 
@@ -366,6 +504,8 @@ It has tried before.
 
 ## Features
 
+* Positronic variables that propagate state backwards through execution
+* Ordinary forward execution meeting backwards timeline revision
 * Temporal state tracking
 * Iterative convergence
 * Recursive dependency handling
@@ -428,7 +568,7 @@ The first asks:
 
 The second asks:
 
-> What if a value could keep revising itself until its timeline made sense?
+> What if a value could carry its future backwards until its past made sense?
 
 They are separate libraries, but they share a suspicion that early certainty is often just impatience in formal wear.
 

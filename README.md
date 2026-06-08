@@ -6,6 +6,14 @@
 
 This repository contains a pair of related experiments in typed uncertainty, quantum-style computation, temporal convergence, recursive state, and variables with more inner life than is strictly healthy.
 
+`QuantumSuperposition` models possible values.
+
+`PositronicVariables` models possible histories.
+
+The first lets a value remain many things until observation becomes necessary. The second lets later assignments travel backwards through replay, revising earlier assumptions until they meet ordinary forward execution in a stable loop.
+
+That meeting point is where the interesting damage happens.
+
 One library lets values exist in multiple possible states and manipulate those possibilities without collapsing them too early. The other lets variables revise themselves across iterative timelines until the contradiction either settles down, becomes useful, or has the decency to admit it is a paradox.
 
 It is not trying to be the sensible answer to a normal software problem.
@@ -38,9 +46,17 @@ A `QuBit<T>` is not a value that forgot to make up its mind. It is a formal set 
 
 `PositronicVariables` then asks a more troubling question:
 
-What if variables could keep trying?
+What if variables could carry their future backwards?
 
-A `PositronicVariable<T>` can move through repeated evaluation passes, revising its state as dependent values change, until the system converges on something stable. If it cannot become one thing, it may become several. Sometimes that is failure. Sometimes that is the answer being honest.
+A `PositronicVariable<T>` does not merely update as execution moves forwards. It can take a later assignment and propagate that state backwards into the execution trace, forcing earlier reads to be reconsidered on the next pass.
+
+Ordinary code moves forwards.
+
+Positronic state moves backwards.
+
+The loop forms where those two directions meet.
+
+A `PositronicVariable<T>` can therefore move through repeated evaluation passes, revising its state as dependent values change, until the system converges on something stable. If it cannot become one thing, it may become several. Sometimes that is failure. Sometimes that is the answer being honest.
 
 ---
 
@@ -152,6 +168,22 @@ It uses the generic superposition model from `QuantumSuperposition`, but it is n
 
 Instead, it models variables that can evolve across repeated passes until a network stabilises.
 
+The core mechanic is directional:
+
+```text
+Forward execution:
+    read value -> calculate result -> assign new value
+
+Backward positronic propagation:
+    assignment -> revise earlier state -> replay forward expression
+```
+
+A normal variable is carried forwards by the programme.
+
+A positronic variable carries consequences backwards through the timeline.
+
+The convergence loop appears when those two directions touch. The engine walks around that loop until the values stop changing, or until the smallest honest answer is a superposition of the histories that could not be reduced to one.
+
 ```csharp
 var x = PositronicVariable<int>.GetOrCreate("x", 1);
 var y = PositronicVariable<int>.GetOrCreate("y", 2);
@@ -201,6 +233,16 @@ antival = any(-1, 1)
 val     = any(1, -1)
 ```
 
+Going forwards, `val` is calculated from `antival`.
+
+Going backwards, `antival.State = val` tells `antival` what it must become.
+
+If `antival` is `-1`, `val` becomes `1`, and the assignment sends `1` backwards.
+
+If `antival` is `1`, `val` becomes `-1`, and the assignment sends `-1` backwards.
+
+The two directions cannot settle on a single integer, so the stable shape of the programme is a two-state paradox.
+
 Some systems resolve by choosing.
 
 Some resolve by admitting the choice was the wrong question.
@@ -219,9 +261,9 @@ The first says:
 
 The second says:
 
-> A variable may have a history, and that history may need to be replayed until the present stops contradicting itself.
+> A variable may have a history, and later state may need to travel backwards through replay until the past and present stop contradicting one another.
 
-That shared idea is the spine of the repository: uncertainty should not be mush. It should be typed, inspectable, transformable, testable, and occasionally allowed to be funny.
+That shared idea is the spine of the repository: uncertainty should not be mush, and neither should causality. Both should be typed, inspectable, transformable, testable, and occasionally allowed to be funny.
 
 ---
 
@@ -275,7 +317,7 @@ This project is built around a few questionable but persistent beliefs:
 * Collapse should be explicit.
 * A variable can have several opinions and still be useful.
 * Strong typing makes absurdity safer.
-* Time is not always a line. Sometimes it is a negotiation.
+* Time is not always a line. Sometimes it is a negotiation between forward execution and backward consequence.
 * A contradiction that converges is not necessarily a bug.
 * A joke in the documentation is allowed, provided it is carrying its own technical weight.
 
