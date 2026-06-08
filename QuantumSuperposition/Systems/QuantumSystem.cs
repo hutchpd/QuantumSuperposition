@@ -134,12 +134,6 @@ namespace QuantumSuperposition.Systems
         // Helper: Converts an array of bits to its integer representation.
         private static int BitsToIndex(int[] bits) { int index = 0; foreach (int bit in bits) index = (index << 1) | bit; return index; }
 
-        private static void TryPartialCollapseReference(IQuantumReference reference, int[] chosenOutcome)
-        {
-            var partialCollapse = reference.GetType().GetMethod("PartialCollapse", new[] { typeof(int[]) });
-            partialCollapse?.Invoke(reference, new object[] { chosenOutcome });
-        }
-
         /// <summary>
         /// Optionally construct the system with explicit amplitudes.
         /// </summary>
@@ -185,7 +179,7 @@ namespace QuantumSuperposition.Systems
             foreach (var kv in ordered) { cumulative += kv.Value; if (roll <= cumulative) { chosen = kv.Key; break; } }
             chosen ??= ordered[^1].Key;
             foreach (IQuantumReference refQ in _registered)
-                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) TryPartialCollapseReference(refQ, chosen);
+                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) refQ.PartialCollapseFromSystem(chosen);
             return chosen;
         }
 

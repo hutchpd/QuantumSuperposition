@@ -702,6 +702,8 @@ namespace QuantumSuperposition.QuantumSoup
             // Do NOT trigger propagation here.
         }
 
+        public void PartialCollapseFromSystem(int[] chosenOutcome) => PartialCollapse(chosenOutcome);
+
 
 
         /// <summary>

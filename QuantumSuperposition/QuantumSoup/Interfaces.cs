@@ -52,6 +52,12 @@ namespace QuantumSuperposition.QuantumSoup
         void NotifyWavefunctionCollapsed(Guid collapseId);
 
         /// <summary>
+        /// Called by QuantumSystem after a partial observation touches this reference.
+        /// Implementations should update their local collapsed view from the selected basis outcome.
+        /// </summary>
+        void PartialCollapseFromSystem(int[] chosenOutcome);
+
+        /// <summary>
         /// Whether this reference is currently collapsed.
         /// </summary>
         bool IsCollapsed { get; }

@@ -88,6 +88,26 @@ namespace QuantumSoupTester
         }
 
         [Test]
+        public void PartialObserve_WithBoolQubit_PropagatesCollapse()
+        {
+            var system = new QuantumSystem();
+            var measured = new QuBit<bool>(system, new[] { 0 }).WithWeights(
+                new Dictionary<bool, Complex> { { false, 1.0 }, { true, 1.0 } },
+                autoNormalise: true);
+            var unmeasured = new QuBit<bool>(system, new[] { 1 }).WithWeights(
+                new Dictionary<bool, Complex> { { false, 1.0 }, { true, 1.0 } },
+                autoNormalise: true);
+
+            system.SetFromTensorProduct(false, measured, unmeasured);
+
+            int[] outcome = system.PartialObserve(new[] { 0 }, new Random(42));
+
+            Assert.That(measured.IsCollapsed, Is.True);
+            Assert.That(measured.GetObservedValue(), Is.EqualTo(outcome[0] != 0));
+            Assert.That(unmeasured.IsCollapsed, Is.False);
+        }
+
+        [Test]
         public void PartialObserve_WithNonBoolQubit_PropagatesCollapse()
         {
             var system = new QuantumSystem();
