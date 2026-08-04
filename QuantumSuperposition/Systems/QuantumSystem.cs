@@ -271,7 +271,7 @@ namespace QuantumSuperposition.Systems
                 var original = qubits[i];
                 if (original.System == this) { systemManaged[i] = original; continue; }
                 int[] indices = original.GetQubitIndices(); if (indices == null || indices.Length == 0) indices = new[] { i };
-                QuBit<T> sysQ = new QuBit<T>(this, indices); var weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight); _ = sysQ.WithWeights(weights, false); systemManaged[i] = sysQ;
+                QuBit<T> sysQ = new QuBit<T>(this, indices); var weights = original.ToWeightedValues().ToDictionary(w => w.value, w => w.weight); sysQ = sysQ.WithWeights(weights, false); systemManaged[i] = sysQ;
             }
             Dictionary<T[], Complex> product = QuantumMathUtility<T>.TensorProduct(systemManaged);
             Dictionary<int[], Complex> result = new(new IntArrayComparer());
