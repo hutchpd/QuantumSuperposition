@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-10-23
+### Fixed
+- **STM Validation & Retries:**
+  - Validated read versions for variables also present in write sets in `TransactionV2`, preventing lost updates in read-modify-write patterns.
+  - Replaced brittle exception message string parsing with typed `StmValidationFailedException` for transaction retry loops.
+- **Convergence & Memory Management:**
+  - Bounded `ConvergenceCoordinator` latency sampling queue to prevent unbounded memory growth, and added error logging for background worker failures.
+  - Removed reflection over ledger entry fields in `UnhappeningEngine` and fixed `(+k) % d` modular arithmetic orbit calculation to correctly preserve seed offset and step size.
+  - Enabled recording of bitwise operations (`&`, `|`, `^`, `~`, `<<`, `>>`) in forward cycles so reverse replay can reconstruct them.
+  - Safely filtered runtime variables using `.OfType<PositronicVariable<T>>()` in `ImprobabilityEngine` to prevent `InvalidCastException` when multiple variable types share a runtime.
+  - Deduplicated commit IDs in `FileLedgerSink` preventing duplicate ledger entries in audit logs.
+  - Removed unused CS0414 fields from `PositronicVariable` and `PositronicVariable.QExpr`.
+
+### Added
+- .NET 8 Generic Math support via `NumberOperators<T>` implementing `INumber<T>`, consolidating arithmetic operators and reducing boilerplate.
+- Extracted operator definitions into `PositronicVariable.Operators.cs`.
+
 ## [1.9.0] - 2026-04-06
 
 ### Added

@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.QuantumSoup;
+using QuantumSuperposition.QuantumSoup;
 using System.Numerics;
 
 namespace QuantumSuperposition.Utilities
@@ -94,11 +94,12 @@ namespace QuantumSuperposition.Utilities
                 result = newResult;
             }
 
-            // Convert to final dictionary
+            // Convert to final dictionary, accumulating amplitudes for identical state keys
             Dictionary<T[], Complex> dict = new(new TensorKeyComparer<T>());
             foreach ((List<T> state, Complex amp) in result)
             {
-                dict[state.ToArray()] = amp;
+                T[] key = state.ToArray();
+                dict[key] = dict.TryGetValue(key, out Complex existing) ? existing + amp : amp;
             }
 
             return dict;

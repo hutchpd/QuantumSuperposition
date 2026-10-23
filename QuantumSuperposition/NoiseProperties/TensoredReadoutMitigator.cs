@@ -65,11 +65,32 @@ namespace QuantumSuperposition.NoiseProperties
             _perQubitConfusion.Clear();
             _perQubitInverse.Clear();
 
-            foreach (int qi in _qubitIndices)
+            QuantumSystem? targetSystem = _noisySystem?.InnerSystem ?? _system;
+            Dictionary<int[], Complex>? savedAmps = null;
+            if (targetSystem != null)
             {
-                ReadoutErrorMatrix m = CalibrateSingleQubit(qi, shots, rng);
-                _perQubitConfusion[qi] = m;
-                _perQubitInverse[qi] = InvertForMitigation(m);
+                savedAmps = new Dictionary<int[], Complex>(new IntArrayComparer());
+                foreach (KeyValuePair<int[], Complex> kv in targetSystem.Amplitudes)
+                {
+                    savedAmps[(int[])kv.Key.Clone()] = kv.Value;
+                }
+            }
+
+            try
+            {
+                foreach (int qi in _qubitIndices)
+                {
+                    ReadoutErrorMatrix m = CalibrateSingleQubit(qi, shots, rng);
+                    _perQubitConfusion[qi] = m;
+                    _perQubitInverse[qi] = InvertForMitigation(m);
+                }
+            }
+            finally
+            {
+                if (targetSystem != null && savedAmps != null)
+                {
+                    targetSystem.SetAmplitudes(savedAmps);
+                }
             }
         }
 

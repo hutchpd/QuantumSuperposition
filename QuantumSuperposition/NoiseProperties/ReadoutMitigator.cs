@@ -35,16 +35,24 @@ namespace QuantumSuperposition.NoiseProperties
 
             rng ??= Random.Shared;
 
-            (int meas0When0, int meas1When0) = RunPrepareMeasure(system, qubitIndex, preparedBit: 0, shots, rng);
-            (int meas0When1, int meas1When1) = RunPrepareMeasure(system, qubitIndex, preparedBit: 1, shots, rng);
+            Dictionary<int[], Complex> savedAmps = SnapshotAmplitudes(system);
+            try
+            {
+                (int meas0When0, int meas1When0) = RunPrepareMeasure(system, qubitIndex, preparedBit: 0, shots, rng);
+                (int meas0When1, int meas1When1) = RunPrepareMeasure(system, qubitIndex, preparedBit: 1, shots, rng);
 
-            double p00 = (double)meas0When0 / shots;
-            double p01 = 1.0 - p00;
+                double p00 = (double)meas0When0 / shots;
+                double p01 = 1.0 - p00;
 
-            double p10 = (double)meas0When1 / shots;
-            double p11 = 1.0 - p10;
+                double p10 = (double)meas0When1 / shots;
+                double p11 = 1.0 - p10;
 
-            return new ReadoutMitigator(new ReadoutErrorMatrix(p00, p01, p10, p11));
+                return new ReadoutMitigator(new ReadoutErrorMatrix(p00, p01, p10, p11));
+            }
+            finally
+            {
+                system.SetAmplitudes(savedAmps);
+            }
         }
 
         public static ReadoutMitigator Calibrate(NoisyQuantumSystem system) => Calibrate(system, qubitIndex: 0, shots: 1024, rng: null);
@@ -57,16 +65,34 @@ namespace QuantumSuperposition.NoiseProperties
 
             rng ??= Random.Shared;
 
-            (int meas0When0, int meas1When0) = RunPrepareMeasure(system, qubitIndex, preparedBit: 0, shots, rng);
-            (int meas0When1, int meas1When1) = RunPrepareMeasure(system, qubitIndex, preparedBit: 1, shots, rng);
+            Dictionary<int[], Complex> savedAmps = SnapshotAmplitudes(system.InnerSystem);
+            try
+            {
+                (int meas0When0, int meas1When0) = RunPrepareMeasure(system, qubitIndex, preparedBit: 0, shots, rng);
+                (int meas0When1, int meas1When1) = RunPrepareMeasure(system, qubitIndex, preparedBit: 1, shots, rng);
 
-            double p00 = (double)meas0When0 / shots;
-            double p01 = 1.0 - p00;
+                double p00 = (double)meas0When0 / shots;
+                double p01 = 1.0 - p00;
 
-            double p10 = (double)meas0When1 / shots;
-            double p11 = 1.0 - p10;
+                double p10 = (double)meas0When1 / shots;
+                double p11 = 1.0 - p10;
 
-            return new ReadoutMitigator(new ReadoutErrorMatrix(p00, p01, p10, p11));
+                return new ReadoutMitigator(new ReadoutErrorMatrix(p00, p01, p10, p11));
+            }
+            finally
+            {
+                system.InnerSystem.SetAmplitudes(savedAmps);
+            }
+        }
+
+        private static Dictionary<int[], Complex> SnapshotAmplitudes(QuantumSystem system)
+        {
+            Dictionary<int[], Complex> copy = new(new IntArrayComparer());
+            foreach (KeyValuePair<int[], Complex> kv in system.Amplitudes)
+            {
+                copy[(int[])kv.Key.Clone()] = kv.Value;
+            }
+            return copy;
         }
 
         public Dictionary<string, double> Mitigate(Dictionary<string, int> counts, bool clampNegativeToZero = true)

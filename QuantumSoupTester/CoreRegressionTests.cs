@@ -4,8 +4,10 @@ using System.Linq;
 using System.Numerics;
 using NUnit.Framework;
 using QuantumSuperposition.Core;
+using QuantumSuperposition.NoiseProperties;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Systems;
+using QuantumSuperposition.Utilities;
 
 namespace QuantumSoupTester
 {
@@ -188,6 +190,102 @@ namespace QuantumSoupTester
 
             Assert.That(system.Amplitudes.Count, Is.EqualTo(1), "Near-zero |1> state should be pruned after H*H.");
             Assert.That(GetAmplitude(system, 0).Real, Is.EqualTo(1.0).Within(Tolerance));
+        }
+
+        [Test]
+        public void QuantumRegister_PreservesCallerQubitOrder_AndSubspaceWithMinusEnvironment()
+        {
+            var system = new QuantumSystem();
+            // Prepare |0> on q0 and |-> on q1: (|00> - |01>) / sqrt(2)
+            double invSqrt2 = 1.0 / Math.Sqrt(2.0);
+            system.SetAmplitudes(new Dictionary<int[], Complex>(new IntArrayComparer())
+            {
+                [new[] { 0, 0 }] = new Complex(invSqrt2, 0),
+                [new[] { 0, 1 }] = new Complex(-invSqrt2, 0)
+            });
+
+            var q0 = new QuBit<int>(system, new[] { 0 });
+            var q1 = new QuBit<int>(system, new[] { 1 });
+
+            // Reversed order register (q1, q0) should preserve [1, 0]
+            var reversedReg = new QuantumRegister(q1, q0);
+            Assert.That(reversedReg.QubitIndices, Is.EqualTo(new[] { 1, 0 }));
+
+            // Subspace register on q0 should NOT cancel |00> and -|01> to zero!
+            var regQ0 = new QuantumRegister(q0);
+            var regExpectedZero = QuantumRegister.FromInt(0, 1, new QuantumSystem());
+            Assert.That(regQ0.AlmostEquals(regExpectedZero), Is.True);
+            Assert.That(default(QuantumRegister).Equals(default(QuantumRegister)), Is.True);
+            Assert.That(default(QuantumRegister).GetHashCode(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void QuBitAndQuantumSoup_GetHashCode_ConsistentWithPhaseIndependentEquals()
+        {
+            var qPlus = new QuBit<int>(new[] { 0, 1 }).WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, 1.0 } });
+            var qMinus = new QuBit<int>(new[] { 0, 1 }).WithWeights(new Dictionary<int, Complex> { { 0, 1.0 }, { 1, -1.0 } });
+
+            Assert.That(qPlus.Equals(qMinus), Is.True);
+            Assert.That(qPlus.GetHashCode(), Is.EqualTo(qMinus.GetHashCode()));
+
+            // IQuantumReference.Observe on local QuBit should not throw InvalidOperationException
+            IQuantumReference localRef = new QuBit<int>(new[] { 7, 9 });
+            Assert.DoesNotThrow(() => localRef.Observe(new Random(42)));
+        }
+
+        [Test]
+        public void Eigenstates_Clone_ResetsCollapsedState_AndExposesMappedValues()
+        {
+            var eigen = new Eigenstates<int>(new[] { 1, 2, 3 });
+            var mapped = eigen % 2;
+            Assert.That(mapped.ToValues().OrderBy(x => x).ToArray(), Is.EqualTo(new[] { 1, 2, 3 }));
+            Assert.That(mapped.ToMappedValues().Distinct().OrderBy(x => x).ToArray(), Is.EqualTo(new[] { 0, 1 }));
+
+            _ = eigen.Observe(new Random(123));
+            Assert.That(eigen.GetCurrentType(), Is.EqualTo(QuantumStateType.CollapsedResult));
+            Assert.That(eigen.ToDebugString(includeCollapseMetadata: true), Does.Contain("Collapsed: True"));
+
+            var clone = (Eigenstates<int>)eigen.Clone();
+            Assert.That(clone.GetCurrentType(), Is.EqualTo(QuantumStateType.SuperpositionAny));
+            Assert.That(clone.ToDebugString(includeCollapseMetadata: true), Does.Contain("Collapsed: False"));
+            Assert.DoesNotThrow(() => clone.All());
+        }
+
+        [Test]
+        public void GateSchedulingVisualiser_RendersMultiQubitGates_WithoutThrowing()
+        {
+            var ops = new[]
+            {
+                new QuantumSystem.GateOperation(QuantumSystem.GateType.MultiQubit, new[] { 0, 2 }, new Complex[4, 4], "CZ")
+            };
+            string diagram = GateSchedulingVisualiser.Visualise(ops, totalQubits: 1);
+            Assert.That(diagram, Does.Contain("q0: [CZ]"));
+            Assert.That(diagram, Does.Contain("q1:  |  "));
+            Assert.That(diagram, Does.Contain("q2: [CZ]"));
+        }
+
+        [Test]
+        public void ThermalRelaxation_RejectsUnphysicalT2GreaterThan2T1()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                _ = new ThermalRelaxation(TimeSpan.FromMicroseconds(10), TimeSpan.FromMicroseconds(25)));
+        }
+
+        [Test]
+        public void ReadoutMitigator_Calibrate_PreservesSystemAmplitudes()
+        {
+            var system = new QuantumSystem();
+            _ = QuantumRegister.EPRPair(system);
+
+            var before = system.Amplitudes.ToDictionary(kv => (int[])kv.Key.Clone(), kv => kv.Value, new IntArrayComparer());
+            _ = ReadoutMitigator.Calibrate(system, qubitIndex: 0, shots: 32, rng: new Random(7));
+
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(before.Count));
+            foreach (var kv in before)
+            {
+                Assert.That(system.Amplitudes.TryGetValue(kv.Key, out Complex actual), Is.True);
+                Assert.That((actual - kv.Value).Magnitude, Is.LessThan(Tolerance));
+            }
         }
     }
 }

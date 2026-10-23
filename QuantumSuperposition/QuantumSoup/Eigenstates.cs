@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
 using System.Numerics;
 
@@ -432,6 +432,11 @@ namespace QuantumSuperposition.QuantumSoup
         public IEnumerable<T> ToValues()
         {
             return _qDict.Keys;
+        }
+
+        public IEnumerable<T> ToMappedValues()
+        {
+            return _qDict.Values;
         }
 
         /// <summary>
@@ -891,12 +896,11 @@ namespace QuantumSuperposition.QuantumSoup
             Eigenstates<T> clone = new(clonedDict, _ops)
             {
                 _weights = clonedWeights,
-                _eType = _eType,
-                // Optionally, copy over collapse-related metadata.
-                _collapseHistoryId = _collapseHistoryId,
-                _lastCollapseSeed = _lastCollapseSeed,
-                _isActuallyCollapsed = _isActuallyCollapsed,
-                _collapsedValue = _collapsedValue
+                _eType = _eType == QuantumStateType.CollapsedResult ? QuantumStateType.SuperpositionAny : _eType,
+                _collapseHistoryId = null,
+                _lastCollapseSeed = null,
+                _isActuallyCollapsed = false,
+                _collapsedValue = default
             };
 
             return clone;

@@ -13,6 +13,8 @@ namespace QuantumSuperposition.NoiseProperties
         {
             if (t1 <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(t1), t1, "T1 must be > 0.");
             if (t2 <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(t2), t2, "T2 must be > 0.");
+            if (t2.TotalSeconds > 2.0 * t1.TotalSeconds + 1e-12)
+                throw new ArgumentOutOfRangeException(nameof(t2), t2, "Physical constraint violated: T2 must be <= 2 * T1.");
 
             T1 = t1;
             T2 = t2;

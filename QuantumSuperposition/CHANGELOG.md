@@ -1,8 +1,31 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.9.2] - 2026-10-23
+### Fixed
+- **Grover Diffusion Operator:** Corrected phase inversion circuit (proper $|0\dots0\rangle$ phase flip with Hadamard and X layers), ensuring textbook amplitude amplification ($P=1.0$ for $n=2$, $P\approx0.96$ for $n=3$).
+- **Quantum Fourier Transform (QFT):** Corrected controlled-phase angle exponent to $\pi / 2^{j-i}$ and replaced CNOT with SWAP gate, matching the exact DFT unitary matrix.
+- **Wavefunction Representation & Equality:**
+  - Initialized `QuantumSystem._amplitudes` dictionary with `IntArrayComparer` to avoid reference-equality collisions.
+  - Corrected `PartialObserve` to collapse and update global `_amplitudes` wavefunction and project participating qubits.
+  - Implemented near-zero amplitude pruning via `QuantumConfig.AmplitudePruningTolerance`.
+  - Fixed `QuantumSoup<T>.GetHashCode()` and `QuBit<T>.GetHashCode()` to hash rounded probabilities (`Math.Round(prob, 8)`), satisfying the `IEquatable` / `Equals` contract.
+  - Made `QuantumRegister.AlmostEquals`, `Equals`, and `GetHashCode` null-safe on `default(QuantumRegister)` and consistent with subspace probability distributions.
+  - Preserved caller qubit ordering in `QuantumRegister(params QuBit<int>[])` and improved `BuildSubspaceVector` to properly marginalize orthogonal non-register environment configurations.
+  - Fixed `QuBit<T>.ObserveLocal` so calling `IQuantumReference.Observe` on local qubits does not throw mutation state errors.
+  - Guarded `QuBit<T>.NotifyWavefunctionCollapsed` against out-of-range qubit indices when shorter basis states are loaded into a multi-qubit system.
+  - Accumulated amplitudes in `QuantumMathUtility<T>.TensorProduct` and `QuantumSystem.SetFromTensorProduct` when state keys collide.
+- **Gate Scheduling & Visualisation:** Supported `GateType.MultiQubit` in `GateSchedulingVisualiser.Visualise` and dynamically expanded row count to prevent `IndexOutOfRangeException`.
+- **Noise & Readout Mitigation:**
+  - Added physical constraint validation $T_2 \le 2 T_1$ in `ThermalRelaxation`.
+  - Made `ReadoutMitigator.Calibrate` and `TensoredReadoutMitigator.Calibrate` non-destructive by snapshotting and restoring the system wavefunction around calibration.
+
+### Added
+- `Eigenstates<T>.ToMappedValues()` to expose projected values alongside the input key domain.
+- `Eigenstates<T>.Clone()` resets collapse status and restores mutability on the cloned instance.
 
 ## [1.9.0] - 2026-04-06
 ### Changed

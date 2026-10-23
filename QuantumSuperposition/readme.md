@@ -1,4 +1,4 @@
-# QuantumSuperposition (.NET Library) - v1.9
+# QuantumSuperposition (.NET Library) - v1.9.2
 
 [![NuGet](https://img.shields.io/nuget/v/QuantumSuperposition.svg)](https://www.nuget.org/packages/QuantumSuperposition)
 ![Quantum Algorithms Inside](https://img.shields.io/badge/quantum--algorithms-included-blueviolet)
@@ -13,7 +13,7 @@ It gives you two related machines:
 1. A **generic superposition engine** for `QuBit<T>` and `Eigenstates<T>`, where ordinary typed values can exist in multiple weighted states and still be transformed, filtered, compared, sampled, and reasoned about.
 2. A **physics-style quantum simulation layer** with `QuantumSystem`, `QuantumGate`, `QuantumRegister`, entanglement, gate scheduling, QFT, Grover search, noisy readout, mitigation, and enough complex amplitudes to make certainty look provincial.
 
-This release is aligned with `PositronicVariables` v1.9 so the shared `QuBit<T>` model, package metadata, and documentation remain in step. No one wants two timelines disagreeing about the shape of uncertainty.
+This release is aligned with `PositronicVariables` v1.9.2 so the shared `QuBit<T>` model, package metadata, and documentation remain in step. No one wants two timelines disagreeing about the shape of uncertainty.
 
 ---
 

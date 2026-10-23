@@ -80,11 +80,9 @@ namespace PositronicVariables.Variables
         private volatile bool _hadRequiredThisForward = false;
         private readonly bool isValueType = typeof(T).IsValueType;
         private readonly HashSet<T> _domain = [];
-        private static bool _reverseReplayStarted;
         private static int s_LoopDepth;
         private readonly IPositronicRuntime _runtime;
         private readonly List<int> _sliceEpochs = [];
-        private bool _sawStateReadThisForward = false;
         private static readonly bool s_IsIntegralType =
             typeof(T) == typeof(byte) || typeof(T) == typeof(sbyte) ||
             typeof(T) == typeof(short) || typeof(T) == typeof(ushort) ||
@@ -221,7 +219,7 @@ namespace PositronicVariables.Variables
 
         internal static void ResetReverseReplayFlag()
         {
-            _reverseReplayStarted = false;           // Reset the "we're about to moonwalk through time" alarm.
+            // Reset the "we're about to moonwalk through time" alarm.
         }
 
         /// <summary>
@@ -241,7 +239,6 @@ namespace PositronicVariables.Variables
             lock (_tvarLock)
             {
                 ReplaceOrAppendOrUnify(qb, replace: true);
-                _sawStateReadThisForward = false;
                 Interlocked.Increment(ref _tvarVersion);
             }
         }
@@ -310,8 +307,6 @@ namespace PositronicVariables.Variables
             }
         }
         private bool bootstrapSuperseded = false;
-        private volatile bool _suppressBootstrapUnionThisEpoch = false; // prevent bootstrap union after cross-variable reverse rebuild within same epoch
-        private volatile bool _skipReverseScalarThisEpoch; // suppress scalar overwrite after cross-variable reverse reconstruction
 
         // Epoch helpers
         internal static void BeginEpoch()
@@ -454,14 +449,11 @@ namespace PositronicVariables.Variables
 
                 bootstrapSuperseded = timeline.Count > 1;
                 _hadOutsideWritesSinceLastLoop = false;
-                _sawStateReadThisForward = false;
                 _hasForwardScalarBaseline = false;
                 _hasCrossVarAddK = false;
                 _hadRequiredThisForward = false;
                 _reverseRebuiltEpoch = -1;
                 _pendingCrossSource = null;
-                _skipReverseScalarThisEpoch = false;
-                _suppressBootstrapUnionThisEpoch = false;
                 _tvarVersion = snapshot.Version;
             }
         }
@@ -793,7 +785,6 @@ namespace PositronicVariables.Variables
             lock (_tvarLock)
             {
                 ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf: ReferenceEquals(this, other), crossSource: other);
-                _sawStateReadThisForward = false;
                 Interlocked.Increment(ref _tvarVersion);
             }
         }
@@ -814,7 +805,6 @@ namespace PositronicVariables.Variables
             lock (_tvarLock)
             {
                 ReplaceOrAppendOrUnify(qb, replace: true, isFeedbackFromSelf, expr.Source);
-                _sawStateReadThisForward = false;
                 Interlocked.Increment(ref _tvarVersion);
             }
         }
@@ -874,8 +864,6 @@ namespace PositronicVariables.Variables
                     lock (_tvarLock)
                     {
                         _reverseRebuiltEpoch = -1;
-                        _skipReverseScalarThisEpoch = false;
-                        _suppressBootstrapUnionThisEpoch = false;
                         _hasCrossVarAddK = false;
                     }
                 }
@@ -1095,8 +1083,6 @@ namespace PositronicVariables.Variables
 
                      ReplaceForwardHistoryWith(rebuilt);
                      _reverseRebuiltEpoch = CurrentEpoch;
-                     _suppressBootstrapUnionThisEpoch = true;
-                     _skipReverseScalarThisEpoch = true;
                      return;
                 }
 
@@ -1579,11 +1565,6 @@ namespace PositronicVariables.Variables
         {
             get
             {
-                if (InConvergenceLoop && _runtime.Entropy > 0)
-                {
-                    _sawStateReadThisForward = true;
-                }
-
                 return new QExpr(this, () =>
                 {
                     QuBit<T> qb = GetCurrentQBit();
@@ -1663,8 +1644,6 @@ namespace PositronicVariables.Variables
                             rebuilt.Any();
                             ReplaceForwardHistoryWith(rebuilt);
                             _reverseRebuiltEpoch = CurrentEpoch;
-                            _suppressBootstrapUnionThisEpoch = true;
-                            _skipReverseScalarThisEpoch = true;
                         }
                         finally
                         {
@@ -1784,10 +1763,6 @@ namespace PositronicVariables.Variables
         {
             get
             {
-                if (InConvergenceLoop && _runtime.Entropy > 0)
-                {
-                    _sawStateReadThisForward = true;
-                }
                 return new QExpr(this, () =>
                 {
                     QuBit<T> qb = GetCurrentQBit();
@@ -1804,10 +1779,6 @@ namespace PositronicVariables.Variables
         {
             get
             {
-                if (InConvergenceLoop && _runtime.Entropy > 0)
-                {
-                    _sawStateReadThisForward = true;
-                }
                 return new QExpr(this, () =>
                 {
                     QuBit<T> qb = GetCurrentQBit();

@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
 using System.Numerics;
 
@@ -328,15 +328,14 @@ namespace QuantumSuperposition.QuantumSoup
                 foreach (T? s in States.Distinct().OrderBy(x => x))
                 {
                     hash = (hash * 23) + (s?.GetHashCode() ?? 0);
-                    if (IsWeighted && _weights != null && _weights.TryGetValue(s, out Complex amp))
+                    double prob = 1.0;
+                    if (_weights != null && _weights.TryGetValue(s, out Complex amp))
                     {
-                        double real = Math.Round(amp.Real, 12);
-                        double imag = Math.Round(amp.Imaginary, 12);
-                        long realBits = BitConverter.DoubleToInt64Bits(real);
-                        long imagBits = BitConverter.DoubleToInt64Bits(imag);
-                        hash = (hash * 23) + realBits.GetHashCode();
-                        hash = (hash * 23) + imagBits.GetHashCode();
+                        prob = amp.Magnitude * amp.Magnitude;
                     }
+                    double roundedProb = Math.Round(prob, 8);
+                    if (roundedProb == 0.0) roundedProb = 0.0;
+                    hash = (hash * 23) + BitConverter.DoubleToInt64Bits(roundedProb).GetHashCode();
                 }
                 return hash;
             }

@@ -1,4 +1,4 @@
-﻿using PositronicVariables.Engine.Entropy;
+using PositronicVariables.Engine.Entropy;
 using PositronicVariables.Engine.Logging;
 using PositronicVariables.Engine.Timeline;
 using PositronicVariables.Engine.Transponder;
@@ -141,9 +141,8 @@ namespace PositronicVariables.Engine
                 entropy.Flip();
                 if (entropy.Entropy < 0)
                 {
-                    foreach (IPositronicVariable v in PositronicVariable<T>.GetAllVariables(Runtime))
+                    foreach (PositronicVariable<T> pv in PositronicVariable<T>.GetAllVariables(Runtime).OfType<PositronicVariable<T>>())
                     {
-                        PositronicVariable<T> pv = (PositronicVariable<T>)v;
                         QuBit<T> last = pv.GetCurrentQBit();
                         QuBit<T> copy = new(last.ToCollapsedValues().ToArray());
                         _ = copy.Any();

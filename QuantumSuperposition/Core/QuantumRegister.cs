@@ -36,7 +36,7 @@ namespace QuantumSuperposition.Core
             }
             System = sys;
             // Flatten indices; allow disjoint ordering explicitly as supplied
-            QubitIndices = qubits.SelectMany(q => q.GetQubitIndices()).Distinct().OrderBy(i => i).ToArray();
+            QubitIndices = qubits.SelectMany(q => q.GetQubitIndices()).Distinct().ToArray();
         }
 
         private QuantumRegister(QuantumSystem system, int[] indices)
@@ -175,10 +175,15 @@ namespace QuantumSuperposition.Core
         private static Complex[] BuildSubspaceVector(QuantumRegister reg)
         {
             var sys = reg.System ?? throw new InvalidOperationException("Register not bound to a QuantumSystem.");
-            int[] indices = reg.QubitIndices;
+            int[] indices = reg.QubitIndices ?? Array.Empty<int>();
             int n = indices.Length;
             int dim = 1 << n;
             Complex[] vec = new Complex[dim];
+            if (sys.Amplitudes.Count == 0) return vec;
+
+            HashSet<int> indexSet = new(indices);
+            var envBranches = new Dictionary<int[], Complex[]>(new QuantumSuperposition.Utilities.IntArrayComparer());
+
             foreach (var kv in sys.Amplitudes)
             {
                 int[] full = kv.Key;
@@ -186,10 +191,54 @@ namespace QuantumSuperposition.Core
                 int code = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    int bit = full[indices[i]] & 1;
+                    int bit = (indices[i] < full.Length ? full[indices[i]] : 0) & 1;
                     code = (code << 1) | bit;
                 }
-                vec[code] += amp;
+
+                List<int> envBits = new(Math.Max(0, full.Length - n));
+                for (int q = 0; q < full.Length; q++)
+                {
+                    if (!indexSet.Contains(q))
+                    {
+                        envBits.Add(full[q] & 1);
+                    }
+                }
+                int[] envKey = envBits.ToArray();
+                if (!envBranches.TryGetValue(envKey, out Complex[]? branchVec))
+                {
+                    branchVec = new Complex[dim];
+                    envBranches[envKey] = branchVec;
+                }
+                branchVec[code] += amp;
+            }
+
+            if (envBranches.Count == 1)
+            {
+                return envBranches.Values.First();
+            }
+
+            // Multiple orthogonal environment configurations: marginalize incoherently per code
+            // while retaining the phase of the dominant environment branch.
+            for (int c = 0; c < dim; c++)
+            {
+                double probSum = 0.0;
+                Complex dominant = Complex.Zero;
+                foreach (var branchVec in envBranches.Values)
+                {
+                    Complex bAmp = branchVec[c];
+                    double p = bAmp.Magnitude * bAmp.Magnitude;
+                    probSum += p;
+                    if (bAmp.Magnitude > dominant.Magnitude)
+                    {
+                        dominant = bAmp;
+                    }
+                }
+                if (probSum > 0.0)
+                {
+                    double mag = Math.Sqrt(probSum);
+                    Complex unitPhase = dominant.Magnitude > 0.0 ? dominant / dominant.Magnitude : Complex.One;
+                    vec[c] = unitPhase * mag;
+                }
             }
             return vec;
         }
@@ -309,8 +358,13 @@ namespace QuantumSuperposition.Core
         /// </summary>
         public bool AlmostEquals(QuantumRegister other, double tolerance = 1e-10)
         {
-            // struct cannot be null; compare sizes
-            if (QubitIndices.Length != other.QubitIndices.Length) return false;
+            if (System == null || other.System == null)
+            {
+                return System == null && other.System == null;
+            }
+            int[] idx1 = QubitIndices ?? Array.Empty<int>();
+            int[] idx2 = other.QubitIndices ?? Array.Empty<int>();
+            if (idx1.Length != idx2.Length) return false;
             Complex[] v1 = BuildSubspaceVector(this);
             Complex[] v2 = BuildSubspaceVector(other);
             if (v1.Length != v2.Length) return false;
@@ -341,9 +395,21 @@ namespace QuantumSuperposition.Core
         {
             unchecked
             {
+                if (System == null || QubitIndices == null || QubitIndices.Length == 0)
+                {
+                    return 0;
+                }
                 int hash = 17;
-                hash = hash * 23 + (System?.GetHashCode() ?? 0);
-                foreach (var i in QubitIndices) hash = hash * 23 + i.GetHashCode();
+                Complex[] vec = BuildSubspaceVector(this);
+                foreach (Complex amp in vec)
+                {
+                    double real = Math.Round(amp.Real, 12);
+                    double imag = Math.Round(amp.Imaginary, 12);
+                    if (real == 0.0) real = 0.0; // normalize -0.0
+                    if (imag == 0.0) imag = 0.0;
+                    hash = (hash * 23) + BitConverter.DoubleToInt64Bits(real).GetHashCode();
+                    hash = (hash * 23) + BitConverter.DoubleToInt64Bits(imag).GetHashCode();
+                }
                 return hash;
             }
         }

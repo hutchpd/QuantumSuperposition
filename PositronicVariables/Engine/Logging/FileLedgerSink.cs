@@ -14,6 +14,7 @@ namespace PositronicVariables.Engine.Logging
         private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = false };
         private readonly ILedgerSink _innerSink;
         private readonly object _fileLock = new();
+        private readonly HashSet<Guid> _seenCommitIds = new();
 
         public FileLedgerSink(string filePath, ILedgerSink innerSink = null)
         {
@@ -40,13 +41,21 @@ namespace PositronicVariables.Engine.Logging
                 return;
             }
 
-            AppendAuditEntry(new FileLedgerAuditEntry
+            lock (_fileLock)
             {
-                Timestamp = DateTimeOffset.UtcNow,
-                CommitId = commitId,
-                OperationName = op.OperationName,
-                OperationType = op.GetType().FullName ?? op.GetType().Name
-            });
+                if (commitId != Guid.Empty && !_seenCommitIds.Add(commitId))
+                {
+                    return;
+                }
+
+                AppendAuditEntryUnsafe(new FileLedgerAuditEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    CommitId = commitId,
+                    OperationName = op.OperationName,
+                    OperationType = op.GetType().FullName ?? op.GetType().Name
+                });
+            }
         }
 
         public IOperation Peek() => _innerSink.Peek();
@@ -55,7 +64,14 @@ namespace PositronicVariables.Engine.Logging
 
         public void ReverseLastOperations() => _innerSink.ReverseLastOperations();
 
-        public void Clear() => _innerSink.Clear();
+        public void Clear()
+        {
+            _innerSink.Clear();
+            lock (_fileLock)
+            {
+                _seenCommitIds.Clear();
+            }
+        }
 
         public IReadOnlyList<FileLedgerAuditEntry> ReadAuditTrail()
         {
@@ -74,13 +90,10 @@ namespace PositronicVariables.Engine.Logging
             }
         }
 
-        private void AppendAuditEntry(FileLedgerAuditEntry entry)
+        private void AppendAuditEntryUnsafe(FileLedgerAuditEntry entry)
         {
             string json = JsonSerializer.Serialize(entry, s_jsonOptions);
-            lock (_fileLock)
-            {
-                File.AppendAllText(FilePath, json + Environment.NewLine);
-            }
+            File.AppendAllText(FilePath, json + Environment.NewLine);
         }
     }
 

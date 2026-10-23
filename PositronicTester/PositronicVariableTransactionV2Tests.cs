@@ -134,5 +134,51 @@ namespace PositronicVariables.Tests
             Assert.That(result, Is.EqualTo(new[] { 1, 3 }),
                 "Orbit of (v + 2) % 4 starting from 1 should be {1, 3}, not all of 0..3.");
         }
+
+        [Test]
+        public void BitwiseXorCycle_AndHeterogeneousRuntimeVariables_ConvergeWithoutInvalidCast()
+        {
+            // Register a variable of a different type in the same runtime
+            _ = PositronicVariable<double>.GetOrCreate("otherTypeVar", 3.14, _rt);
+            var v = PositronicVariable<int>.GetOrCreate("xorVar", 1, _rt);
+
+            Assert.DoesNotThrow(() =>
+            {
+                PositronicVariable<int>.RunConvergenceLoop(_rt, () =>
+                {
+                    v.Assign(v ^ 1);
+                });
+            });
+
+            int[] result = v.ToValues().OrderBy(x => x).ToArray();
+            Assert.That(result, Is.EqualTo(new[] { 0, 1 }));
+        }
+
+        [Test]
+        public void FileLedgerSink_DeduplicatesCommitIds()
+        {
+            string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ledger_{Guid.NewGuid():N}.jsonl");
+            try
+            {
+                var sink = new PositronicVariables.Engine.Logging.FileLedgerSink(tempFile);
+                var v = PositronicVariable<int>.GetOrCreate("auditVar", 5, _rt);
+                var op = new PositronicVariables.Operations.BitwiseNotOperation<int>(v, _rt);
+                Guid commitId = Guid.NewGuid();
+
+                sink.Append(op, commitId);
+                sink.Append(op, commitId); // duplicate commitId should not be written twice
+
+                var entries = sink.ReadAuditTrail();
+                Assert.That(entries.Count, Is.EqualTo(1));
+                Assert.That(entries[0].CommitId, Is.EqualTo(commitId));
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile))
+                {
+                    System.IO.File.Delete(tempFile);
+                }
+            }
+        }
     }
 }

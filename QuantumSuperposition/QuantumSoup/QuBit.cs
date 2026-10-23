@@ -1091,20 +1091,15 @@ namespace QuantumSuperposition.QuantumSoup
                 {
                     hash = (hash * 23) + (s?.GetHashCode() ?? 0);
 
-                    if (IsWeighted)
+                    double prob = 1.0;
+                    if (_weights != null && _weights.TryGetValue(s, out Complex w))
                     {
-                        Complex amp = _weights != null && _weights.TryGetValue(s, out Complex w) ? w : Complex.One;
-
-                        // Round real and imaginary parts separately to avoid hash instability
-                        double real = Math.Round(amp.Real, 12);
-                        double imag = Math.Round(amp.Imaginary, 12);
-
-                        long realBits = BitConverter.DoubleToInt64Bits(real);
-                        long imagBits = BitConverter.DoubleToInt64Bits(imag);
-
-                        hash = (hash * 23) + realBits.GetHashCode();
-                        hash = (hash * 23) + imagBits.GetHashCode();
+                        prob = w.Magnitude * w.Magnitude;
                     }
+
+                    double roundedProb = Math.Round(prob, 8);
+                    if (roundedProb == 0.0) roundedProb = 0.0;
+                    hash = (hash * 23) + BitConverter.DoubleToInt64Bits(roundedProb).GetHashCode();
                 }
 
                 return hash;
@@ -1197,6 +1192,10 @@ namespace QuantumSuperposition.QuantumSoup
             }
 
             int[] fullObserved = System.GetCollapsedState();
+            if (_qubitIndices.Length == 0 || _qubitIndices.Any(i => i < 0 || i >= fullObserved.Length))
+            {
+                return;
+            }
             if (_qubitIndices.Length == 1)
             {
                 int value = fullObserved[_qubitIndices[0]];
@@ -1369,13 +1368,13 @@ namespace QuantumSuperposition.QuantumSoup
 
             // Mark as collapsed
             _collapsedValue = picked;
-            _isActuallyCollapsed = true;
             _qList = new[] { picked };
             if (_weights != null)
             {
                 _weights = new Dictionary<T, Complex> { { picked, Complex.One } };
             }
             SetType(QuantumStateType.CollapsedResult);
+            _isActuallyCollapsed = true;
 
             return picked!;
         }

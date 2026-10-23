@@ -20,8 +20,6 @@ namespace PositronicVariables.Variables
         {
             internal readonly PositronicVariable<T> Source;
 
-            internal readonly QuBit<T> Q;
-
             private readonly Func<QuBit<T>> _lazy;
             private readonly QuBit<T>? _eager;
 

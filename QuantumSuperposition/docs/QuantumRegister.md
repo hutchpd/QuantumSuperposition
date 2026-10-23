@@ -49,5 +49,5 @@ Internally this uses `QuantumAlgorithms.BitsToIndex` and falls back to `PartialO
 
 - Creating from amplitudes or integer value overwrites system amplitudes for the involved qubits
 - `Collapse()` locks underlying qubits to prevent accidental mutation after measurement
-- Supports disjoint index sets. Indices are stored sorted
+- Supports arbitrary index sets. Preserves caller-supplied qubit ordering (e.g. for CNOT control/target orientation)
 

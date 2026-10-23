@@ -299,7 +299,11 @@ namespace QuantumSuperposition.Systems
             }
             Dictionary<T[], Complex> product = QuantumMathUtility<T>.TensorProduct(systemManaged);
             Dictionary<int[], Complex> result = new(new IntArrayComparer());
-            foreach (var kv in product) { int[] intState = kv.Key.Select(mapToBasis).ToArray(); result[intState] = kv.Value; }
+            foreach (var kv in product)
+            {
+                int[] intState = kv.Key.Select(mapToBasis).ToArray();
+                result[intState] = result.TryGetValue(intState, out Complex existing) ? existing + kv.Value : kv.Value;
+            }
             _amplitudes = result; NormaliseAmplitudes();
             if (propagateCollapse)
             {
