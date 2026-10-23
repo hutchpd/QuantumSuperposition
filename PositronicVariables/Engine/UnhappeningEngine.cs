@@ -1,4 +1,4 @@
-﻿using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Logging;
 using PositronicVariables.Engine.Timeline;
 using PositronicVariables.Operations;
 using PositronicVariables.Operations.Interfaces;
@@ -187,17 +187,28 @@ namespace PositronicVariables.Engine
                 rebuiltSet.UnionWith(incomingVals);
             }
 
-            // Special-case: (+k) then %d → residue class
+            // Special-case: (+k) then %d → close orbit under (v + k) % d from seeds
             AdditionOperation<T> addOp = poppedReversibles.OfType<AdditionOperation<T>>().FirstOrDefault();
             ReversibleModulusOp<T> modOp = poppedReversibles.OfType<ReversibleModulusOp<T>>().FirstOrDefault();
             bool usedResidueClass = addOp is not null && modOp is not null;
 
             if (usedResidueClass)
             {
-                int d = Convert.ToInt32(modOp.Divisor);
-                for (int i = 0; i < d; i++)
+                int d = Math.Abs(Convert.ToInt32(modOp.Divisor));
+                foreach (T seed in seeds)
                 {
-                    _ = rebuiltSet.Add((T)Convert.ChangeType(i, typeof(T)));
+                    T v = seed;
+                    for (int step = 0; step < Math.Max(1, d); step++)
+                    {
+                        for (int i = poppedReversibles.Count - 1; i >= 0; i--)
+                        {
+                            v = poppedReversibles[i].ApplyForward(v);
+                        }
+                        if (!rebuiltSet.Add(v))
+                        {
+                            break;
+                        }
+                    }
                 }
             }
             else
@@ -256,9 +267,14 @@ namespace PositronicVariables.Engine
             return rebuilt;
         }
 
-        // Reflect to determine if an operation targets the given variable instance
+        // Determine if an operation targets the given variable instance via IOperation.TargetVariable (with reflection fallback for custom external ops)
         private static bool BelongsToVariable(object entry, PositronicVariable<T> variable)
         {
+            if (entry is IOperation op && op.TargetVariable is not null)
+            {
+                return ReferenceEquals(op.TargetVariable, variable);
+            }
+
             FieldInfo[] fields = entry.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             foreach (FieldInfo f in fields)
             {

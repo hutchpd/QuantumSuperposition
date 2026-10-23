@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using QuantumSuperposition.Systems;
 
 namespace QuantumSuperposition.QuantumSoup
@@ -56,6 +56,12 @@ namespace QuantumSuperposition.QuantumSoup
         /// Implementations should update their local collapsed view from the selected basis outcome.
         /// </summary>
         void PartialCollapseFromSystem(int[] chosenOutcome);
+
+        /// <summary>
+        /// Called by QuantumSystem after a partial observation touches this reference,
+        /// passing both the measured system indices and the selected basis outcome.
+        /// </summary>
+        void PartialCollapseFromSystem(int[] measuredIndices, int[] chosenOutcome) => PartialCollapseFromSystem(chosenOutcome);
 
         /// <summary>
         /// Whether this reference is currently collapsed.

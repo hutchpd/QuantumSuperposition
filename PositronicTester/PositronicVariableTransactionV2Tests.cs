@@ -94,5 +94,45 @@ namespace PositronicVariables.Tests
 
             Assert.DoesNotThrowAsync(async () => await Task.WhenAll(t1, t2));
         }
+
+        [Test]
+        public void ConcurrentReadWriteIncrement_NoLostUpdates()
+        {
+            var counter = PositronicVariable<int>.GetOrCreate("counter", 0, _rt);
+            int workers = 8;
+            int incrementsPerWorker = 25;
+
+            var tasks = Enumerable.Range(0, workers).Select(_ => Task.Run(() =>
+            {
+                for (int i = 0; i < incrementsPerWorker; i++)
+                {
+                    TransactionV2.RunWithRetry(tx =>
+                    {
+                        tx.RecordRead(counter);
+                        int current = counter.GetCurrentQBit().ToCollapsedValues().First();
+                        tx.StageWrite(counter, new QuantumSuperposition.QuantumSoup.QuBit<int>(new[] { current + 1 }).Any(), TxMutationKind.ReplaceLast);
+                    }, maxAttempts: 64, baseDelayMs: 1, maxDelayMs: 10);
+                }
+            })).ToArray();
+
+            Assert.DoesNotThrowAsync(async () => await Task.WhenAll(tasks));
+            int finalValue = counter.GetCurrentQBit().ToCollapsedValues().First();
+            Assert.That(finalValue, Is.EqualTo(workers * incrementsPerWorker));
+        }
+
+        [Test]
+        public void NonCoprimeModulusCycle_RespectsStepAndSeedOrbit()
+        {
+            var v = PositronicVariable<int>.GetOrCreate("nonCoprime", 1, _rt);
+
+            PositronicVariable<int>.RunConvergenceLoop(_rt, () =>
+            {
+                v.Assign((v + 2) % 4);
+            });
+
+            int[] result = v.ToValues().OrderBy(x => x).ToArray();
+            Assert.That(result, Is.EqualTo(new[] { 1, 3 }),
+                "Orbit of (v + 2) % 4 starting from 1 should be {1, 3}, not all of 0..3.");
+        }
     }
 }

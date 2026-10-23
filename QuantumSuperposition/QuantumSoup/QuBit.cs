@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Core;
 using QuantumSuperposition.Operators;
 using QuantumSuperposition.Systems;
 using QuantumSuperposition.Utilities;
@@ -680,12 +680,15 @@ namespace QuantumSuperposition.QuantumSoup
             return picked;
         }
 
-        public void PartialCollapse(int[] chosenOutcome)
+        public void PartialCollapse(int[] chosenOutcome) => PartialCollapse(_qubitIndices, chosenOutcome);
+
+        public void PartialCollapse(int[] measuredIndices, int[] chosenOutcome)
         {
-            // Only update local state: set _collapsedValue based on _qubitIndices.
+            // Only update local state: set _collapsedValue based on _qubitIndices mapped through measuredIndices.
             if (_qubitIndices.Length == 1)
             {
-                int value = chosenOutcome[0];
+                int pos = Array.IndexOf(measuredIndices, _qubitIndices[0]);
+                int value = pos >= 0 && pos < chosenOutcome.Length ? chosenOutcome[pos] : chosenOutcome[0];
                 // For bool qubits, convert 0/1 to false/true.
                 object observed = typeof(T) == typeof(bool) ? value != 0 : value;
                 _collapsedValue = (T)observed;
@@ -693,16 +696,20 @@ namespace QuantumSuperposition.QuantumSoup
             else
             {
                 // For multi-index qubits.
-                int[] values = _qubitIndices.Select(i => chosenOutcome[i]).ToArray();
+                int[] values = _qubitIndices.Select(qIdx =>
+                {
+                    int pos = Array.IndexOf(measuredIndices, qIdx);
+                    return pos >= 0 && pos < chosenOutcome.Length ? chosenOutcome[pos] : (qIdx < chosenOutcome.Length ? chosenOutcome[qIdx] : 0);
+                }).ToArray();
                 _collapsedValue = (T)(object)values;
             }
             // Mark this qubit as collapsed locally.
-            // (Do not update _amplitudes so that other qubits remain uncollapsed.)
             _isActuallyCollapsed = true;
             // Do NOT trigger propagation here.
         }
 
         public void PartialCollapseFromSystem(int[] chosenOutcome) => PartialCollapse(chosenOutcome);
+        public void PartialCollapseFromSystem(int[] measuredIndices, int[] chosenOutcome) => PartialCollapse(measuredIndices, chosenOutcome);
 
 
 

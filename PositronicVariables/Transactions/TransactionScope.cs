@@ -52,6 +52,7 @@ namespace PositronicVariables.Transactions
         public static void RecordRead(ITransactionalVariable v)
         {
             var data = s_current.Value ?? throw new InvalidOperationException("No ambient transaction. Use TransactionScope.Begin().");
+            if (data.ReadSet.Any(r => r.var.TxId == v.TxId)) return;
             data.ReadSet.Add((v, v.TxVersion));
         }
 
@@ -70,14 +71,44 @@ namespace PositronicVariables.Transactions
 
         public static void Run(Action body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)
         {
-            using var tx = Begin(maxAttempts, baseDelayMs, maxDelayMs);
-            body();
+            if (body == null) throw new ArgumentNullException(nameof(body));
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    using var tx = Begin(maxAttempts: 1, baseDelayMs, maxDelayMs);
+                    body();
+                    tx.Dispose();
+                    return;
+                }
+                catch (TransactionAbortedException) when (attempt < maxAttempts)
+                {
+                    int delay = Math.Min(maxDelayMs, (int)(Math.Pow(2, attempt - 1) * baseDelayMs));
+                    int jitter = s_rng.Value!.Next(0, 3);
+                    Thread.Sleep(delay + jitter);
+                }
+            }
         }
 
         public static async Task RunAsync(Func<Task> body, int maxAttempts = 8, int baseDelayMs = 1, int maxDelayMs = 50)
         {
-            using var tx = Begin(maxAttempts, baseDelayMs, maxDelayMs);
-            await body().ConfigureAwait(false);
+            if (body == null) throw new ArgumentNullException(nameof(body));
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    using var tx = Begin(maxAttempts: 1, baseDelayMs, maxDelayMs);
+                    await body().ConfigureAwait(false);
+                    tx.Dispose();
+                    return;
+                }
+                catch (TransactionAbortedException) when (attempt < maxAttempts)
+                {
+                    int delay = Math.Min(maxDelayMs, (int)(Math.Pow(2, attempt - 1) * baseDelayMs));
+                    int jitter = s_rng.Value!.Next(0, 3);
+                    await Task.Delay(delay + jitter).ConfigureAwait(false);
+                }
+            }
         }
 
         public void Dispose()
@@ -118,7 +149,7 @@ namespace PositronicVariables.Transactions
                     CommitOnce();
                     return;
                 }
-                catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
+                catch (StmValidationFailedException)
                 {
                     STMTelemetry.RecordRetry();
                     if (attempt == _maxAttempts)
@@ -146,7 +177,7 @@ namespace PositronicVariables.Transactions
                     if (v.TxVersion != ver)
                     {
                         STMTelemetry.RecordValidationFailure(v.TxId);
-                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                        throw new StmValidationFailedException("STM validation failed: read version changed.");
                     }
                 }
                 STMTelemetry.RecordCommit(readOnly: true, writesApplied: 0, lockHoldTicks: 0);
@@ -168,14 +199,12 @@ namespace PositronicVariables.Transactions
                     }
                 }
 
-                var writeIds = data.WriteSet.Keys.ToHashSet();
                 foreach (var (v, ver) in data.ReadSet)
                 {
-                    if (writeIds.Contains(v.TxId)) continue;
                     if (v.TxVersion != ver)
                     {
                         STMTelemetry.RecordValidationFailure(v.TxId);
-                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                        throw new StmValidationFailedException("STM validation failed: read version changed.");
                     }
                 }
 

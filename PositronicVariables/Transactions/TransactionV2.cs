@@ -120,7 +120,7 @@ namespace PositronicVariables.Transactions
                     if (v.TxVersion != ver)
                     {
                         STMTelemetry.RecordValidationFailure(v.TxId);
-                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                        throw new StmValidationFailedException("STM validation failed: read version changed.");
                     }
                 }
 
@@ -158,14 +158,12 @@ namespace PositronicVariables.Transactions
                     }
                 }
 
-                var writeIds = _writeSet.Keys.ToHashSet();
                 foreach (var (v, ver) in _readSet)
                 {
-                    if (writeIds.Contains(v.TxId)) continue;
                     if (v.TxVersion != ver)
                     {
                         STMTelemetry.RecordValidationFailure(v.TxId);
-                        throw new InvalidOperationException("STM validation failed: read version changed.");
+                        throw new StmValidationFailedException("STM validation failed: read version changed.");
                     }
                 }
 
@@ -229,7 +227,7 @@ namespace PositronicVariables.Transactions
                     tx.CommitOnce();
                     return;
                 }
-                catch (InvalidOperationException ex) when (ex.Message.StartsWith("STM validation failed", StringComparison.Ordinal))
+                catch (StmValidationFailedException)
                 {
                     STMTelemetry.RecordRetry();
                     if (attempt == maxAttempts)

@@ -10,4 +10,9 @@ namespace PositronicVariables.Transactions
             Attempts = attempts;
         }
     }
+
+    internal sealed class StmValidationFailedException : InvalidOperationException
+    {
+        public StmValidationFailedException(string message) : base(message) { }
+    }
 }

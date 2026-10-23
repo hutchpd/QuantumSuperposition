@@ -1,4 +1,4 @@
-﻿namespace QuantumSuperposition.Core
+namespace QuantumSuperposition.Core
 {
     public static class QuantumConfig
     {
@@ -26,5 +26,10 @@
         /// Tolerance used for unitarity validation when <see cref="ValidateUnitarity"/> is enabled.
         /// </summary>
         public static double UnitarityTolerance { get; set; } = 1e-9;
+
+        /// <summary>
+        /// Amplitudes with magnitude below or equal to this threshold are pruned after gate application.
+        /// </summary>
+        public static double AmplitudePruningTolerance { get; set; } = 1e-12;
     }
 }

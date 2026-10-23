@@ -1,4 +1,4 @@
-﻿using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Logging;
 using PositronicVariables.Variables;
 using QuantumSuperposition.QuantumSoup;
 using System;
@@ -15,6 +15,7 @@ namespace PositronicVariables.Engine.Timeline
     {
         private readonly List<QuBit<T>> _backupTimeline;
         public PositronicVariable<T> Variable { get; }
+        IPositronicVariable? IOperation.TargetVariable => Variable;
         public QuBit<T> AddedSlice { get; }
 
         public string OperationName => "TimelineAppend";

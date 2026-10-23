@@ -148,5 +148,46 @@ namespace QuantumSoupTester
             double probabilityMass = system.Amplitudes.Values.Sum(a => a.Magnitude * a.Magnitude);
             Assert.That(probabilityMass, Is.EqualTo(1.0).Within(Tolerance));
         }
+
+        [Test]
+        public void FreshSystem_ApplyMultiQubitGate_DoesNotWipeWavefunction()
+        {
+            var system = new QuantumSystem();
+            system.ApplyMultiQubitGate(new[] { 0 }, QuantumGates.Hadamard.Matrix, "H");
+
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(2));
+            Assert.That(GetAmplitude(system, 0).Real, Is.EqualTo(1.0 / Math.Sqrt(2)).Within(Tolerance));
+            Assert.That(GetAmplitude(system, 1).Real, Is.EqualTo(1.0 / Math.Sqrt(2)).Within(Tolerance));
+        }
+
+        [Test]
+        public void PartialObserve_UpdatesWavefunctionAmplitudesAndNonZeroIndexQubits()
+        {
+            var system = new QuantumSystem();
+            _ = QuantumRegister.EPRPair(system); // (|00> + |11>) / sqrt(2)
+            var q1 = new QuBit<int>(system, new[] { 1 });
+
+            int[] outcome = system.PartialObserve(new[] { 1 }, new Random(42));
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(1));
+            int[] remainingBasis = system.Amplitudes.Keys.Single();
+            Assert.That(remainingBasis[0], Is.EqualTo(outcome[0]));
+            Assert.That(remainingBasis[1], Is.EqualTo(outcome[0]));
+            Assert.That(q1.GetObservedValue(), Is.EqualTo(outcome[0]));
+        }
+
+        [Test]
+        public void DoubleHadamard_PrunesNearZeroAmplitudes()
+        {
+            var system = new QuantumSystem();
+            _ = QuantumRegister.FromInt(0, 1, system);
+            // Apply H via MultiQubitGate twice (so queue optimization doesn't cancel them before matrix math)
+            system.ApplyMultiQubitGate(new[] { 0 }, QuantumGates.Hadamard.Matrix, "H1");
+            system.ProcessGateQueue();
+            system.ApplyMultiQubitGate(new[] { 0 }, QuantumGates.Hadamard.Matrix, "H2");
+            system.ProcessGateQueue();
+
+            Assert.That(system.Amplitudes.Count, Is.EqualTo(1), "Near-zero |1> state should be pruned after H*H.");
+            Assert.That(GetAmplitude(system, 0).Real, Is.EqualTo(1.0).Within(Tolerance));
+        }
     }
 }

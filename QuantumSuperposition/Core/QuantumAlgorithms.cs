@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.Systems;
+using QuantumSuperposition.Systems;
 using System.Numerics;
 
 namespace QuantumSuperposition.Core
@@ -19,7 +19,7 @@ namespace QuantumSuperposition.Core
                 system.ApplySingleQubitGate(qubits[i], QuantumGates.Hadamard, "H");
                 for (int j = i + 1; j < n; j++)
                 {
-                    double theta = Math.PI / Math.Pow(2, j - i + 1);
+                    double theta = Math.PI / Math.Pow(2, j - i);
                     system.ApplyTwoQubitGate(qubits[j], qubits[i], QuantumGates.CPhase(theta), $"CPhase({theta})");
                 }
             }
@@ -27,7 +27,7 @@ namespace QuantumSuperposition.Core
             // Swap qubits to reverse the order
             for (int i = 0; i < n / 2; i++)
             {
-                system.ApplyTwoQubitGate(qubits[i], qubits[n - i - 1], QuantumGates.CNOT, "SWAP");
+                system.ApplyTwoQubitGate(qubits[i], qubits[n - i - 1], QuantumGates.SWAP, "SWAP");
             }
         }
 
@@ -101,12 +101,11 @@ namespace QuantumSuperposition.Core
                 system.ApplySingleQubitGate(qubit, QuantumGates.PauliX, "X");
             }
 
-            // Multi-controlled Z gate: flip the phase of |0...0⟩.
+            // Multi-controlled Z gate: flip the phase of |1...1⟩ (which reflects |0...0⟩ due to the surrounding X layers).
             Complex[,] mcz = new Complex[dim, dim];
             for (int i = 0; i < dim; i++)
             {
-                // Only state |0...0⟩ (i==0) gets a phase of –1.
-                mcz[i, i] = (i == 0) ? -1.0 : 1.0;
+                mcz[i, i] = (i == dim - 1) ? -1.0 : 1.0;
             }
             system.ApplyMultiQubitGate(qubits, mcz, "MCZ");
 

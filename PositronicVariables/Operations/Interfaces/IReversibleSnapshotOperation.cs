@@ -1,4 +1,4 @@
-﻿using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Logging;
 using PositronicVariables.Variables;
 using QuantumSuperposition.QuantumSoup;
 using System;
@@ -9,6 +9,7 @@ namespace PositronicVariables.Operations.Interfaces
         where T : IComparable<T>
     {
         PositronicVariable<T> Variable { get; }
+        IPositronicVariable? IOperation.TargetVariable => Variable;
         T Original { get; }
         void IOperation.Undo()
         {

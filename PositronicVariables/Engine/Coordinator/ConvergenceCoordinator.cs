@@ -22,7 +22,8 @@ namespace PositronicVariables.Engine.Coordinator
         private long _enqueueCount;
         private long _maxDepth;
         private long _totalLatencyTicks;
-        private readonly ConcurrentQueue<long> _latencySamples = new();
+        private long _failedCount;
+        private Exception? _lastError;
         private readonly object _flushLock = new();
 
         public ConvergenceCoordinator(int capacity = 1024)
@@ -60,14 +61,13 @@ namespace PositronicVariables.Engine.Coordinator
                     var swLatency = Stopwatch.StartNew();
                     ProcessItem(item);
                     swLatency.Stop();
-                    _latencySamples.Enqueue(swLatency.ElapsedTicks);
                     Interlocked.Add(ref _totalLatencyTicks, swLatency.ElapsedTicks);
                     Interlocked.Increment(ref _processed);
                 }
             }
         }
 
-        private static void ProcessItem(IConvergenceWorkItem item)
+        private void ProcessItem(IConvergenceWorkItem item)
         {
             try
             {
@@ -88,6 +88,8 @@ namespace PositronicVariables.Engine.Coordinator
             }
             catch (Exception ex)
             {
+                Interlocked.Increment(ref _failedCount);
+                Volatile.Write(ref _lastError, ex);
                 // Surface exception immediately so tests fail fast instead of hanging in FlushAsync.
                 Console.Error.WriteLine($"[ConvergenceCoordinator] Work item failed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
                 // No rethrow: the queue must carry on, like a determined penguin.
@@ -106,6 +108,8 @@ namespace PositronicVariables.Engine.Coordinator
         public long Processed => Interlocked.Read(ref _processed);
         public long Enqueued => Interlocked.Read(ref _enqueueCount);
         public long MaxDepth => Interlocked.Read(ref _maxDepth);
+        public long FailedCount => Interlocked.Read(ref _failedCount);
+        public Exception? LastError => Volatile.Read(ref _lastError);
         public double AverageLatencyMs
         {
             get

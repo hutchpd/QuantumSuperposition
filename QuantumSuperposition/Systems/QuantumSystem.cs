@@ -1,4 +1,5 @@
-﻿using QuantumSuperposition.Entanglement;
+using QuantumSuperposition.Core;
+using QuantumSuperposition.Entanglement;
 using QuantumSuperposition.QuantumSoup;
 using QuantumSuperposition.Utilities;
 using System.Numerics;
@@ -26,7 +27,7 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         public event Action<int[],int[]>? GlobalCollapse;
 
-        private Dictionary<int[], Complex> _amplitudes = [];
+        private Dictionary<int[], Complex> _amplitudes = new(new IntArrayComparer());
         private readonly List<IQuantumReference> _registered = [];
         public EntanglementManager Entanglement { get; } = new();
         private Queue<GateOperation> _gateQueue = new();
@@ -62,18 +63,32 @@ namespace QuantumSuperposition.Systems
         /// Applies a unitary gate to a set of target qubits.
         /// Optimised: structural grouping using sentinel -1 (no string allocations).
         /// Handles duplicate target indices & auto-expands wavefunction length if needed.
+        /// If no prior queued gates are pending, applies immediately; always records in gate queue.
         /// </summary>
         public void ApplyMultiQubitGate(int[] targetQubits, Complex[,] gate, string gateName)
         {
             if (targetQubits == null || targetQubits.Length == 0) throw new ArgumentException("At least one target qubit required.");
             int[] distinctTargets = targetQubits.Distinct().OrderBy(i => i).ToArray();
             int numTargets = distinctTargets.Length;
-            int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, distinctTargets.Max() + 1);
-            EnsureWavefunctionLength(requiredLength);
             int expectedDim = 1 << numTargets;
             if (gate.GetLength(0) != gate.GetLength(1) || gate.GetLength(0) != expectedDim)
                 throw new ArgumentException($"Invalid multi-qubit gate matrix. GateName={gateName}, Targets=[{string.Join(',', distinctTargets)}], TargetCount={numTargets}, ExpectedDim={expectedDim}x{expectedDim}, ActualDim={gate.GetLength(0)}x{gate.GetLength(1)}.");
-            _gateQueue.Enqueue(new GateOperation(GateType.MultiQubit, distinctTargets, gate, gateName));
+
+            bool applyImmediately = _gateQueue.Count == 0;
+            var op = new GateOperation(GateType.MultiQubit, distinctTargets, gate, gateName) { AlreadyApplied = applyImmediately };
+            _gateQueue.Enqueue(op);
+            if (applyImmediately)
+            {
+                ProcessMultiQubitGate(distinctTargets, gate, gateName);
+            }
+        }
+
+        private void ProcessMultiQubitGate(int[] distinctTargets, Complex[,] gate, string gateName = "MultiQubitGate")
+        {
+            int numTargets = distinctTargets.Length;
+            int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, distinctTargets.Max() + 1);
+            EnsureWavefunctionLength(requiredLength);
+            int expectedDim = 1 << numTargets;
             bool[] isTarget = new bool[requiredLength]; foreach (int tq in distinctTargets) isTarget[tq] = true;
             Dictionary<PatternKey, List<int[]>> groups = new();
             foreach (int[] state in _amplitudes.Keys)
@@ -87,6 +102,7 @@ namespace QuantumSuperposition.Systems
             }
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
             Complex[] localVector = new Complex[expectedDim];
+            double pruneTol = QuantumConfig.AmplitudePruningTolerance;
             foreach (var group in groups)
             {
                 int[] exemplar = group.Value[0];
@@ -99,14 +115,15 @@ namespace QuantumSuperposition.Systems
                 Complex[] resultVector = QuantumMathUtility<Complex>.ApplyMatrix(localVector, gate);
                 for (int mask = 0; mask < expectedDim; mask++)
                 {
-                    Complex res = resultVector[mask]; if (res == Complex.Zero) continue;
+                    Complex res = resultVector[mask]; if (res.Magnitude <= pruneTol) continue;
                     int[] variant = (int[])exemplar.Clone();
                     for (int bit = 0; bit < numTargets; bit++) variant[distinctTargets[bit]] = (mask >> (numTargets - 1 - bit)) & 1;
                     newAmps[variant] = res;
                 }
             }
-            _amplitudes = newAmps; // simplified
+            _amplitudes = newAmps;
             NormaliseAmplitudes();
+            SafeRaiseGateExecuted(gateName, distinctTargets);
         }
 
         private readonly struct PatternKey : IEquatable<PatternKey>
@@ -138,7 +155,7 @@ namespace QuantumSuperposition.Systems
         /// Optionally construct the system with explicit amplitudes.
         /// </summary>
         public QuantumSystem(Dictionary<int[], Complex>? initialAmps = null)
-        { if (initialAmps != null) { _amplitudes = initialAmps; NormaliseAmplitudes(); } }
+        { if (initialAmps != null) { _amplitudes = new Dictionary<int[], Complex>(initialAmps, new IntArrayComparer()); NormaliseAmplitudes(); } }
 
         /// <summary>
         /// Will return a multiline string that you can print to the console visualising the gate schedule.
@@ -178,8 +195,14 @@ namespace QuantumSuperposition.Systems
             double roll = rng.NextDouble() * totalProb; double cumulative = 0.0; int[]? chosen = null;
             foreach (var kv in ordered) { cumulative += kv.Value; if (roll <= cumulative) { chosen = kv.Key; break; } }
             chosen ??= ordered[^1].Key;
+
+            Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
+            foreach (var item in groups[chosen]) newAmps[item.state] = item.amplitude;
+            _amplitudes = newAmps;
+            NormaliseAmplitudes();
+
             foreach (IQuantumReference refQ in _registered)
-                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) refQ.PartialCollapseFromSystem(chosen);
+                if (refQ.GetQubitIndices().Intersect(measuredIndices).Any()) refQ.PartialCollapseFromSystem(measuredIndices, chosen);
             return chosen;
         }
 
@@ -191,6 +214,7 @@ namespace QuantumSuperposition.Systems
             public int[] TargetQubits { get; }
             public Complex[,] GateMatrix { get; }
             public string GateName { get; }
+            internal bool AlreadyApplied { get; set; }
             public GateOperation(GateType type, int[] targets, Complex[,] matrix, string gateName)
             { OperationType = type; TargetQubits = targets; GateMatrix = matrix; GateName = gateName; }
         }
@@ -311,7 +335,13 @@ namespace QuantumSuperposition.Systems
                 {
                     case GateType.SingleQubit: ProcessSingleQubitGate(op.TargetQubits[0], op.GateMatrix); break;
                     case GateType.TwoQubit: ProcessTwoQubitGate(op.TargetQubits[0], op.TargetQubits[1], op.GateMatrix); break;
-                    case GateType.MultiQubit: throw new InvalidOperationException("MultiQubit operations should be processed immediately.");
+                    case GateType.MultiQubit:
+                        if (!op.AlreadyApplied)
+                        {
+                            ProcessMultiQubitGate(op.TargetQubits, op.GateMatrix, op.GateName);
+                            op.AlreadyApplied = true;
+                        }
+                        break;
                     default: throw new InvalidOperationException("Unsupported gate operation.");
                 }
             }
@@ -327,6 +357,7 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         private bool CanCancel(GateOperation op1, GateOperation op2)
         {
+            if (op1.AlreadyApplied || op2.AlreadyApplied) return false;
             if (op1.OperationType == op2.OperationType && op1.TargetQubits.SequenceEqual(op2.TargetQubits))
             {
                 int n = op1.GateMatrix.GetLength(0);
@@ -346,8 +377,11 @@ namespace QuantumSuperposition.Systems
         /// </summary>
         private void ProcessSingleQubitGate(int qubit, Complex[,] gate)
         {
+            int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, qubit + 1);
+            EnsureWavefunctionLength(requiredLength);
             Dictionary<int[], Complex> newAmps = new(new IntArrayComparer());
             var groups = _amplitudes.Keys.GroupBy(state => string.Join(",", state.Select((v, idx) => idx == qubit ? "*" : v.ToString())));
+            double pruneTol = QuantumConfig.AmplitudePruningTolerance;
             foreach (var group in groups)
             {
                 int[] exemplar = group.First();
@@ -357,14 +391,16 @@ namespace QuantumSuperposition.Systems
                 _ = _amplitudes.TryGetValue(basis1, out Complex a1);
                 Complex new0 = gate[0,0]*a0 + gate[0,1]*a1;
                 Complex new1 = gate[1,0]*a0 + gate[1,1]*a1;
-                if (new0 != Complex.Zero) newAmps[basis0] = new0;
-                if (new1 != Complex.Zero) newAmps[basis1] = new1;
+                if (new0.Magnitude > pruneTol) newAmps[basis0] = new0;
+                if (new1.Magnitude > pruneTol) newAmps[basis1] = new1;
             }
             _amplitudes = newAmps; NormaliseAmplitudes(); SafeRaiseGateExecuted("SingleQubitGate", new[]{qubit});
         }
 
         private void ProcessTwoQubitGate(int qubitA, int qubitB, Complex[,] gate)
         {
+            int requiredLength = Math.Max(_amplitudes.Count == 0 ? 0 : _amplitudes.Keys.First().Length, Math.Max(qubitA, qubitB) + 1);
+            EnsureWavefunctionLength(requiredLength);
             Dictionary<string, List<int[]>> grouped = [];
             foreach (int[] state in _amplitudes.Keys.ToList())
             {
@@ -373,6 +409,7 @@ namespace QuantumSuperposition.Systems
                 grouped[key].Add(state);
             }
             Dictionary<int[], Complex> newAmplitudes = new(new IntArrayComparer());
+            double pruneTol = QuantumConfig.AmplitudePruningTolerance;
             foreach (var group in grouped)
             {
                 int[] exemplar = group.Value.First();
@@ -381,7 +418,7 @@ namespace QuantumSuperposition.Systems
                 Complex[] vec = new Complex[4];
                 foreach (var kv in localVariants) { _ = _amplitudes.TryGetValue(kv.Value, out Complex amp); int idx=(kv.Key.a<<1)|kv.Key.b; vec[idx]=amp; }
                 Complex[] newVec = QuantumMathUtility<Complex>.ApplyMatrix(vec, gate);
-                foreach (var kv in localVariants) { int idx=(kv.Key.a<<1)|kv.Key.b; if (newVec[idx] != Complex.Zero) newAmplitudes[kv.Value] = newVec[idx]; }
+                foreach (var kv in localVariants) { int idx=(kv.Key.a<<1)|kv.Key.b; if (newVec[idx].Magnitude > pruneTol) newAmplitudes[kv.Value] = newVec[idx]; }
             }
             _amplitudes = newAmplitudes; NormaliseAmplitudes(); SafeRaiseGateExecuted("TwoQubitGate", new[]{qubitA, qubitB});
         }

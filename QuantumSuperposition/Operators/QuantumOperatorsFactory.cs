@@ -1,4 +1,4 @@
-﻿using QuantumSuperposition.Core;
+using QuantumSuperposition.Core;
 using System.Collections.Concurrent;
 using System.Numerics;
 
@@ -30,7 +30,12 @@ namespace QuantumSuperposition.Operators
             Register<Guid>(() => new GuidOperators());
             Register<Uri>(() => new UriOperators());
             Register<Version>(() => new VersionOperators());
-
+            Register<BigInteger>(() => NumberOperators<BigInteger>.Instance);
+            Register<Half>(() => NumberOperators<Half>.Instance);
+            Register<Int128>(() => NumberOperators<Int128>.Instance);
+            Register<UInt128>(() => NumberOperators<UInt128>.Instance);
+            Register<nint>(() => NumberOperators<nint>.Instance);
+            Register<nuint>(() => NumberOperators<nuint>.Instance);
         }
 
         public static void Register<T>(Func<IQuantumOperators<T>> factory)

@@ -1,49 +1,43 @@
 using System;
-using System.Numerics;
+using System.Linq.Expressions;
 
 namespace PositronicVariables.Runtime
 {
     internal static class NumericOps<T>
     {
-        private static readonly TypeCode _code = Type.GetTypeCode(typeof(T));
+        private static readonly Func<T, T, T> s_add = CreateBinaryOp(Expression.Add, fallbackRight: true);
+        private static readonly Func<T, T, T> s_sub = CreateBinaryOp(Expression.Subtract, fallbackRight: false);
 
-        public static T Add(T a, T b)
+        public static T Add(T a, T b) => s_add(a, b);
+        public static T Subtract(T a, T b) => s_sub(a, b);
+
+        private static Func<T, T, T> CreateBinaryOp(Func<Expression, Expression, BinaryExpression> op, bool fallbackRight)
         {
-            switch (_code)
+            try
             {
-                case TypeCode.Int32: return (T)(object)((int)(object)a + (int)(object)b);
-                case TypeCode.Int64: return (T)(object)((long)(object)a + (long)(object)b);
-                case TypeCode.Double: return (T)(object)((double)(object)a + (double)(object)b);
-                case TypeCode.Single: return (T)(object)((float)(object)a + (float)(object)b);
-                case TypeCode.Decimal: return (T)(object)((decimal)(object)a + (decimal)(object)b);
-                case TypeCode.UInt32: return (T)(object)((uint)(object)a + (uint)(object)b);
-                case TypeCode.UInt64: return (T)(object)((ulong)(object)a + (ulong)(object)b);
-                case TypeCode.Int16: return (T)(object)((short)(object)a + (short)(object)b);
-                case TypeCode.UInt16: return (T)(object)((ushort)(object)a + (ushort)(object)b);
-                case TypeCode.Byte: return (T)(object)((byte)(object)a + (byte)(object)b);
-                case TypeCode.SByte: return (T)(object)((sbyte)(object)a + (sbyte)(object)b);
-                default:
-                    try { dynamic da = a; dynamic db = b; return (T)(da + db); } catch { return b; }
+                ParameterExpression pA = Expression.Parameter(typeof(T), "a");
+                ParameterExpression pB = Expression.Parameter(typeof(T), "b");
+                Expression body;
+                if (typeof(T) == typeof(byte) || typeof(T) == typeof(sbyte) ||
+                    typeof(T) == typeof(short) || typeof(T) == typeof(ushort))
+                {
+                    body = Expression.Convert(
+                        op(Expression.Convert(pA, typeof(int)), Expression.Convert(pB, typeof(int))),
+                        typeof(T));
+                }
+                else
+                {
+                    body = op(pA, pB);
+                }
+                return Expression.Lambda<Func<T, T, T>>(body, pA, pB).Compile();
             }
-        }
-
-        public static T Subtract(T a, T b)
-        {
-            switch (_code)
+            catch
             {
-                case TypeCode.Int32: return (T)(object)((int)(object)a - (int)(object)b);
-                case TypeCode.Int64: return (T)(object)((long)(object)a - (long)(object)b);
-                case TypeCode.Double: return (T)(object)((double)(object)a - (double)(object)b);
-                case TypeCode.Single: return (T)(object)((float)(object)a - (float)(object)b);
-                case TypeCode.Decimal: return (T)(object)((decimal)(object)a - (decimal)(object)b);
-                case TypeCode.UInt32: return (T)(object)((uint)(object)a - (uint)(object)b);
-                case TypeCode.UInt64: return (T)(object)((ulong)(object)a - (ulong)(object)b);
-                case TypeCode.Int16: return (T)(object)((short)(object)a - (short)(object)b);
-                case TypeCode.UInt16: return (T)(object)((ushort)(object)a - (ushort)(object)b);
-                case TypeCode.Byte: return (T)(object)((byte)(object)a - (byte)(object)b);
-                case TypeCode.SByte: return (T)(object)((sbyte)(object)a - (sbyte)(object)b);
-                default:
-                    try { dynamic da = a; dynamic db = b; return (T)(da - db); } catch { return a; }
+                return (a, b) =>
+                {
+                    try { dynamic da = a; dynamic db = b; return (T)(fallbackRight ? da + db : da - db); }
+                    catch { return fallbackRight ? b : a; }
+                };
             }
         }
     }

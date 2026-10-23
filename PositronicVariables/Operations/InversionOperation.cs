@@ -1,4 +1,4 @@
-﻿using PositronicVariables.Engine.Logging;
+using PositronicVariables.Engine.Logging;
 using PositronicVariables.Runtime;
 using PositronicVariables.Variables;
 using System;
@@ -11,6 +11,7 @@ namespace PositronicVariables.Operations
         private readonly PositronicVariable<T> _variable = variable;
         private readonly T _originalValue = originalValue;
         private readonly T _invertedValue = invertedValue;
+        public IPositronicVariable? TargetVariable => _variable;
         public string OperationName { get; } = $"Inverse of {opName}";
 
         /// <summary>
